@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
 API_BASE = "https://be.komikcast.cc"
 HOST = os.environ.get("KC_HOST", "0.0.0.0")
-PORT = int(os.environ.get("KC_PORT", "5050"))
+PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "5050")
 UA = (
     "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
@@ -111,6 +111,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
+            # CORS — frontend Vercel boleh hit proxy Railway
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
             if extra_headers:
                 for k, v in extra_headers.items():
                     self.send_header(k, v)

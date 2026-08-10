@@ -1,0 +1,7 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python3 -u server/app.py"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
