@@ -1,7 +1,9 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/img", "destination": "/api/img" }
+    { "source": "/img", "destination": "/api/img" },
+    { "source": "/api/check-hotlink", "destination": "/api/check-hotlink" },
+    { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" }
   ],
   "headers": [
     {
