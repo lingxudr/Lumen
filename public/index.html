@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f4f1e8" />
+  <meta name="description" content="Baca komik online dengan koleksi terbaru setiap hari" />
+  <title>Lumen — Baca Komik Online</title>
+    <link rel="stylesheet" href="/css/main.css" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Lumen" />
+</head>
+<body>
+  <div id="app">
+    <header class="header" id="header">
+      <div class="header-inner">
+        <button type="button" class="brand" onclick="App.go('home')" aria-label="Beranda">
+          <span class="brand-mark">L</span>
+          <span class="brand-name">Lumen</span>
+        </button>
+
+        <form class="search" onsubmit="return App.search(event)" role="search">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+          </svg>
+          <input id="q" type="search" placeholder="Cari judul komik…" autocomplete="off" enterkeyhint="search" />
+        </form>
+
+        <nav class="tabs" aria-label="Navigasi utama">
+          <button type="button" class="tab is-active" data-tab="newest" onclick="App.tab('newest')">Terbaru</button>
+          <button type="button" class="tab" data-tab="project" onclick="App.tab('project')">Project</button>
+          <button type="button" class="tab" data-tab="hot" onclick="App.tab('hot')">Populer</button>
+          <button type="button" class="tab" data-tab="bookmarks" onclick="App.library('bookmarks')">Favorit</button>
+          <button type="button" class="tab" data-tab="history" onclick="App.library('history')">Riwayat</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main" id="main">
+      <!-- HOME -->
+      <section id="view-home" class="view">
+        <div class="toolbar">
+          <div>
+            <h1 class="page-title" id="list-title">Terbaru</h1>
+            <p class="page-sub" id="list-status">Update komik terbaru setiap hari</p>
+          </div>
+          <div class="pager">
+            <button type="button" class="btn btn-ghost" id="btn-prev" onclick="App.page(-1)" disabled>← Sebelumnya</button>
+            <span class="pager-info" id="page-info">1</span>
+            <button type="button" class="btn btn-ghost" id="btn-next" onclick="App.page(1)">Berikutnya →</button>
+          </div>
+        </div>
+        <div class="filter-bar" id="filter-bar">
+          <div class="filter-group">
+            <button type="button" class="chip is-active" data-filter-status="" onclick="App.setFilter('status','')">Semua status</button>
+            <button type="button" class="chip" data-filter-status="ongoing" onclick="App.setFilter('status','ongoing')">Ongoing</button>
+            <button type="button" class="chip" data-filter-status="completed" onclick="App.setFilter('status','completed')">Completed</button>
+          </div>
+          <div class="filter-group">
+            <button type="button" class="chip is-active" data-filter-format="" onclick="App.setFilter('format','')">Semua tipe</button>
+            <button type="button" class="chip" data-filter-format="manga" onclick="App.setFilter('format','manga')">Manga</button>
+            <button type="button" class="chip" data-filter-format="manhwa" onclick="App.setFilter('format','manhwa')">Manhwa</button>
+            <button type="button" class="chip" data-filter-format="manhua" onclick="App.setFilter('format','manhua')">Manhua</button>
+          </div>
+        </div>
+        <div id="continue-banner" class="continue-banner is-hidden"></div>
+        <div id="series-list" class="grid"></div>
+      </section>
+
+      <!-- SERIES -->
+      <section id="view-series" class="view is-hidden">
+        <button type="button" class="btn btn-ghost back-btn" onclick="App.go('home')">← Kembali ke koleksi</button>
+        <div id="series-detail" class="series-hero"></div>
+        <div class="section-label section-label-row" id="chapter-list-label"><span>Daftar Chapter</span></div>
+        <div id="chapter-list" class="chapter-list"></div>
+      </section>
+
+
+      <!-- LIBRARY -->
+      <section id="view-library" class="view is-hidden">
+        <div class="toolbar">
+          <div>
+            <h1 class="page-title" id="library-title">Favorit</h1>
+            <p class="page-sub" id="library-status">—</p>
+          </div>
+          <div class="pager">
+            <button type="button" class="btn btn-ghost" data-lib-tab="bookmarks" onclick="App.library('bookmarks')">Favorit</button>
+            <button type="button" class="btn btn-ghost" data-lib-tab="history" onclick="App.library('history')">Riwayat</button>
+            <button type="button" class="btn btn-ghost" id="btn-clear-history" onclick="App.clearHistory()">Hapus riwayat</button>
+          </div>
+        </div>
+        <div id="library-list" class="grid"></div>
+      </section>
+      <!-- READER -->
+      <section id="view-reader" class="view is-hidden">
+        <div class="reader-progress" id="reader-progress" aria-hidden="true">
+          <div class="reader-progress-bar" id="reader-progress-bar"></div>
+        </div>
+        <div class="reader-top" id="reader-top">
+          <button type="button" class="btn btn-ghost" onclick="App.backToSeries()">← Daftar</button>
+          <div class="reader-heading" id="reader-title">—</div>
+          <button type="button" class="btn btn-ghost btn-icon" id="btn-reader-menu" onclick="App.toggleReaderMenu()" title="Opsi" aria-label="Opsi">⋯</button>
+        </div>
+        <div id="reader-menu" class="reader-menu is-hidden">
+          <div class="reader-menu-row">
+            <span class="reader-menu-label">Tema halaman</span>
+            <div class="seg">
+              <button type="button" class="seg-btn" data-theme="light" onclick="App.setReaderTheme('light')">Terang</button>
+              <button type="button" class="seg-btn" data-theme="dark" onclick="App.setReaderTheme('dark')">Gelap</button>
+            </div>
+          </div>
+          <div class="reader-menu-row">
+            <span class="reader-menu-label">Lebar gambar</span>
+            <div class="seg">
+              <button type="button" class="seg-btn" data-fit="width" onclick="App.setReaderFit('width')">Full</button>
+              <button type="button" class="seg-btn" data-fit="comfortable" onclick="App.setReaderFit('comfortable')">Sedang</button>
+              <button type="button" class="seg-btn" data-fit="small" onclick="App.setReaderFit('small')">Kecil</button>
+            </div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="use-proxy" onchange="App.reloadChapter()" />
+            <span>Proxy gambar</span>
+          </label>
+          <button type="button" class="btn btn-soft" onclick="App.checkHotlink()">Periksa gambar</button>
+        </div>
+        <div id="hotlink-panel" class="probe-panel is-hidden"></div>
+        <div class="reader-stage" id="reader-stage">
+          <button type="button" class="tap-zone tap-zone--prev" id="tap-prev" aria-label="Chapter sebelumnya"></button>
+          <button type="button" class="tap-zone tap-zone--next" id="tap-next" aria-label="Chapter berikutnya"></button>
+          <div id="reader-pages" class="reader-pages"></div>
+        </div>
+        <div class="reader-end" id="reader-end">
+          <button type="button" class="btn btn-primary" id="btn-prev-ch" onclick="App.navChapter(-1)">← Chapter sebelumnya</button>
+          <button type="button" class="btn btn-primary" id="btn-next-ch" onclick="App.navChapter(1)">Chapter berikutnya →</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast is-hidden" role="status"></div>
+    <div id="loading" class="overlay is-hidden" aria-hidden="true">
+      <div class="spinner"></div>
+    </div>
+  </div>
+  <script src="/js/app.js" type="module"></script>
+</body>
+</html>
