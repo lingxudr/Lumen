@@ -25,6 +25,9 @@ export async function api(path, params = {}) {
     throw new Error(`Respons tidak valid (${res.status})`);
   }
   if (!res.ok) {
+    if (data.error === "upstream_blocked" || data.message) {
+      throw new Error(data.message || data.error);
+    }
     throw new Error(data.message || data.error || `Gagal memuat (${res.status})`);
   }
   return data;
