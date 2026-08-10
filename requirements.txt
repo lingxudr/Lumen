@@ -1,1 +1,1 @@
-# Pure stdlib — no pip packages required
+# no third-party deps (stdlib only)
