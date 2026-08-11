@@ -68,8 +68,8 @@ const App = {
     const m = document.getElementById("reader-menu");
     if (m) m.classList.toggle("is-hidden");
   },
-  refresh() {
-    home.loadList();
+  refresh(force) {
+    home.loadList({ force: !!force });
   },
 };
 

@@ -1,5 +1,5 @@
 import { Config } from "../config.js";
-import { api, apiPeek } from "../api.js";
+import { api, apiPeek, clearApiCache } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { getLastRead } from "../storage.js";
@@ -18,6 +18,18 @@ export function createHomeView(ctx) {
         </div>
       </article>`
     ).join("");
+  }
+
+  function setDataBadge(kind, text) {
+    const el = $("#data-badge");
+    if (!el) return;
+    if (!kind) {
+      el.className = "data-badge is-hidden";
+      el.textContent = "";
+      return;
+    }
+    el.className = "data-badge data-badge--" + kind;
+    el.textContent = text || "";
   }
 
   function buildListParams() {
@@ -57,18 +69,37 @@ export function createHomeView(ctx) {
       : "Tidak ada hasil.";
   }
 
-  async function loadList() {
+  async function loadList(opts = {}) {
+    const force = !!opts.force;
     const params = buildListParams();
-    const cached = apiPeek("series", params);
     const box = $("#series-list");
+
+    if (force) {
+      clearApiCache();
+      setDataBadge("fresh", "Memuat ulang…");
+    }
+
+    const cached = force ? null : apiPeek("series", params);
 
     // Cache hit → tampil instan, revalidate di belakang
     if (cached) {
       applyListData(cached);
+      const fromDb = cached.meta && cached.meta.source === "sqlite";
+      setDataBadge(
+        fromDb ? "db" : "cache",
+        fromDb ? "Data tersimpan (DB) — mungkin belum update terbaru" : "Dari cache — sedang diperbarui…"
+      );
       loading(false);
-      api("series", params, { ttl: 60_000, stale: 5 * 60_000 })
-        .then((data) => applyListData(data))
-        .catch(() => {});
+      api("series", params, { ttl: 90_000, stale: 10 * 60_000, force: false })
+        .then((data) => {
+          applyListData(data);
+          const db = data.meta && data.meta.source === "sqlite";
+          setDataBadge(db ? "db" : "live", db ? "Data tersimpan (DB)" : "Data terbaru");
+          setTimeout(() => setDataBadge(null), 2500);
+        })
+        .catch(() => {
+          setDataBadge("cache", "Menampilkan cache (update gagal)");
+        });
       return;
     }
 
@@ -79,27 +110,38 @@ export function createHomeView(ctx) {
     try {
       let data;
       try {
-        data = await api("series", params, { ttl: 90_000, stale: 10 * 60_000 });
+        data = await api("series", params, {
+          ttl: 90_000,
+          stale: 10 * 60_000,
+          force,
+        });
       } catch (netErr) {
-        // fallback search lokal SQLite jika user sedang mencari
         if (ctx.state.query && ctx.state.query.trim().length >= 2) {
-          data = await api("local/search", { q: ctx.state.query.trim(), limit: Config.pageSize });
+          data = await api("local/search", {
+            q: ctx.state.query.trim(),
+            limit: Config.pageSize,
+          });
           if (!(data.data || []).length) throw netErr;
           toast("Menampilkan hasil dari cache lokal");
+          setDataBadge("db", "Hasil pencarian lokal (DB)");
         } else {
           throw netErr;
         }
       }
       applyListData(data);
+      const db = data.meta && data.meta.source === "sqlite";
+      setDataBadge(db ? "db" : "live", db ? "Data tersimpan (DB)" : "Data terbaru");
+      setTimeout(() => setDataBadge(null), 2500);
     } catch (err) {
       console.error(err);
       const msg = String(err.message || err);
       $("#list-status").textContent = msg;
+      setDataBadge(null);
       renderState($("#series-list"), {
         title: "Gagal memuat daftar",
         detail: msg,
         retryLabel: "Coba lagi",
-        onRetry: () => loadList(),
+        onRetry: () => loadList({ force: true }),
       });
       toast(msg);
     } finally {
@@ -224,6 +266,34 @@ export function createHomeView(ctx) {
     loadList();
   }
 
+  function setupPullToRefresh() {
+    const scroller = document.getElementById("view-home") || document;
+    let startY = 0;
+    let pulling = false;
+    const onStart = (e) => {
+      if (window.scrollY > 8) return;
+      startY = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
+      pulling = true;
+    };
+    const onMove = (e) => {
+      if (!pulling || window.scrollY > 8) return;
+      const y = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
+      if (y - startY > 90) {
+        pulling = false;
+        toast("Memuat ulang…");
+        loadList({ force: true });
+      }
+    };
+    const onEnd = () => {
+      pulling = false;
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+  }
+  setupPullToRefresh();
+
   return { loadList, setTab, page, search, renderContinue, setFilter };
+
 
 }

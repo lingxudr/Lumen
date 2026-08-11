@@ -45,8 +45,10 @@
           <div>
             <h1 class="page-title" id="list-title">Terbaru</h1>
             <p class="page-sub" id="list-status">Update komik terbaru setiap hari</p>
+            <div id="data-badge" class="data-badge is-hidden" aria-live="polite"></div>
           </div>
           <div class="pager">
+            <button type="button" class="btn btn-ghost" id="btn-refresh" onclick="App.refresh(true)" title="Muat ulang">↻ Refresh</button>
             <button type="button" class="btn btn-ghost" id="btn-prev" onclick="App.page(-1)" disabled>← Sebelumnya</button>
             <span class="pager-info" id="page-info">1</span>
             <button type="button" class="btn btn-ghost" id="btn-next" onclick="App.page(1)">Berikutnya →</button>

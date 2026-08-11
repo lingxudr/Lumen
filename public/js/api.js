@@ -32,18 +32,35 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function friendlyError(raw) {
+  const s = String(raw || "");
+  if (/Application failed to respond|502|503|upstream/i.test(s)) {
+    return "Server sibuk atau sedang restart. Coba lagi sebentar.";
+  }
+  if (/Failed to fetch|NetworkError|Load failed/i.test(s)) {
+    return "Tidak dapat terhubung ke server. Coba beberapa saat lagi.";
+  }
+  if (/rate_limited|Terlalu banyak/i.test(s)) {
+    return "Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.";
+  }
+  if (/timeout|AbortError/i.test(s)) {
+    return "Koneksi timeout. Coba lagi.";
+  }
+  return s || "Terjadi kesalahan. Coba lagi.";
+}
+
 async function fetchJsonOnce(url, signal) {
   let res;
   try {
     res = await fetch(url, { signal });
   } catch (e) {
     if (e && e.name === "AbortError") {
-      throw new Error("Koneksi timeout. Coba lagi.");
+      throw new Error(friendlyError("timeout"));
     }
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       throw new Error("Tidak ada koneksi internet.");
     }
-    throw new Error("Tidak dapat terhubung ke server. Coba beberapa saat lagi.");
+    throw new Error(friendlyError(e && e.message));
   }
 
   const text = await res.text();
@@ -63,10 +80,9 @@ async function fetchJsonOnce(url, signal) {
     if (data.error === "rate_limited") {
       throw new Error(`Terlalu banyak permintaan. Tunggu ~${data.retry_after || 5}s.`);
     }
-    if (data.error === "upstream_blocked" || data.message) {
-      throw new Error(data.message || data.error);
-    }
-    throw new Error(data.message || data.error || `Gagal memuat (${res.status})`);
+    throw new Error(
+      friendlyError(data.message || data.error || data.detail || `Gagal memuat (${res.status})`)
+    );
   }
   return data;
 }

@@ -1439,3 +1439,42 @@ body[data-reader-theme="dark"] .img-pending {
   word-break: break-word;
 }
 .state-retry { min-width: 140px; }
+
+
+/* Data source badge */
+.data-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+}
+.data-badge--cache { background: #fff3bf; }
+.data-badge--db { background: #d0ebff; }
+.data-badge--live { background: #d3f9d8; }
+.data-badge--fresh { background: #ffe8cc; }
+
+/* Series detail skeleton */
+.series-skeleton {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 16px;
+  padding: 12px 0;
+}
+.sk-cover-lg {
+  width: 120px;
+  height: 170px;
+  border-radius: 8px;
+}
+@media (max-width: 640px) {
+  .series-skeleton {
+    grid-template-columns: 96px 1fr;
+  }
+  .sk-cover-lg {
+    width: 96px;
+    height: 136px;
+  }
+}

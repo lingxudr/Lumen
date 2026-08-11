@@ -4,7 +4,31 @@ import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
 
 export function createSeriesView(ctx) {
+  function showSeriesSkeleton() {
+    const detail = $("#series-detail");
+    const list = $("#chapter-list");
+    if (detail) {
+      detail.innerHTML = `
+        <div class="series-skeleton">
+          <div class="sk sk-cover-lg"></div>
+          <div class="series-skeleton-body">
+            <div class="sk sk-line"></div>
+            <div class="sk sk-line sk-line-mid"></div>
+            <div class="sk sk-line sk-line-short"></div>
+            <div class="sk sk-line"></div>
+          </div>
+        </div>`;
+    }
+    if (list) {
+      list.innerHTML = Array.from({ length: 8 }, () =>
+        `<div class="sk sk-line" style="height:44px;margin:8px 0;border-radius:8px;"></div>`
+      ).join("");
+    }
+  }
+
   async function openSeries(slugOrId) {
+    showView("series");
+    showSeriesSkeleton();
     loading(true);
     try {
       const detail = await api(`series/${encodeURIComponent(slugOrId)}`, { includeMeta: "true" }, { ttl: 5 * 60_000, stale: 30 * 60_000 });
