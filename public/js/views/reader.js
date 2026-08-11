@@ -1,4 +1,4 @@
-import { api, proxyImageUrl, checkImageStatus } from "../api.js";
+import { api, apiPrefetch, proxyImageUrl, checkImageStatus } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg } from "../ui.js";
 import { saveLastRead, getPrefs, savePrefs } from "../storage.js";
@@ -78,6 +78,24 @@ export function createReaderView(ctx) {
     });
   }
 
+
+  function prefetchNeighborChapters(currentIndex) {
+    const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
+    if (!slug) return;
+    const idxs = ctx.state.chapters.map((c) => String(chapterIndex(c)));
+    const pos = idxs.indexOf(String(currentIndex));
+    if (pos < 0) return;
+    // list newest-first: pos-1 = newer, pos+1 = older
+    for (const p of [pos - 1, pos + 1]) {
+      if (p < 0 || p >= idxs.length) continue;
+      apiPrefetch(
+        `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(idxs[p])}`,
+        {},
+        { ttl: 15 * 60_000, stale: 30 * 60_000 }
+      );
+    }
+  }
+
   async function openChapter(index) {
     const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
     if (!slug) {
@@ -101,6 +119,7 @@ export function createReaderView(ctx) {
       bindScroll();
       render();
       persistProgress();
+      prefetchNeighborChapters(index);
       lastScrollY = 0;
       window.scrollTo(0, 0);
       updateProgress();

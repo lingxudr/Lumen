@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Lumen Reader — pure stdlib HTTP server + API proxy."""
+import gzip
 import json
 import os
 import ssl
@@ -189,17 +190,35 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(body, (bytes, bytearray)):
             body = str(body).encode("utf-8")
         try:
+            extra_headers = dict(extra_headers or {})
+            if "Cache-Control" not in extra_headers:
+                extra_headers["Cache-Control"] = "no-store"
+
+            # Gzip JSON/text if client accepts and payload worth it
+            ae = (self.headers.get("Accept-Encoding") or "").lower()
+            use_gzip = (
+                "gzip" in ae
+                and len(body) >= 512
+                and (
+                    "json" in (content_type or "")
+                    or "text/" in (content_type or "")
+                    or "javascript" in (content_type or "")
+                    or "css" in (content_type or "")
+                )
+                and "Content-Encoding" not in extra_headers
+            )
+            if use_gzip:
+                body = gzip.compress(body, compresslevel=6)
+                extra_headers["Content-Encoding"] = "gzip"
+                extra_headers["Vary"] = "Accept-Encoding"
+
             self.send_response(code)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Connection", "close")
-            # CORS — frontend Vercel boleh hit proxy Railway
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
-            extra_headers = dict(extra_headers or {})
-            if "Cache-Control" not in extra_headers:
-                extra_headers["Cache-Control"] = "no-store"
             for k, v in extra_headers.items():
                 self.send_header(k, v)
             self.end_headers()

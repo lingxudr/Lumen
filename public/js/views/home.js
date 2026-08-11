@@ -1,5 +1,5 @@
 import { Config } from "../config.js";
-import { api } from "../api.js";
+import { api, apiPeek } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg } from "../ui.js";
 import { getLastRead } from "../storage.js";
@@ -20,49 +20,65 @@ export function createHomeView(ctx) {
     ).join("");
   }
 
+  function buildListParams() {
+    const params = { take: Config.pageSize, page: ctx.state.page };
+    if (ctx.state.query) {
+      params.title = ctx.state.query;
+      params.takeChapter = 2;
+    } else if (ctx.state.tab === "newest") {
+      params.preset = "rilisan_terbaru";
+      params.takeChapter = Config.previewChapters;
+    } else if (ctx.state.tab === "project") {
+      params.preset = "rilisan_terbaru";
+      params.type = "project";
+      params.takeChapter = Config.previewChapters;
+    } else if (ctx.state.tab === "hot") {
+      params.isHot = "true";
+      params.takeChapter = 2;
+      params.includeMeta = "true";
+    }
+    if (ctx.state.status) params.status = ctx.state.status;
+    if (ctx.state.format) params.format = ctx.state.format;
+    return params;
+  }
+
+  function applyListData(data) {
+    const items = data.data || [];
+    const meta = data.meta || {};
+    ctx.state.lastPage = meta.lastPage || 1;
+    ctx.state.page = meta.page || ctx.state.page;
+    $("#page-info").textContent = `${ctx.state.page} / ${ctx.state.lastPage}`;
+    $("#btn-prev").disabled = ctx.state.page <= 1;
+    $("#btn-next").disabled = ctx.state.page >= ctx.state.lastPage;
+    renderList(items);
+    renderContinue();
+    $("#list-status").textContent = items.length
+      ? `${items.length} judul · ${meta.total != null ? Number(meta.total).toLocaleString("id-ID") : "—"} total`
+      : "Tidak ada hasil.";
+  }
+
   async function loadList() {
-    // skeleton di grid; overlay penuh hanya jika kosong total
+    const params = buildListParams();
+    const cached = apiPeek("series", params);
     const box = $("#series-list");
+
+    // Cache hit → tampil instan, revalidate di belakang
+    if (cached) {
+      applyListData(cached);
+      loading(false);
+      api("series", params, { ttl: 60_000, stale: 5 * 60_000 })
+        .then((data) => applyListData(data))
+        .catch(() => {});
+      return;
+    }
+
     const empty = !box || !box.children.length;
     if (empty) loading(true);
     showSkeleton(8);
     $("#list-status").textContent = "Memuat…";
     try {
-      const params = { take: Config.pageSize, page: ctx.state.page };
-      if (ctx.state.query) {
-        params.title = ctx.state.query;
-        params.takeChapter = 2;
-      } else if (ctx.state.tab === "newest") {
-        params.preset = "rilisan_terbaru";
-        params.takeChapter = Config.previewChapters;
-      } else if (ctx.state.tab === "project") {
-        params.preset = "rilisan_terbaru";
-        params.type = "project";
-        params.takeChapter = Config.previewChapters;
-      } else if (ctx.state.tab === "hot") {
-        params.isHot = "true";
-        params.takeChapter = 2;
-        params.includeMeta = "true";
-      }
-
-      if (ctx.state.status) params.status = ctx.state.status;
-      if (ctx.state.format) params.format = ctx.state.format;
-
-      const data = await api("series", params);
-      const items = data.data || [];
-      const meta = data.meta || {};
-      ctx.state.lastPage = meta.lastPage || 1;
-      ctx.state.page = meta.page || ctx.state.page;
-
-      $("#page-info").textContent = `${ctx.state.page} / ${ctx.state.lastPage}`;
-      $("#btn-prev").disabled = ctx.state.page <= 1;
-      $("#btn-next").disabled = ctx.state.page >= ctx.state.lastPage;
-
-      renderList(items);
-      renderContinue();
-      $("#list-status").textContent = items.length
-        ? `${items.length} judul · ${meta.total != null ? Number(meta.total).toLocaleString("id-ID") : "—"} total`
-        : "Tidak ada hasil.";
+      const data = await api("series", params, { ttl: 60_000, stale: 5 * 60_000 });
+      applyListData(data);
     } catch (err) {
       console.error(err);
       $("#series-list").innerHTML = "";
