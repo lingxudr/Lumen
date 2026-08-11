@@ -12,6 +12,12 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, unquote, urlparse
 from urllib.request import Request, urlopen
 
+import sys
+_SERVER_DIR = Path(__file__).resolve().parent
+if str(_SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVER_DIR))
+import db as lumen_db
+
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
 API_BASE = "https://be.komikcast.cc"
@@ -191,6 +197,54 @@ def mime(path):
     }.get(path.suffix.lower(), "application/octet-stream")
 
 
+def _parse_api_sub(sub: str):
+    """Return (kind, slug, chapter) for series routes."""
+    s = (sub or "").split("?")[0].strip("/")
+    parts = [p for p in s.split("/") if p]
+    if not parts or parts[0] != "series":
+        return None, None, None
+    if len(parts) == 1:
+        return "list", None, None
+    slug = parts[1]
+    if len(parts) == 2:
+        return "detail", slug, None
+    if len(parts) == 3 and parts[2] == "chapters":
+        return "chapters", slug, None
+    if len(parts) >= 4 and parts[2] == "chapters":
+        return "pages", slug, parts[3]
+    return None, slug, None
+
+
+def _persist_upstream(sub: str, body: bytes):
+    kind, slug, chapter = _parse_api_sub(sub)
+    try:
+        if kind == "list" or kind == "detail":
+            lumen_db.save_series_response(body)
+        elif kind == "chapters" and slug:
+            lumen_db.save_chapter_list(slug, body)
+        elif kind == "pages" and slug and chapter is not None:
+            lumen_db.save_chapter_pages(slug, chapter, body)
+    except Exception:
+        traceback.print_exc()
+
+
+def _db_fallback(sub: str):
+    kind, slug, chapter = _parse_api_sub(sub)
+    try:
+        if kind == "detail" and slug:
+            raw = lumen_db.get_manga(slug)
+            if raw:
+                return lumen_db.wrap_manga_detail(raw)
+        if kind == "chapters" and slug:
+            return lumen_db.get_chapter_list(slug)
+        if kind == "pages" and slug and chapter is not None:
+            return lumen_db.get_chapter_pages(slug, chapter)
+    except Exception:
+        traceback.print_exc()
+    return None
+
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -296,6 +350,7 @@ class Handler(BaseHTTPRequestHandler):
                             "ok": True,
                             "upstream": code,
                             "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                            "db": lumen_db.stats(),
                             "rate_limit": {"api": RATE_LIMIT_API, "img": RATE_LIMIT_IMG, "window": RATE_LIMIT_WINDOW},
                         },
                     )
@@ -350,16 +405,41 @@ class Handler(BaseHTTPRequestHandler):
                         extra_headers=extra,
                     )
 
-                code, hdrs, body = fetch(url)
+                try:
+                    code, hdrs, body = fetch(url)
+                except Exception as e:
+                    fb = _db_fallback(sub)
+                    if fb:
+                        extra = dict(rate_headers)
+                        extra["X-Lumen-Cache"] = "DB"
+                        extra["X-Lumen-DB"] = "HIT"
+                        extra["Cache-Control"] = "public, max-age=60"
+                        return self.send_bytes(
+                            200, fb, "application/json; charset=utf-8", extra_headers=extra
+                        )
+                    return self.send_json(502, {"error": "upstream_error", "detail": str(e)})
                 ct = hdrs.get("content-type") or "application/json; charset=utf-8"
                 extra = dict(rate_headers)
                 if code == 200:
                     cache_set(cache_key, body, ttl)
+                    _persist_upstream(sub, body)
                     extra["X-Lumen-Cache"] = "MISS"
                     extra["X-Lumen-Cache-TTL"] = str(ttl)
+                    extra["X-Lumen-DB"] = "WRITE"
                     extra["Cache-Control"] = "public, max-age=%d" % min(60, ttl)
-                else:
-                    extra["X-Lumen-Cache"] = "BYPASS"
+                    return self.send_bytes(code, body, ct, extra_headers=extra)
+
+                # upstream gagal → coba SQLite
+                fb = _db_fallback(sub)
+                if fb:
+                    extra["X-Lumen-Cache"] = "DB"
+                    extra["X-Lumen-DB"] = "HIT"
+                    extra["Cache-Control"] = "public, max-age=60"
+                    return self.send_bytes(
+                        200, fb, "application/json; charset=utf-8", extra_headers=extra
+                    )
+                extra["X-Lumen-Cache"] = "BYPASS"
+                extra["X-Lumen-DB"] = "MISS"
                 return self.send_bytes(code, body, ct, extra_headers=extra)
 
             if path == "/img":
@@ -527,9 +607,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    db_path = lumen_db.init_db()
     print("=" * 60, flush=True)
     print("  Lumen Reader", flush=True)
     print("  -> http://127.0.0.1:%s" % PORT, flush=True)
+    print("  db: %s" % db_path, flush=True)
     print("=" * 60, flush=True)
     ThreadingHTTPServer.allow_reuse_address = True
     try:

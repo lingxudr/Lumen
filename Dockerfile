@@ -4,6 +4,8 @@ WORKDIR /app
 
 # App is pure stdlib — no pip install needed
 COPY server/ ./server/
+RUN mkdir -p /data /app/data
+ENV DB_PATH=/data/lumen.db
 COPY public/ ./public/
 COPY Procfile railway.toml requirements.txt ./
 
