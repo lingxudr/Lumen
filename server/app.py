@@ -188,7 +188,7 @@ def client_ip(handler):
 
 
 
-def fetch(url, extra_headers=None, timeout=25, retries=1):
+def fetch(url, extra_headers=None, timeout=12, retries=0):
     headers = {
         "User-Agent": UA,
         "Accept": "*/*",
@@ -429,6 +429,13 @@ class Handler(BaseHTTPRequestHandler):
                 if sub.startswith("check-hotlink"):
                     return self.send_json(405, {"error": "POST only"})
 
+                # Instant ping (diagnosa Railway)
+                if sub.split("?")[0].rstrip("/") == "ping":
+                    return self.send_json(
+                        200,
+                        {"ok": True, "pong": True, "api_base": API_BASE},
+                    )
+
                 # Local SQLite search (tidak ke upstream)
                 if sub.split("?")[0] in ("local/search", "local/search/"):
                     ip = client_ip(self)
@@ -500,8 +507,9 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
                 try:
-                    code, hdrs, body = fetch(url)
+                    code, hdrs, body = fetch(url, timeout=12, retries=0)
                 except Exception as e:
+                    print("upstream error:", sub, e, flush=True)
                     fb = _db_fallback(sub)
                     if fb:
                         extra = dict(rate_headers)
@@ -511,7 +519,17 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_bytes(
                             200, fb, "application/json; charset=utf-8", extra_headers=extra
                         )
-                    return self.send_json(502, {"error": "upstream_error", "detail": str(e)})
+                    return self.send_json(
+                        200,
+                        {
+                            "status": 502,
+                            "message": "Sumber sementara tidak terjangkau",
+                            "error": "upstream_error",
+                            "detail": str(e),
+                            "data": [],
+                            "meta": {"page": 1, "lastPage": 1, "total": 0},
+                        },
+                    )
                 ct = hdrs.get("content-type") or "application/json; charset=utf-8"
                 extra = dict(rate_headers)
                 if code == 200:

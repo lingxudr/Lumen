@@ -3,24 +3,25 @@ function detectEndpoints() {
   const host = typeof location !== "undefined" ? location.hostname : "";
   const local = host === "localhost" || host === "127.0.0.1" || host === "";
 
-  // URL public Railway proxy (update setelah deploy Railway)
-  // Contoh: https://lumen-proxy-production-xxxx.up.railway.app
+  // Jika dibuka langsung di Railway, API = same origin (paling stabil)
+  if (host.endsWith(".railway.app")) {
+    return { apiBase: "/api", imgProxy: "/img" };
+  }
+
   const fromWindow =
     typeof window !== "undefined" && window.LUMEN_PROXY
       ? String(window.LUMEN_PROXY).trim()
       : "";
-  const RAILWAY_ORIGIN = fromWindow;
 
   if (local) {
     return { apiBase: "/api", imgProxy: "/img" };
   }
 
-  // Produksi: wajib proxy Railway (Vercel IP sering diblokir sumber)
-  if (!RAILWAY_ORIGIN) {
-    console.warn("[Lumen] window.LUMEN_PROXY belum di-set — API mungkin gagal di Vercel");
+  if (!fromWindow) {
+    console.warn("[Lumen] window.LUMEN_PROXY belum di-set");
     return { apiBase: "/api", imgProxy: "/img" };
   }
-  const origin = RAILWAY_ORIGIN.replace(/\/$/, "");
+  const origin = fromWindow.replace(/\/$/, "");
   return {
     apiBase: origin + "/api",
     imgProxy: origin + "/img",
@@ -34,5 +35,5 @@ export const Config = {
   imgProxy: endpoints.imgProxy,
   pageSize: 20,
   previewChapters: 3,
-  version: "1.1.0",
+  version: "1.2.0",
 };
