@@ -408,28 +408,21 @@ class Handler(BaseHTTPRequestHandler):
                         lumen_db.prune()
                     except Exception:
                         pass
-                try:
-                    code, _, _ = fetch(API_BASE + "/", timeout=8)
-                    return self.send_json(
-                        200,
-                        {
-                            "ok": True,
-                            "upstream": code,
-                            "api_base": API_BASE,
-                            "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
-                            "db": _db_stats_safe(),
-                            "rate_limit": {"api": RATE_LIMIT_API, "img": RATE_LIMIT_IMG, "window": RATE_LIMIT_WINDOW},
+                return self.send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "api_base": API_BASE,
+                        "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                        "db": _db_stats_safe(),
+                        "rate_limit": {
+                            "api": RATE_LIMIT_API,
+                            "img": RATE_LIMIT_IMG,
+                            "window": RATE_LIMIT_WINDOW,
                         },
-                    )
-                except Exception as e:
-                    return self.send_json(
-                        200,
-                        {
-                            "ok": True,
-                            "upstream": str(e),
-                            "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
-                        },
-                    )
+                    },
+                )
+
 
             if path.startswith("/api/"):
                 sub = path[len("/api/") :]
