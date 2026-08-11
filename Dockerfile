@@ -6,6 +6,7 @@ WORKDIR /app
 COPY server/ ./server/
 RUN mkdir -p /data /app/data
 ENV DB_PATH=/data/lumen.db
+ENV API_BASE=https://be.komikcast.cc
 COPY public/ ./public/
 COPY Procfile railway.toml requirements.txt ./
 

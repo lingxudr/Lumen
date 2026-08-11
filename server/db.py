@@ -227,3 +227,64 @@ def wrap_manga_detail(payload_bytes: bytes) -> bytes:
         return json.dumps(out, ensure_ascii=False).encode("utf-8")
     except Exception:
         return payload_bytes
+
+
+def search_manga(query: str, limit: int = 20):
+    """Local title search (case-insensitive LIKE)."""
+    q = (query or "").strip()
+    if len(q) < 2:
+        return []
+    like = "%%%s%%" % q.replace("%", "").replace("_", "")
+    with _LOCK:
+        c = _connect()
+        rows = c.execute(
+            """
+            SELECT slug, title, cover, payload, updated_at
+            FROM manga
+            WHERE title LIKE ? OR slug LIKE ?
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (like, like, int(limit)),
+        ).fetchall()
+    out = []
+    for r in rows:
+        try:
+            item = json.loads(r["payload"])
+        except Exception:
+            item = {
+                "id": None,
+                "data": {"slug": r["slug"], "title": r["title"], "coverImage": r["cover"]},
+            }
+        out.append(item)
+    return out
+
+
+def prune(max_age_pages: float = 30 * 86400, max_age_lists: float = 14 * 86400, max_pages: int = 4000):
+    """Remove old chapter pages/lists; keep manga metadata longer."""
+    now = time.time()
+    with _LOCK:
+        c = _connect()
+        c.execute(
+            "DELETE FROM chapter_pages WHERE updated_at < ?",
+            (now - max_age_pages,),
+        )
+        c.execute(
+            "DELETE FROM chapter_list WHERE updated_at < ?",
+            (now - max_age_lists,),
+        )
+        # hard cap rows
+        n = c.execute("SELECT COUNT(*) FROM chapter_pages").fetchone()[0]
+        if n > max_pages:
+            c.execute(
+                """
+                DELETE FROM chapter_pages WHERE rowid IN (
+                    SELECT rowid FROM chapter_pages
+                    ORDER BY updated_at ASC
+                    LIMIT ?
+                )
+                """,
+                (n - max_pages,),
+            )
+        c.commit()
+        return stats()

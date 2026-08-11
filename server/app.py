@@ -20,7 +20,7 @@ import db as lumen_db
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
-API_BASE = "https://be.komikcast.cc"
+API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://be.komikcast.cc").rstrip("/")
 HOST = os.environ.get("KC_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "5050")
 UA = (
@@ -28,6 +28,7 @@ UA = (
     "(KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
 )
 SSL_CTX = ssl.create_default_context()
+_health_hits = 0
 
 import threading
 import time
@@ -342,6 +343,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.serve_file(STATIC / rel)
 
             if path == "/health":
+                global _health_hits
+                _health_hits += 1
+                if _health_hits % 50 == 0:
+                    try:
+                        lumen_db.prune()
+                    except Exception:
+                        pass
                 try:
                     code, _, _ = fetch(API_BASE + "/", timeout=8)
                     return self.send_json(
@@ -349,6 +357,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "ok": True,
                             "upstream": code,
+                            "api_base": API_BASE,
                             "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
                             "db": lumen_db.stats(),
                             "rate_limit": {"api": RATE_LIMIT_API, "img": RATE_LIMIT_IMG, "window": RATE_LIMIT_WINDOW},
@@ -368,6 +377,40 @@ class Handler(BaseHTTPRequestHandler):
                 sub = path[len("/api/") :]
                 if sub.startswith("check-hotlink"):
                     return self.send_json(405, {"error": "POST only"})
+
+                # Local SQLite search (tidak ke upstream)
+                if sub.split("?")[0] in ("local/search", "local/search/"):
+                    ip = client_ip(self)
+                    ok, remaining, reset = rate_allow(ip, "api", RATE_LIMIT_API)
+                    if not ok:
+                        return self.send_json(429, {"error": "rate_limited", "retry_after": reset})
+                    q = (qs.get("q") or qs.get("title") or [""])[0]
+                    try:
+                        limit = int((qs.get("limit") or ["20"])[0])
+                    except ValueError:
+                        limit = 20
+                    items = lumen_db.search_manga(q, limit=min(50, max(1, limit)))
+                    body = json.dumps(
+                        {
+                            "status": 200,
+                            "message": "Local search",
+                            "data": items,
+                            "meta": {"source": "sqlite", "q": q, "total": len(items)},
+                        },
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    return self.send_bytes(
+                        200,
+                        body,
+                        "application/json; charset=utf-8",
+                        extra_headers={"X-Lumen-DB": "SEARCH", "Cache-Control": "public, max-age=30"},
+                    )
+
+                if sub.split("?")[0] in ("local/stats", "local/prune"):
+                    if sub.startswith("local/prune"):
+                        pruned = lumen_db.prune()
+                        return self.send_json(200, {"ok": True, "db": pruned})
+                    return self.send_json(200, {"ok": True, "db": lumen_db.stats()})
 
                 ip = client_ip(self)
                 ok, remaining, reset = rate_allow(ip, "api", RATE_LIMIT_API)
@@ -608,6 +651,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     db_path = lumen_db.init_db()
+    try:
+        lumen_db.prune()
+    except Exception:
+        pass
     print("=" * 60, flush=True)
     print("  Lumen Reader", flush=True)
     print("  -> http://127.0.0.1:%s" % PORT, flush=True)

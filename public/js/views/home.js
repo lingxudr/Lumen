@@ -77,7 +77,19 @@ export function createHomeView(ctx) {
     showSkeleton(8);
     $("#list-status").textContent = "Memuat…";
     try {
-      const data = await api("series", params, { ttl: 60_000, stale: 5 * 60_000 });
+      let data;
+      try {
+        data = await api("series", params, { ttl: 90_000, stale: 10 * 60_000 });
+      } catch (netErr) {
+        // fallback search lokal SQLite jika user sedang mencari
+        if (ctx.state.query && ctx.state.query.trim().length >= 2) {
+          data = await api("local/search", { q: ctx.state.query.trim(), limit: Config.pageSize });
+          if (!(data.data || []).length) throw netErr;
+          toast("Menampilkan hasil dari cache lokal");
+        } else {
+          throw netErr;
+        }
+      }
       applyListData(data);
     } catch (err) {
       console.error(err);

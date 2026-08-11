@@ -1,5 +1,5 @@
 /* Lumen service worker — cache shell + cover offline */
-const CACHE = "lumen-shell-v1";
+const CACHE = "lumen-shell-v2";
 const SHELL = ["/", "/index.html", "/css/main.css", "/js/app.js", "/js/config.js", "/js/api.js", "/js/ui.js", "/js/utils.js", "/js/storage.js", "/js/views/home.js", "/js/views/series.js", "/js/views/reader.js", "/js/views/library.js", "/manifest.webmanifest", "/assets/icon-192.png"];
 
 self.addEventListener("install", (event) => {
