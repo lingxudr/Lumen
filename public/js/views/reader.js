@@ -162,7 +162,7 @@ export function createReaderView(ctx) {
 
     // Lazy + preload 2–3 halaman ke depan
     const PRELOAD = 3;
-    const resolved = images.map((url) => (useProxy ? proxyImageUrl(url) : url));
+    const resolved = images.map((url) => (useProxy ? proxyImageUrl(url, { webp: true }) : url));
 
     resolved.forEach((src, i) => {
       const wrap = document.createElement("div");
@@ -189,7 +189,7 @@ export function createReaderView(ctx) {
         if (!useProxy && !img.dataset.proxied) {
           img.dataset.proxied = "1";
           const raw = images[i];
-          img.src = proxyImageUrl(raw);
+          img.src = proxyImageUrl(raw, { webp: false });
           return;
         }
         const div = document.createElement("div");

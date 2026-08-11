@@ -188,6 +188,44 @@ def client_ip(handler):
 
 
 
+
+def convert_to_webp(body, max_width=None, quality=None):
+    """Re-encode image bytes to WebP. Returns (bytes, content_type) or None."""
+    try:
+        from io import BytesIO
+        from PIL import Image
+    except Exception:
+        return None
+    if quality is None:
+        try:
+            quality = int(os.environ.get("WEBP_QUALITY") or "78")
+        except Exception:
+            quality = 78
+    try:
+        im = Image.open(BytesIO(body))
+        im.load()
+        if max_width:
+            try:
+                max_width = int(max_width)
+            except Exception:
+                max_width = None
+        if max_width and im.width > max_width:
+            h = int(im.height * (max_width / float(im.width)))
+            im = im.resize((max_width, h), Image.Resampling.LANCZOS)
+        if im.mode not in ("RGB", "RGBA"):
+            im = im.convert("RGBA" if "A" in im.getbands() else "RGB")
+        buf = BytesIO()
+        im.save(buf, format="WEBP", quality=quality, method=4)
+        data = buf.getvalue()
+        # only use if smaller or roughly similar
+        if len(data) > len(body) * 1.05 and not max_width:
+            return None
+        return data, "image/webp"
+    except Exception as e:
+        print("webp convert fail:", e, flush=True)
+        return None
+
+
 def fetch(url, extra_headers=None, timeout=12, retries=0):
     headers = {
         "User-Agent": UA,
@@ -588,12 +626,22 @@ class Handler(BaseHTTPRequestHandler):
                 if not any(a in src for a in allowed):
                     return self.send_json(403, {"error": "host not allowed"})
 
-                cached = img_cache_get(src)
+                want_webp = False
+                fmt = ((qs.get("fmt") or [""])[0] or "").lower()
+                accept = (self.headers.get("Accept") or "").lower()
+                if fmt == "webp" or "image/webp" in accept:
+                    want_webp = True
+                max_w = (qs.get("w") or [None])[0]
+
+                cache_key = src + ("|webp" if want_webp else "|raw") + ("|w=" + str(max_w) if max_w else "")
+                cached = img_cache_get(cache_key)
                 if cached is not None:
                     body, ct = cached
                     extra = dict(rate_headers)
                     extra["X-Lumen-Cache"] = "HIT"
-                    extra["Cache-Control"] = "public, max-age=3600"
+                    extra["Cache-Control"] = "public, max-age=86400"
+                    if "webp" in (ct or ""):
+                        extra["X-Lumen-Image"] = "webp"
                     return self.send_bytes(200, body, ct, extra_headers=extra)
 
                 code, hdrs, body = fetch(
@@ -602,13 +650,33 @@ class Handler(BaseHTTPRequestHandler):
                         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
                         "Referer": "https://v3.komikcast.fit/",
                     },
+                    timeout=15,
+                    retries=0,
                 )
                 ct = hdrs.get("content-type") or "image/jpeg"
                 extra = dict(rate_headers)
+
                 if code == 200 and body:
-                    img_cache_set(src, body, ct)
+                    # already webp from CDN
+                    if want_webp and "webp" not in (ct or "").lower():
+                        converted = convert_to_webp(body, max_width=max_w)
+                        if converted:
+                            body, ct = converted
+                            extra["X-Lumen-Image"] = "webp"
+                        elif max_w:
+                            converted = convert_to_webp(body, max_width=max_w, quality=85)
+                            if converted:
+                                body, ct = converted
+                                extra["X-Lumen-Image"] = "webp"
+                    elif max_w and want_webp:
+                        converted = convert_to_webp(body, max_width=max_w)
+                        if converted:
+                            body, ct = converted
+                            extra["X-Lumen-Image"] = "webp"
+
+                    img_cache_set(cache_key, body, ct)
                     extra["X-Lumen-Cache"] = "MISS"
-                    extra["Cache-Control"] = "public, max-age=3600"
+                    extra["Cache-Control"] = "public, max-age=86400"
                 else:
                     extra["X-Lumen-Cache"] = "BYPASS"
                 return self.send_bytes(code, body, ct, extra_headers=extra)

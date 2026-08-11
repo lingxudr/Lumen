@@ -156,8 +156,29 @@ export function clearApiCache() {
   INFLIGHT.clear();
 }
 
-export function proxyImageUrl(url) {
-  return `${Config.imgProxy}?u=${encodeURIComponent(url)}`;
+function supportsWebP() {
+  if (typeof supportsWebP._v === "boolean") return supportsWebP._v;
+  try {
+    supportsWebP._v =
+      typeof document !== "undefined" &&
+      document.createElement("canvas").toDataURL("image/webp").indexOf("data:image/webp") === 0;
+  } catch {
+    supportsWebP._v = false;
+  }
+  return supportsWebP._v;
+}
+
+/**
+ * @param {string} url
+ * @param {{ webp?: boolean, w?: number }} [opts]
+ */
+export function proxyImageUrl(url, opts = {}) {
+  const qs = new URLSearchParams();
+  qs.set("u", url);
+  const useWebp = opts.webp !== false && supportsWebP();
+  if (useWebp) qs.set("fmt", "webp");
+  if (opts.w) qs.set("w", String(opts.w));
+  return `${Config.imgProxy}?${qs}`;
 }
 
 export async function checkImageStatus(urls) {

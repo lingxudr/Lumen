@@ -56,7 +56,7 @@ export function renderState(container, { title, detail, retryLabel, onRetry }) {
   }
 }
 
-export function setImg(el, url) {
+export function setImg(el, url, opts = {}) {
   if (!el) return;
   if (!url) {
     el.style.opacity = "0.25";
@@ -65,13 +65,20 @@ export function setImg(el, url) {
   el.referrerPolicy = "no-referrer";
   el.loading = el.loading || "lazy";
   el.decoding = "async";
-  el.src = url;
+  // Cover & UI images: proxy + WebP (lebih kecil)
+  const w = opts.w || 480;
+  el.src = proxyImageUrl(url, { webp: true, w });
   el.onerror = () => {
-    if (el.dataset.proxied) {
+    if (el.dataset.proxied === "2") {
       el.style.opacity = "0.25";
       return;
     }
+    if (el.dataset.proxied === "1") {
+      el.dataset.proxied = "2";
+      el.src = url; // last resort: direct
+      return;
+    }
     el.dataset.proxied = "1";
-    el.src = proxyImageUrl(url);
+    el.src = proxyImageUrl(url, { webp: false }); // raw via proxy
   };
 }
