@@ -1,7 +1,7 @@
 import { Config } from "../config.js";
 import { api, apiPeek } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
-import { toast, loading, showView, setImg } from "../ui.js";
+import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { getLastRead } from "../storage.js";
 
 export function createHomeView(ctx) {
@@ -81,9 +81,15 @@ export function createHomeView(ctx) {
       applyListData(data);
     } catch (err) {
       console.error(err);
-      $("#series-list").innerHTML = "";
-      $("#list-status").textContent = String(err.message || err);
-      toast(String(err.message || err));
+      const msg = String(err.message || err);
+      $("#list-status").textContent = msg;
+      renderState($("#series-list"), {
+        title: "Gagal memuat daftar",
+        detail: msg,
+        retryLabel: "Coba lagi",
+        onRetry: () => loadList(),
+      });
+      toast(msg);
     } finally {
       loading(false);
     }

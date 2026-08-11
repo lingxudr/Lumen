@@ -1,24 +1,35 @@
 import { api } from "../api.js";
 import { $, esc, escAttr, relTime, isNew, chapterIndex } from "../utils.js";
-import { toast, loading, showView, setImg } from "../ui.js";
+import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
 
 export function createSeriesView(ctx) {
   async function openSeries(slugOrId) {
     loading(true);
     try {
-      const detail = await api(`series/${encodeURIComponent(slugOrId)}`, { includeMeta: "true" });
+      const detail = await api(`series/${encodeURIComponent(slugOrId)}`, { includeMeta: "true" }, { ttl: 5 * 60_000, stale: 30 * 60_000 });
       const series = detail.data;
       if (!series) throw new Error("Judul tidak ditemukan");
       ctx.state.series = series;
       const slug = series.data?.slug || series.slug || String(slugOrId);
-      const chRes = await api(`series/${encodeURIComponent(slug)}/chapters`);
+      const chRes = await api(`series/${encodeURIComponent(slug)}/chapters`, {}, { ttl: 3 * 60_000, stale: 20 * 60_000 });
       ctx.state.chapters = chRes.data || [];
       showView("series");
       render();
     } catch (err) {
       console.error(err);
-      toast(String(err.message || err));
+      const msg = String(err.message || err);
+      toast(msg);
+      showView("series");
+      const detail = document.querySelector("#series-detail");
+      if (detail) {
+        renderState(detail, {
+          title: "Gagal memuat judul",
+          detail: msg,
+          retryLabel: "Coba lagi",
+          onRetry: () => openSeries(slugOrId),
+        });
+      }
     } finally {
       loading(false);
     }

@@ -131,7 +131,7 @@ def client_ip(handler):
 
 
 
-def fetch(url, extra_headers=None, timeout=30):
+def fetch(url, extra_headers=None, timeout=25, retries=1):
     headers = {
         "User-Agent": UA,
         "Accept": "*/*",
@@ -141,20 +141,36 @@ def fetch(url, extra_headers=None, timeout=30):
     }
     if extra_headers:
         headers.update(extra_headers)
-    req = Request(url, headers=headers, method="GET")
-    try:
-        resp = urlopen(req, timeout=timeout, context=SSL_CTX)
+    last_err = None
+    for attempt in range(retries + 1):
+        req = Request(url, headers=headers, method="GET")
         try:
-            body = resp.read()
-            status = getattr(resp, "status", 200)
-            hdrs = {k.lower(): v for k, v in resp.headers.items()}
-            return status, hdrs, body
-        finally:
-            resp.close()
-    except HTTPError as e:
-        body = e.read() if e.fp else b""
-        hdrs = {k.lower(): v for k, v in (e.headers.items() if e.headers else [])}
-        return e.code, hdrs, body
+            resp = urlopen(req, timeout=timeout, context=SSL_CTX)
+            try:
+                body = resp.read()
+                status = getattr(resp, "status", 200)
+                hdrs = {k.lower(): v for k, v in resp.headers.items()}
+                return status, hdrs, body
+            finally:
+                resp.close()
+        except HTTPError as e:
+            body = e.read() if e.fp else b""
+            hdrs = {k.lower(): v for k, v in (e.headers.items() if e.headers else [])}
+            # retry only transient 5xx
+            if e.code >= 500 and attempt < retries:
+                time.sleep(0.35 * (attempt + 1))
+                last_err = e
+                continue
+            return e.code, hdrs, body
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(0.35 * (attempt + 1))
+                continue
+            raise
+    if last_err:
+        raise last_err
+    return 502, {}, b""
 
 
 def mime(path):

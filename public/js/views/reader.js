@@ -1,6 +1,6 @@
 import { api, apiPrefetch, proxyImageUrl, checkImageStatus } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
-import { toast, loading, showView, setImg } from "../ui.js";
+import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { saveLastRead, getPrefs, savePrefs } from "../storage.js";
 
 export function createReaderView(ctx) {
@@ -110,7 +110,9 @@ export function createReaderView(ctx) {
     if (menu) menu.classList.add("is-hidden");
     try {
       const res = await api(
-        `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(index)}`
+        `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(index)}`,
+        {},
+        { ttl: 15 * 60_000, stale: 45 * 60_000 }
       );
       if (!res?.data) throw new Error(res?.message || "Chapter gagal dimuat");
       ctx.state.chapterData = res.data;
@@ -125,7 +127,18 @@ export function createReaderView(ctx) {
       updateProgress();
     } catch (err) {
       console.error(err);
-      toast(String(err.message || err));
+      const msg = String(err.message || err);
+      toast(msg);
+      showView("reader");
+      const box = document.querySelector("#reader-pages");
+      if (box) {
+        renderState(box, {
+          title: "Gagal memuat chapter",
+          detail: msg,
+          retryLabel: "Coba lagi",
+          onRetry: () => openChapter(index),
+        });
+      }
     } finally {
       loading(false);
     }

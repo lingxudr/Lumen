@@ -1401,3 +1401,41 @@ body:not(.mode-reader) .reader-progress { display: none; }
 body[data-reader-theme="dark"] .img-pending {
   background: #151515;
 }
+
+
+/* Offline + empty/error state */
+.offline-bar {
+  position: sticky;
+  top: 0;
+  z-index: 400;
+  background: #111;
+  color: #ffe566;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+  border-bottom: 3px solid #111;
+}
+.state-panel {
+  grid-column: 1 / -1;
+  margin: 24px auto;
+  max-width: 420px;
+  padding: 28px 20px;
+  text-align: center;
+  background: #fff;
+  border: 3px solid #111;
+  box-shadow: 6px 6px 0 #111;
+}
+.state-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.state-detail {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 16px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+.state-retry { min-width: 140px; }

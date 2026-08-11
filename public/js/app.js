@@ -1,7 +1,7 @@
 /**
  * Lumen — entry point
  */
-import { showView } from "./ui.js";
+import { showView, setOffline, toast } from "./ui.js";
 import { createHomeView } from "./views/home.js";
 import { createSeriesView } from "./views/series.js";
 import { createReaderView } from "./views/reader.js";
@@ -41,7 +41,6 @@ const App = {
     }
   },
   tab(name) {
-    // reset library tab highlight on main tabs
     home.setTab(name);
   },
   page: home.page,
@@ -69,10 +68,25 @@ const App = {
     const m = document.getElementById("reader-menu");
     if (m) m.classList.toggle("is-hidden");
   },
+  refresh() {
+    home.loadList();
+  },
 };
 
 window.App = App;
+
 document.addEventListener("DOMContentLoaded", () => {
+  setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
+  window.addEventListener("offline", () => {
+    setOffline(true);
+    toast("Koneksi terputus");
+  });
+  window.addEventListener("online", () => {
+    setOffline(false);
+    toast("Koneksi kembali");
+    home.loadList();
+  });
+
   home.loadList();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});

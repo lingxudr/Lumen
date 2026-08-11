@@ -4,8 +4,10 @@ import { Config } from "./config.js";
 const MEM = new Map(); // key -> { exp, data, staleExp }
 const INFLIGHT = new Map(); // key -> Promise
 
-const DEFAULT_TTL = 60_000; // 60s fresh
-const DEFAULT_STALE = 5 * 60_000; // serve stale up to 5m while revalidating
+const DEFAULT_TTL = 90_000; // 90s fresh
+const DEFAULT_STALE = 10 * 60_000; // stale up to 10m while revalidating
+const FETCH_TIMEOUT = 18_000;
+const MAX_RETRIES = 2;
 
 function cacheKey(path, params) {
   const qs = new URLSearchParams();
@@ -26,13 +28,24 @@ function buildUrl(path, params = {}) {
   return `${Config.apiBase}/${path}${qs.toString() ? `?${qs}` : ""}`;
 }
 
-async function fetchJson(url) {
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchJsonOnce(url, signal) {
   let res;
   try {
-    res = await fetch(url);
-  } catch {
-    throw new Error("Tidak dapat terhubung ke server. Pastikan aplikasi sedang berjalan.");
+    res = await fetch(url, { signal });
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      throw new Error("Koneksi timeout. Coba lagi.");
+    }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      throw new Error("Tidak ada koneksi internet.");
+    }
+    throw new Error("Tidak dapat terhubung ke server. Coba beberapa saat lagi.");
   }
+
   const text = await res.text();
   let data;
   try {
@@ -40,13 +53,43 @@ async function fetchJson(url) {
   } catch {
     throw new Error(`Respons tidak valid (${res.status})`);
   }
+
+  if (res.status === 429) {
+    const wait = data.retry_after || 5;
+    throw new Error(`Terlalu banyak permintaan. Tunggu ~${wait}s.`);
+  }
+
   if (!res.ok) {
+    if (data.error === "rate_limited") {
+      throw new Error(`Terlalu banyak permintaan. Tunggu ~${data.retry_after || 5}s.`);
+    }
     if (data.error === "upstream_blocked" || data.message) {
       throw new Error(data.message || data.error);
     }
     throw new Error(data.message || data.error || `Gagal memuat (${res.status})`);
   }
   return data;
+}
+
+async function fetchJson(url) {
+  let lastErr;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), FETCH_TIMEOUT) : null;
+    try {
+      const data = await fetchJsonOnce(url, ctrl ? ctrl.signal : undefined);
+      if (timer) clearTimeout(timer);
+      return data;
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      lastErr = e;
+      const msg = String(e && e.message ? e.message : e);
+      // jangan retry error logis (404-ish message, rate limit)
+      if (/Terlalu banyak|tidak valid|tidak ditemukan/i.test(msg)) break;
+      if (attempt < MAX_RETRIES) await sleep(400 * (attempt + 1));
+    }
+  }
+  throw lastErr || new Error("Gagal memuat data");
 }
 
 /**
@@ -63,10 +106,8 @@ export async function api(path, params = {}, opts = {}) {
 
   if (!opts.force) {
     const hit = MEM.get(key);
-    if (hit && hit.exp > now) {
-      return hit.data;
-    }
-    // stale-while-revalidate
+    if (hit && hit.exp > now) return hit.data;
+
     if (hit && hit.staleExp > now) {
       if (!INFLIGHT.has(key)) {
         const p = fetchJson(url)
@@ -82,13 +123,16 @@ export async function api(path, params = {}, opts = {}) {
     }
   }
 
-  if (INFLIGHT.has(key) && !opts.force) {
-    return INFLIGHT.get(key);
-  }
+  if (INFLIGHT.has(key) && !opts.force) return INFLIGHT.get(key);
 
   const p = fetchJson(url)
     .then((data) => {
       MEM.set(key, { data, exp: Date.now() + ttl, staleExp: Date.now() + stale });
+      // bound memory
+      if (MEM.size > 120) {
+        const first = MEM.keys().next().value;
+        MEM.delete(first);
+      }
       return data;
     })
     .finally(() => INFLIGHT.delete(key));
@@ -96,18 +140,20 @@ export async function api(path, params = {}, opts = {}) {
   return p;
 }
 
-/** Peek cache without network */
 export function apiPeek(path, params = {}) {
   const key = cacheKey(path, params);
   const hit = MEM.get(key);
-  if (!hit) return null;
-  if (hit.staleExp < Date.now()) return null;
+  if (!hit || hit.staleExp < Date.now()) return null;
   return hit.data;
 }
 
-/** Warm cache in background (no throw to caller) */
 export function apiPrefetch(path, params = {}, opts = {}) {
   api(path, params, opts).catch(() => {});
+}
+
+export function clearApiCache() {
+  MEM.clear();
+  INFLIGHT.clear();
 }
 
 export function proxyImageUrl(url) {
