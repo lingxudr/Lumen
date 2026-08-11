@@ -1,1 +1,1 @@
-web: python -u server/app.py
+web: python -u server/boot.py

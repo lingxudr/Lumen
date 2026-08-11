@@ -71,8 +71,8 @@ except Exception as _db_imp_err:
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
 API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://be.komikcast.cc").rstrip("/")
-HOST = os.environ.get("KC_HOST", "0.0.0.0")
-PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "5050")
+HOST = os.environ.get("HOST") or os.environ.get("KC_HOST") or "0.0.0.0"
+PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "8080")
 UA = (
     "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
