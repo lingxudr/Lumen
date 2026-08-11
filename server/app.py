@@ -22,29 +22,112 @@ UA = (
 )
 SSL_CTX = ssl.create_default_context()
 
-# Short TTL cache for list API (hemat upstream)
+import threading
+import time
+from collections import defaultdict, deque
+
+# ── Tiered API cache (agresif, hemat upstream) ───────────────────────
+# list/search: 60s | series detail: 5m | chapter list: 3m
+# single chapter: 15m | genres: 30m | images: 2h
 API_CACHE = {}
-API_CACHE_TTL = 45  # seconds
-API_CACHE_MAX = 64
+IMG_CACHE = {}
+API_CACHE_MAX = 256
+IMG_CACHE_MAX = 48
+IMG_CACHE_TTL = 2 * 3600
+_CACHE_LOCK = threading.Lock()
+
+
+def _ttl_for(sub_path):
+    s = (sub_path or "").split("?")[0].strip("/")
+    if s == "genres" or s.startswith("genres/"):
+        return 30 * 60
+    if "/chapters/" in s:
+        return 15 * 60
+    if s.endswith("/chapters"):
+        return 3 * 60
+    if s.startswith("series/") and "/chapters" not in s:
+        return 5 * 60
+    if s == "series":
+        return 60
+    return 90
+
 
 def cache_get(key):
-    import time
-    row = API_CACHE.get(key)
-    if not row:
-        return None
-    body, exp = row
-    if time.time() > exp:
-        API_CACHE.pop(key, None)
-        return None
-    return body
+    with _CACHE_LOCK:
+        row = API_CACHE.get(key)
+        if not row:
+            return None
+        body, exp, ttl = row
+        if time.time() > exp:
+            API_CACHE.pop(key, None)
+            return None
+        return body, max(0, int(exp - time.time())), ttl
 
-def cache_set(key, body):
-    import time
-    if len(API_CACHE) >= API_CACHE_MAX:
-        # drop oldest-ish: clear half
-        for k in list(API_CACHE.keys())[: API_CACHE_MAX // 2]:
-            API_CACHE.pop(k, None)
-    API_CACHE[key] = (body, time.time() + API_CACHE_TTL)
+
+def cache_set(key, body, ttl):
+    with _CACHE_LOCK:
+        if len(API_CACHE) >= API_CACHE_MAX:
+            now = time.time()
+            for k, v in list(API_CACHE.items()):
+                if now > v[1]:
+                    API_CACHE.pop(k, None)
+            if len(API_CACHE) >= API_CACHE_MAX:
+                for k in list(API_CACHE.keys())[: API_CACHE_MAX // 2]:
+                    API_CACHE.pop(k, None)
+        API_CACHE[key] = (body, time.time() + ttl, ttl)
+
+
+def img_cache_get(key):
+    with _CACHE_LOCK:
+        row = IMG_CACHE.get(key)
+        if not row:
+            return None
+        body, exp, ct = row
+        if time.time() > exp:
+            IMG_CACHE.pop(key, None)
+            return None
+        return body, ct
+
+
+def img_cache_set(key, body, content_type):
+    with _CACHE_LOCK:
+        if len(body) > 2_500_000:
+            return
+        if len(IMG_CACHE) >= IMG_CACHE_MAX:
+            for k in list(IMG_CACHE.keys())[: IMG_CACHE_MAX // 2]:
+                IMG_CACHE.pop(k, None)
+        IMG_CACHE[key] = (body, time.time() + IMG_CACHE_TTL, content_type)
+
+
+# ── Rate limit per IP (sliding window 60s) ────────────────────────────
+RATE_LIMIT_WINDOW = 60
+RATE_LIMIT_API = int(os.environ.get("RATE_LIMIT_API", "120"))
+RATE_LIMIT_IMG = int(os.environ.get("RATE_LIMIT_IMG", "90"))
+_RATE = defaultdict(deque)
+_RATE_LOCK = threading.Lock()
+
+
+def rate_allow(ip, bucket, limit):
+    now = time.time()
+    key = "%s:%s" % (bucket, ip or "unknown")
+    with _RATE_LOCK:
+        q = _RATE[key]
+        cutoff = now - RATE_LIMIT_WINDOW
+        while q and q[0] < cutoff:
+            q.popleft()
+        if len(q) >= limit:
+            reset = int(max(1, RATE_LIMIT_WINDOW - (now - q[0]))) if q else RATE_LIMIT_WINDOW
+            return False, 0, reset
+        q.append(now)
+        return True, max(0, limit - len(q)), RATE_LIMIT_WINDOW
+
+
+def client_ip(handler):
+    xff = handler.headers.get("X-Forwarded-For") or handler.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return handler.client_address[0] if handler.client_address else "unknown"
+
 
 
 def fetch(url, extra_headers=None, timeout=30):
@@ -109,15 +192,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(code)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             # CORS — frontend Vercel boleh hit proxy Railway
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
-            if extra_headers:
-                for k, v in extra_headers.items():
-                    self.send_header(k, v)
+            extra_headers = dict(extra_headers or {})
+            if "Cache-Control" not in extra_headers:
+                extra_headers["Cache-Control"] = "no-store"
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
         except BrokenPipeError:
@@ -171,47 +255,95 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/health":
                 try:
                     code, _, _ = fetch(API_BASE + "/", timeout=8)
-                    return self.send_json(200, {"ok": True, "upstream": code})
+                    return self.send_json(
+                        200,
+                        {
+                            "ok": True,
+                            "upstream": code,
+                            "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                            "rate_limit": {"api": RATE_LIMIT_API, "img": RATE_LIMIT_IMG, "window": RATE_LIMIT_WINDOW},
+                        },
+                    )
                 except Exception as e:
-                    return self.send_json(200, {"ok": True, "upstream": str(e)})
+                    return self.send_json(
+                        200,
+                        {
+                            "ok": True,
+                            "upstream": str(e),
+                            "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                        },
+                    )
 
             if path.startswith("/api/"):
                 sub = path[len("/api/") :]
-                # check-hotlink is POST only
                 if sub.startswith("check-hotlink"):
                     return self.send_json(405, {"error": "POST only"})
+
+                ip = client_ip(self)
+                ok, remaining, reset = rate_allow(ip, "api", RATE_LIMIT_API)
+                rate_headers = {
+                    "X-RateLimit-Limit": str(RATE_LIMIT_API),
+                    "X-RateLimit-Remaining": str(remaining),
+                    "X-RateLimit-Reset": str(reset),
+                }
+                if not ok:
+                    rate_headers["Retry-After"] = str(reset)
+                    return self.send_bytes(
+                        429,
+                        json.dumps({"error": "rate_limited", "retry_after": reset}).encode(),
+                        "application/json; charset=utf-8",
+                        extra_headers=rate_headers,
+                    )
+
                 url = API_BASE + "/" + sub
                 if parsed.query:
                     url += "?" + parsed.query
-                # Cache GET list/detail singkat (bukan chapter images)
-                cacheable = (
-                    sub == "series"
-                    or (sub.startswith("series/") and "/chapters/" not in sub)
-                    or sub == "genres"
-                )
-                # chapter list boleh di-cache sebentar
-                if "/chapters" in sub and not sub.rstrip("/").endswith("chapters"):
-                    # single chapter: /series/x/chapters/99 — cache pendek juga OK
-                    cacheable = True
-                if sub.count("/chapters/") == 1:
-                    cacheable = True  # single chapter JSON (urls only)
+
                 cache_key = "GET " + url
-                if cacheable:
-                    hit = cache_get(cache_key)
-                    if hit is not None:
-                        return self.send_bytes(
-                            200, hit, "application/json; charset=utf-8",
-                            extra_headers={"X-Lumen-Cache": "HIT"},
-                        )
+                ttl = _ttl_for(sub)
+                hit = cache_get(cache_key)
+                if hit is not None:
+                    body, age_left, used_ttl = hit
+                    extra = dict(rate_headers)
+                    extra["X-Lumen-Cache"] = "HIT"
+                    extra["X-Lumen-Cache-TTL"] = str(used_ttl)
+                    extra["Cache-Control"] = "public, max-age=%d" % min(age_left, used_ttl)
+                    return self.send_bytes(
+                        200,
+                        body,
+                        "application/json; charset=utf-8",
+                        extra_headers=extra,
+                    )
+
                 code, hdrs, body = fetch(url)
                 ct = hdrs.get("content-type") or "application/json; charset=utf-8"
-                extra = {}
-                if cacheable and code == 200:
-                    cache_set(cache_key, body)
+                extra = dict(rate_headers)
+                if code == 200:
+                    cache_set(cache_key, body, ttl)
                     extra["X-Lumen-Cache"] = "MISS"
+                    extra["X-Lumen-Cache-TTL"] = str(ttl)
+                    extra["Cache-Control"] = "public, max-age=%d" % min(60, ttl)
+                else:
+                    extra["X-Lumen-Cache"] = "BYPASS"
                 return self.send_bytes(code, body, ct, extra_headers=extra)
 
             if path == "/img":
+                ip = client_ip(self)
+                ok, remaining, reset = rate_allow(ip, "img", RATE_LIMIT_IMG)
+                rate_headers = {
+                    "X-RateLimit-Limit": str(RATE_LIMIT_IMG),
+                    "X-RateLimit-Remaining": str(remaining),
+                    "X-RateLimit-Reset": str(reset),
+                }
+                if not ok:
+                    rate_headers["Retry-After"] = str(reset)
+                    return self.send_bytes(
+                        429,
+                        json.dumps({"error": "rate_limited", "retry_after": reset}).encode(),
+                        "application/json; charset=utf-8",
+                        extra_headers=rate_headers,
+                    )
+
                 src = (qs.get("u") or [""])[0].strip()
                 if not (src.startswith("http://") or src.startswith("https://")):
                     return self.send_json(400, {"error": "missing or invalid u"})
@@ -227,6 +359,15 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 if not any(a in src for a in allowed):
                     return self.send_json(403, {"error": "host not allowed"})
+
+                cached = img_cache_get(src)
+                if cached is not None:
+                    body, ct = cached
+                    extra = dict(rate_headers)
+                    extra["X-Lumen-Cache"] = "HIT"
+                    extra["Cache-Control"] = "public, max-age=3600"
+                    return self.send_bytes(200, body, ct, extra_headers=extra)
+
                 code, hdrs, body = fetch(
                     src,
                     extra_headers={
@@ -235,7 +376,14 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
                 ct = hdrs.get("content-type") or "image/jpeg"
-                return self.send_bytes(code, body, ct)
+                extra = dict(rate_headers)
+                if code == 200 and body:
+                    img_cache_set(src, body, ct)
+                    extra["X-Lumen-Cache"] = "MISS"
+                    extra["Cache-Control"] = "public, max-age=3600"
+                else:
+                    extra["X-Lumen-Cache"] = "BYPASS"
+                return self.send_bytes(code, body, ct, extra_headers=extra)
 
             self.send_json(404, {"error": "not found", "path": path})
         except Exception as e:
