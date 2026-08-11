@@ -12,18 +12,39 @@ from pathlib import Path
 _LOCK = threading.Lock()
 _CONN = None
 
-DB_PATH = Path(
-    os.environ.get("DB_PATH")
-    or os.environ.get("LUMEN_DB")
-    or str(Path(__file__).resolve().parent.parent / "data" / "lumen.db")
-)
+def _resolve_db_path():
+    candidates = []
+    env = os.environ.get("DB_PATH") or os.environ.get("LUMEN_DB")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path("/data/lumen.db"))
+    candidates.append(Path(__file__).resolve().parent.parent / "data" / "lumen.db")
+    candidates.append(Path("/tmp/lumen.db"))
+    for path in candidates:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # probe write
+            probe = path.parent / ".lumen_write_test"
+            probe.write_text("ok")
+            probe.unlink(missing_ok=True)
+            return path
+        except Exception:
+            continue
+    return Path("/tmp/lumen.db")
+
+
+DB_PATH = _resolve_db_path()
 
 
 def _connect():
-    global _CONN
+    global _CONN, DB_PATH
     if _CONN is not None:
         return _CONN
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        DB_PATH = Path("/tmp/lumen.db")
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

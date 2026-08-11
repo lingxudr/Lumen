@@ -229,7 +229,15 @@ def _persist_upstream(sub: str, body: bytes):
         traceback.print_exc()
 
 
+def _db_stats_safe():
+    try:
+        return lumen_db.stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def _db_fallback(sub: str):
+
     kind, slug, chapter = _parse_api_sub(sub)
     try:
         if kind == "detail" and slug:
@@ -359,7 +367,7 @@ class Handler(BaseHTTPRequestHandler):
                             "upstream": code,
                             "api_base": API_BASE,
                             "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
-                            "db": lumen_db.stats(),
+                            "db": _db_stats_safe(),
                             "rate_limit": {"api": RATE_LIMIT_API, "img": RATE_LIMIT_IMG, "window": RATE_LIMIT_WINDOW},
                         },
                     )
@@ -650,15 +658,20 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    db_path = lumen_db.init_db()
+    db_path = "(disabled)"
     try:
-        lumen_db.prune()
-    except Exception:
-        pass
+        db_path = lumen_db.init_db()
+        try:
+            lumen_db.prune()
+        except Exception as e:
+            print("prune skip: %s" % e, flush=True)
+    except Exception as e:
+        print("db init failed (continue without db): %s" % e, flush=True)
     print("=" * 60, flush=True)
     print("  Lumen Reader", flush=True)
-    print("  -> http://127.0.0.1:%s" % PORT, flush=True)
+    print("  -> http://0.0.0.0:%s" % PORT, flush=True)
     print("  db: %s" % db_path, flush=True)
+    print("  api: %s" % API_BASE, flush=True)
     print("=" * 60, flush=True)
     ThreadingHTTPServer.allow_reuse_address = True
     try:
