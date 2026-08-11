@@ -325,7 +325,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # Gzip JSON/text if client accepts and payload worth it
             ae = (self.headers.get("Accept-Encoding") or "").lower()
-            use_gzip = (
+            use_gzip = False and (
                 "gzip" in ae
                 and len(body) >= 512
                 and (
@@ -383,6 +383,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            print("GET", self.path[:120], flush=True)
             parsed = urlparse(self.path)
             path = unquote(parsed.path or "/")
             qs = parse_qs(parsed.query or "")
@@ -719,33 +720,42 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global PORT, HOST
+    HOST = "0.0.0.0"
+    try:
+        PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "8080")
+    except Exception:
+        PORT = 8080
+
     db_path = "(disabled)"
     try:
         db_path = lumen_db.init_db()
-        try:
-            lumen_db.prune()
-        except Exception as e:
-            print("prune skip: %s" % e, flush=True)
     except Exception as e:
-        print("db init failed (continue without db): %s" % e, flush=True)
+        print("db init failed:", e, flush=True)
+
     print("=" * 60, flush=True)
-    print("  Lumen Reader", flush=True)
-    print("  -> http://0.0.0.0:%s" % PORT, flush=True)
+    print("  Lumen Reader READY", flush=True)
+    print("  bind: %s:%s" % (HOST, PORT), flush=True)
     print("  db: %s" % db_path, flush=True)
     print("  api: %s" % API_BASE, flush=True)
     print("=" * 60, flush=True)
+
     ThreadingHTTPServer.allow_reuse_address = True
     try:
         server = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
-        print("Gagal bind port %s: %s" % (PORT, e), flush=True)
-        raise SystemExit(1)
+        print("bind failed on %s: %s — trying 8080" % (PORT, e), flush=True)
+        PORT = 8080
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+
+    print("listening on %s:%s" % (HOST, PORT), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nbye", flush=True)
+        print("bye", flush=True)
     finally:
         server.server_close()
+
 
 
 if __name__ == "__main__":
