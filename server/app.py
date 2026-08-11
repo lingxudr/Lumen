@@ -16,7 +16,57 @@ import sys
 _SERVER_DIR = Path(__file__).resolve().parent
 if str(_SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(_SERVER_DIR))
-import db as lumen_db
+try:
+    import db as lumen_db
+except Exception as _db_imp_err:
+    print("db import failed:", _db_imp_err, flush=True)
+
+    class _DbStub:
+        @staticmethod
+        def init_db():
+            return "(stub)"
+
+        @staticmethod
+        def stats():
+            return {"error": "db unavailable"}
+
+        @staticmethod
+        def prune():
+            return {"error": "db unavailable"}
+
+        @staticmethod
+        def save_series_response(body):
+            return None
+
+        @staticmethod
+        def save_chapter_list(slug, body):
+            return None
+
+        @staticmethod
+        def save_chapter_pages(slug, chapter, body):
+            return None
+
+        @staticmethod
+        def get_manga(slug, max_age=0):
+            return None
+
+        @staticmethod
+        def get_chapter_list(slug, max_age=0):
+            return None
+
+        @staticmethod
+        def get_chapter_pages(slug, chapter, max_age=0):
+            return None
+
+        @staticmethod
+        def wrap_manga_detail(payload_bytes):
+            return payload_bytes
+
+        @staticmethod
+        def search_manga(query, limit=20):
+            return []
+
+    lumen_db = _DbStub()
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
