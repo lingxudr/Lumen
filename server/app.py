@@ -68,6 +68,20 @@ except Exception as _db_imp_err:
 
     lumen_db = _DbStub()
 
+
+# Hybrid providers (Komikcast + Komiku) — optional
+try:
+    _LUMEN_ROOT = Path(__file__).resolve().parent.parent
+    if str(_LUMEN_ROOT) not in sys.path:
+        sys.path.insert(0, str(_LUMEN_ROOT))
+    from server.hybrid_providers import KomikuProvider, KomikcastProvider  # type: ignore
+    _HYBRID_OK = True
+except Exception as _hy_err:
+    print("hybrid import failed:", _hy_err, flush=True)
+    KomikuProvider = None  # type: ignore
+    KomikcastProvider = None  # type: ignore
+    _HYBRID_OK = False
+
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
 API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://be.komikcast.cc").rstrip("/")
@@ -342,6 +356,158 @@ def _db_fallback(sub: str):
 
 
 
+
+def _norm_title_key(t):
+    if not t:
+        return ""
+    import re
+    s = str(t).lower().strip()
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _komiku_to_series_item(m):
+    """Map MangaInfo Komiku → bentuk item series Komikcast (frontend)."""
+    slug = m.slug or m.source_slug or ""
+    # chapter preview dari latest_chapter
+    chapters = []
+    ch_name = m.latest_chapter or ""
+    ch_num = None
+    if ch_name:
+        import re
+        mm = re.search(r"([0-9]+(?:\.[0-9]+)?)", ch_name)
+        if mm:
+            try:
+                ch_num = float(mm.group(1))
+            except ValueError:
+                ch_num = None
+        chapters.append(
+            {
+                "id": None,
+                "createdAt": None,
+                "data": {
+                    "index": int(ch_num) if ch_num is not None and float(ch_num).is_integer() else ch_num,
+                    "title": ch_name,
+                    "slug": None,
+                },
+                "provider": "komiku",
+                "updated_label": m.updated_label,
+            }
+        )
+    return {
+        "id": m.source_id or slug,
+        "data": {
+            "title": m.title,
+            "nativeTitle": m.title_alt,
+            "slug": slug,
+            "coverImage": m.cover_url,
+            "author": m.author,
+            "rating": m.rating,
+            "status": (m.status or "").lower() if m.status else None,
+            "format": (m.type or "").lower() if m.type else None,
+            "type": "mirror",
+            "genreIds": [],
+            "isHot": False,
+            "totalChapters": None,
+            "provider": "komiku",
+            "latestChapterLabel": m.latest_chapter,
+            "updatedLabel": m.updated_label,
+        },
+        "createdAt": None,
+        "updatedAt": None,
+        "chapters": chapters,
+        "provider": "komiku",
+        "_source": "komiku",
+    }
+
+
+def build_hybrid_newest(page=1, take=20):
+    """
+    Gabungan terbaru Komikcast + Komiku untuk tab Terbaru.
+    Dedup by title; prioritaskan yang punya latest_chapter info.
+    """
+    take = max(1, min(int(take or 20), 50))
+    page = max(1, int(page or 1))
+    items = []
+    errors = []
+
+    # Komikcast via upstream API shape
+    try:
+        url = f"{API_BASE}/series?page={page}&take={take}&sort=updatedAt"
+        code, hdrs, body = fetch(url, timeout=14, retries=1)
+        if code == 200 and body:
+            payload = json.loads(body.decode("utf-8", errors="replace"))
+            for it in payload.get("data") or []:
+                if isinstance(it, dict):
+                    it = dict(it)
+                    it["_source"] = "komikcast"
+                    it["provider"] = "komikcast"
+                    if isinstance(it.get("data"), dict):
+                        it["data"] = dict(it["data"])
+                        it["data"]["provider"] = "komikcast"
+                    items.append(it)
+    except Exception as e:
+        errors.append(f"komikcast: {e}")
+
+    # Komiku (page 1 only has true "terbaru" homepage order)
+    if _HYBRID_OK and KomikuProvider is not None and page <= 1:
+        try:
+            ku = KomikuProvider()
+            batch = ku.get_latest(limit=take)
+            for m in batch:
+                items.append(_komiku_to_series_item(m))
+        except Exception as e:
+            errors.append(f"komiku: {e}")
+
+    # Split by provider then interleave so Komiku updates always visible
+    kc_list = [it for it in items if (it.get("provider") or (it.get("data") or {}).get("provider")) == "komikcast"]
+    ku_list = [it for it in items if (it.get("provider") or (it.get("data") or {}).get("provider")) == "komiku"]
+
+    seen = set()
+    merged = []
+
+    def _key(it):
+        d = it.get("data") or {}
+        return _norm_title_key(d.get("title") or "") or (d.get("slug") or "").lower()
+
+    def _add(it):
+        k = _key(it)
+        if not k or k in seen:
+            return False
+        seen.add(k)
+        merged.append(it)
+        return True
+
+    # Round-robin KC / KU
+    i = j = 0
+    while len(merged) < take and (i < len(kc_list) or j < len(ku_list)):
+        if i < len(kc_list):
+            _add(kc_list[i])
+            i += 1
+        if len(merged) >= take:
+            break
+        if j < len(ku_list):
+            _add(ku_list[j])
+            j += 1
+
+    return {
+        "status": 200,
+        "message": "Hybrid newest (komikcast+komiku)",
+        "data": merged,
+        "meta": {
+            "source": "hybrid",
+            "page": page,
+            "take": take,
+            "total": len(merged),
+            "komikcast": len([x for x in merged if x.get("provider") == "komikcast"]),
+            "komiku": len([x for x in merged if x.get("provider") == "komiku"]),
+            "errors": errors,
+            "providers": ["komikcast", "komiku"],
+        },
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -426,8 +592,14 @@ class Handler(BaseHTTPRequestHandler):
             path = unquote(parsed.path or "/")
             qs = parse_qs(parsed.query or "")
 
-            if path in ("/", "/index.html"):
+            if path in ("/", "/index.html", "/hub.html"):
                 return self.serve_file(STATIC / "index.html")
+
+            if path in ("/comic.html", "/comic", "/reader"):
+                return self.serve_file(STATIC / "comic.html")
+
+            if path in ("/api-explorer.html", "/api-explorer"):
+                return self.serve_file(STATIC / "api-explorer.html")
 
             if path in ("/sw.js", "/manifest.webmanifest"):
                 return self.serve_file(STATIC / path.lstrip("/"))
@@ -524,6 +696,37 @@ class Handler(BaseHTTPRequestHandler):
                         "application/json; charset=utf-8",
                         extra_headers=rate_headers,
                     )
+
+
+                # Hybrid newest: merge Komiku into Terbaru
+                sub_clean = sub.split("?")[0].strip("/")
+                if sub_clean == "series":
+                    sort = (qs.get("sort") or ["updatedAt"])[0]
+                    # only merge for updated/newest style lists
+                    if sort in ("updatedAt", "updated_at", "newest", "latest", ""):
+                        try:
+                            page = int((qs.get("page") or ["1"])[0])
+                        except ValueError:
+                            page = 1
+                        try:
+                            take = int((qs.get("take") or qs.get("limit") or ["20"])[0])
+                        except ValueError:
+                            take = 20
+                        # skip merge if explicit search query present
+                        qsearch = (qs.get("q") or qs.get("search") or [""])[0].strip()
+                        if not qsearch:
+                            hybrid = build_hybrid_newest(page=page, take=take)
+                            body = json.dumps(hybrid, ensure_ascii=False).encode("utf-8")
+                            extra = dict(rate_headers)
+                            extra["X-Lumen-Hybrid"] = "1"
+                            extra["Cache-Control"] = "public, max-age=30"
+                            return self.send_bytes(
+                                200,
+                                body,
+                                "application/json; charset=utf-8",
+                                extra_headers=extra,
+                            )
+
 
                 url = API_BASE + "/" + sub
                 if parsed.query:
