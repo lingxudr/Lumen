@@ -33,7 +33,7 @@ class BaseProvider(ABC):
         """Cari manga by keyword."""
 
     @abstractmethod
-    def get_latest(self, page: int = 1, limit: int = 20) -> list[MangaInfo]:
+    def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
         """Daftar update / newest."""
 
     @abstractmethod

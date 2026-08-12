@@ -136,7 +136,7 @@ class KomikcastProvider(BaseProvider):
                         return found
         return found[:limit]
 
-    def get_latest(self, page: int = 1, limit: int = 20) -> list[MangaInfo]:
+    def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
         data = self._get_json(
             "/series",
             params={"page": page, "take": limit, "sort": "updatedAt"},

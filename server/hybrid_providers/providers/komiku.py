@@ -438,7 +438,7 @@ class KomikuProvider(BaseProvider):
         # fallback HTML
         return self._search_html(keyword, limit=limit)
 
-    def get_latest(self, page: int = 1, limit: int = 20) -> list[MangaInfo]:
+    def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
         """
         Prioritas page 1:
           HTML #Terbaru (chapter + waktu update) di-merge dengan REST metadata.
