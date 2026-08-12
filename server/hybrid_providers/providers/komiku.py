@@ -440,35 +440,85 @@ class KomikuProvider(BaseProvider):
 
     def get_latest(self, page: int = 1, limit: int = 20) -> list[MangaInfo]:
         """
-        Prioritas:
-        1) HTML #Terbaru (chapter + 'x menit lalu' seperti di situs)
-        2) REST orderby=modified
-        3) fallback HTML cards
+        Prioritas page 1:
+          HTML #Terbaru (chapter + waktu update) di-merge dengan REST metadata.
+        Page > 1:
+          REST orderby=modified.
+        Fallback: HTML cards.
         """
-        if page <= 1:
-            try:
-                items = self._latest_terbaru_html(limit=limit)
-                if items:
-                    return items[:limit]
-            except ProviderError:
-                pass
-
-        per_page = min(max(limit, 1), 100)
+        rest_by_slug: dict[str, MangaInfo] = {}
         try:
-            items = self._rest_manga_list(
+            rest_items = self._rest_manga_list(
                 {
                     "orderby": "modified",
                     "order": "desc",
-                    "per_page": per_page,
+                    "per_page": min(max(limit, 1), 100),
                     "page": max(page, 1),
                 }
             )
-            if items:
-                return items[:limit]
+            for m in rest_items:
+                if m.slug:
+                    rest_by_slug[m.slug] = m
         except ProviderError:
-            pass
-        return self._latest_html(limit=limit)
+            rest_items = []
 
+        if page <= 1:
+            try:
+                html_items = self._latest_terbaru_html(limit=max(limit, 20))
+            except ProviderError:
+                html_items = []
+
+            if html_items:
+                merged: list[MangaInfo] = []
+                for h in html_items:
+                    r = rest_by_slug.get(h.slug)
+                    if r:
+                        # REST metadata + HTML latest chapter/time/cover
+                        merged.append(
+                            MangaInfo(
+                                slug=h.slug,
+                                title=h.title or r.title,
+                                title_alt=r.title_alt,
+                                synopsis=r.synopsis,
+                                cover_url=h.cover_url or r.cover_url,
+                                author=r.author,
+                                status=r.status,
+                                type=r.type,
+                                genres=r.genres or h.genres,
+                                rating=r.rating,
+                                latest_chapter=h.latest_chapter
+                                or (h.raw or {}).get("latest_chapter"),
+                                latest_chapter_url=h.latest_chapter_url
+                                or (h.raw or {}).get("latest_chapter_url"),
+                                updated_label=h.updated_label
+                                or (h.raw or {}).get("updated_label"),
+                                source_slug=h.slug,
+                                source_id=r.source_id,
+                                source_url=h.source_url or r.source_url,
+                                provider=self.name,
+                                raw={**(r.raw or {}), **(h.raw or {})},
+                            )
+                        )
+                    else:
+                        # HTML only — pastikan field latest terisi dari raw
+                        h.latest_chapter = h.latest_chapter or (h.raw or {}).get(
+                            "latest_chapter"
+                        )
+                        h.latest_chapter_url = h.latest_chapter_url or (
+                            h.raw or {}
+                        ).get("latest_chapter_url")
+                        h.updated_label = h.updated_label or (h.raw or {}).get(
+                            "updated_label"
+                        )
+                        merged.append(h)
+                    if len(merged) >= limit:
+                        break
+                if merged:
+                    return merged[:limit]
+
+        if rest_items:
+            return rest_items[:limit]
+        return self._latest_html(limit=limit)
     def _latest_terbaru_html(self, limit: int = 20) -> list[MangaInfo]:
         """Parse blok #Terbaru di beranda Komiku (sumber update yang user lihat)."""
         html_text = self._get_html(BASE_SITE + "/")
@@ -518,6 +568,9 @@ class KomikuProvider(BaseProvider):
                 title=title,
                 cover_url=cover,
                 genres=genres,
+                latest_chapter=ch_name,
+                latest_chapter_url=ch_url,
+                updated_label=time_label,
                 source_slug=slug,
                 source_url=url,
                 provider=self.name,

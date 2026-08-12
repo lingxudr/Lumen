@@ -2,6 +2,7 @@ from .base import BaseProvider, ProviderError
 from .manager import ProviderManager
 from .models import ChapterInfo, ChapterPages, MangaInfo
 from .providers import KomikcastProvider, KomikuProvider
+from .sync import SyncJob
 
 __all__ = [
     "BaseProvider",
@@ -12,4 +13,5 @@ __all__ = [
     "ChapterPages",
     "KomikcastProvider",
     "KomikuProvider",
+    "SyncJob",
 ]

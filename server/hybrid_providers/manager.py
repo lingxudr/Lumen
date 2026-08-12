@@ -12,6 +12,7 @@ from collections import defaultdict
 from typing import Any
 
 from .base import BaseProvider, ProviderError
+from .chapter_dedup import dedupe_provider_chapter_infos
 from .models import ChapterInfo, ChapterPages, MangaInfo
 
 
@@ -122,9 +123,7 @@ class ProviderManager:
         ]
         Terurut number DESC.
         """
-        # number -> provider -> ChapterInfo
-        bucket: dict[float | str, dict[str, ChapterInfo]] = defaultdict(dict)
-
+        by_provider: dict[str, list[ChapterInfo]] = {}
         for p in self.providers:
             src_slug = slug_map.get(p.name)
             if not src_slug:
@@ -133,47 +132,33 @@ class ProviderManager:
                 chapters = p.get_chapters(src_slug)
             except ProviderError:
                 continue
-            for ch in chapters:
-                key: float | str
-                if ch.number is not None:
-                    key = float(ch.number)
-                else:
-                    key = f"name:{(ch.name or '').lower()}"
-                bucket[key][p.name] = ch
+            by_provider[p.name] = chapters
+
+        # dedup lintas provider (Chapter 10 / Ch.10 / 10.0 → satu entri)
+        deduped = dedupe_provider_chapter_infos(by_provider)
 
         merged: list[dict[str, Any]] = []
-        for key, by_prov in bucket.items():
-            # pilih name dari provider prioritas tertinggi yang ada
-            primary: ChapterInfo | None = None
-            for p in self.providers:
-                if p.name in by_prov:
-                    primary = by_prov[p.name]
-                    break
-            if primary is None:
-                continue
-            sources = {}
-            for pname, ch in by_prov.items():
+        for entry in deduped:
+            sources: dict[str, Any] = {}
+            for pname, meta in (entry.get("sources") or {}).items():
                 sources[pname] = {
-                    "url": ch.url,
-                    "source_chapter_id": ch.source_chapter_id,
-                    "published_at": ch.published_at,
+                    "url": meta.get("url"),
+                    "source_chapter_id": meta.get("source_chapter_id"),
+                    "published_at": meta.get("published_at"),
                     "available": True,
-                    "name": ch.name,
+                    "name": meta.get("name"),
                 }
-            number = key if isinstance(key, float) else primary.number
             merged.append(
                 {
-                    "number": number,
-                    "name": primary.name,
+                    "number": entry.get("number"),
+                    "name": entry.get("name"),
+                    "key": entry.get("key"),
                     "sources": sources,
+                    "providers": list(sources.keys()),
                 }
             )
 
-        def sort_key(item: dict[str, Any]):
-            n = item.get("number")
-            return (n is not None, n if n is not None else -1)
-
-        merged.sort(key=sort_key, reverse=True)
+        # already sorted desc by dedupe module
         return merged
 
     # ------------------------------------------------------------------

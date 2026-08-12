@@ -20,6 +20,9 @@ class MangaInfo:
     type: str | None = None            # Manga | Manhwa | Manhua
     genres: list[str] = field(default_factory=list)
     rating: float | None = None
+    latest_chapter: str | None = None  # mis. "Chapter 544"
+    latest_chapter_url: str | None = None
+    updated_label: str | None = None   # mis. "3 menit lalu" / "Fantasi · 3 menit lalu"
     source_slug: str | None = None     # slug di provider asal
     source_id: str | None = None
     source_url: str | None = None
@@ -38,6 +41,9 @@ class MangaInfo:
             "type": self.type,
             "genres": list(self.genres),
             "rating": self.rating,
+            "latest_chapter": self.latest_chapter,
+            "latest_chapter_url": self.latest_chapter_url,
+            "updated_label": self.updated_label,
             "source_slug": self.source_slug,
             "source_id": self.source_id,
             "source_url": self.source_url,
