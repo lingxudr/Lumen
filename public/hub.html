@@ -62,7 +62,7 @@
     </form>
 
     <section class="link-list" aria-label="Menu utama">
-      <a class="link-card" href="/comic.html">
+      <a class="link-card" href="/">
         <div class="link-icon">📖</div>
         <div class="link-text">
           <strong>Sanka Comic</strong>
@@ -81,7 +81,7 @@
         <div class="link-go">↗</div>
       </a>
 
-      <a class="link-card" href="/comic.html#/newest">
+      <a class="link-card" href="/#/newest">
         <div class="link-icon">🔥</div>
         <div class="link-text">
           <strong>Update Terbaru</strong>
@@ -90,7 +90,7 @@
         <div class="link-go">↗</div>
       </a>
 
-      <a class="link-card" href="/comic.html#/search">
+      <a class="link-card" href="/#/search">
         <div class="link-icon">🔎</div>
         <div class="link-text">
           <strong>Cari Judul</strong>
@@ -137,7 +137,7 @@
         e.preventDefault();
         const q = document.getElementById("hub-q").value.trim();
         if (!q) return;
-        location.href = "/comic.html#/search?q=" + encodeURIComponent(q);
+        location.href = "/#/search?q=" + encodeURIComponent(q);
       });
 
       document.getElementById("theme-toggle").addEventListener("click", () => {
