@@ -439,6 +439,20 @@ class KomikuProvider(BaseProvider):
         return self._search_html(keyword, limit=limit)
 
     def get_latest(self, page: int = 1, limit: int = 20) -> list[MangaInfo]:
+        """
+        Prioritas:
+        1) HTML #Terbaru (chapter + 'x menit lalu' seperti di situs)
+        2) REST orderby=modified
+        3) fallback HTML cards
+        """
+        if page <= 1:
+            try:
+                items = self._latest_terbaru_html(limit=limit)
+                if items:
+                    return items[:limit]
+            except ProviderError:
+                pass
+
         per_page = min(max(limit, 1), 100)
         try:
             items = self._rest_manga_list(
@@ -454,6 +468,71 @@ class KomikuProvider(BaseProvider):
         except ProviderError:
             pass
         return self._latest_html(limit=limit)
+
+    def _latest_terbaru_html(self, limit: int = 20) -> list[MangaInfo]:
+        """Parse blok #Terbaru di beranda Komiku (sumber update yang user lihat)."""
+        html_text = self._get_html(BASE_SITE + "/")
+        soup = BeautifulSoup(html_text, "html.parser")
+        root = soup.select_one("#Terbaru") or soup
+        out: list[MangaInfo] = []
+        seen: set[str] = set()
+
+        # tiap item punya .ls2j (judul + chapter) berdampingan .ls2v (cover)
+        blocks = root.select("div.ls2j")
+        for block in blocks:
+            a = block.select_one("h3 a[href*='/manga/'], a[href*='/manga/']")
+            if not a:
+                continue
+            href = a.get("href") or ""
+            url = _abs(href)
+            slug = _slug_from_url(url or href)
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            title = _strip_title(a.get_text(strip=True)) or slug
+
+            time_el = block.select_one("span.ls2t")
+            time_label = time_el.get_text(" ", strip=True) if time_el else None
+
+            ch_a = block.select_one("a.ls2l")
+            ch_name = ch_a.get_text(strip=True) if ch_a else None
+            ch_url = _abs(ch_a.get("href")) if ch_a and ch_a.get("href") else None
+
+            # cover dari sibling ls2v sebelumnya
+            cover = None
+            prev = block.find_previous_sibling("div", class_=lambda c: c and "ls2v" in c)
+            if prev:
+                img = prev.select_one("img")
+                if img:
+                    cover = _clean_cover(img.get("data-src") or img.get("src"))
+
+            # genre kasar dari time label "Fantasi · 3 menit lalu"
+            genres: list[str] = []
+            if time_label and "·" in time_label:
+                g = time_label.split("·")[0].strip()
+                if g and not any(x in g.lower() for x in ("menit", "jam", "detik", "hari")):
+                    genres = [g]
+
+            info = MangaInfo(
+                slug=slug,
+                title=title,
+                cover_url=cover,
+                genres=genres,
+                source_slug=slug,
+                source_url=url,
+                provider=self.name,
+                raw={
+                    "latest_chapter": ch_name,
+                    "latest_chapter_url": ch_url,
+                    "updated_label": time_label,
+                    "source": "html_terbaru",
+                },
+            )
+            out.append(info)
+            if len(out) >= limit:
+                break
+
+        return out
 
     def _search_html(self, keyword: str, limit: int = 20) -> list[MangaInfo]:
         url = f"{BASE_SITE}/?post_type=manga&s={quote_plus(keyword)}"
