@@ -88,7 +88,7 @@ Set env:
 
 ```bash
 export MONGO_URI=mongodb://localhost:27017
-export MONGO_DB=sanka_comic
+export MONGO_DB=lumen_comic
 python3 -m server.hybrid_providers.api
 ```
 

@@ -3,7 +3,7 @@ MongoDB cache layer untuk hybrid providers.
 
 Env:
   MONGO_URI=mongodb://localhost:27017
-  MONGO_DB=sanka_comic
+  MONGO_DB=lumen_comic
 
 Collections:
   manga, chapters, pages, meta
@@ -55,7 +55,7 @@ def get_db():
         _client = MongoClient(uri, serverSelectionTimeoutMS=4000)
         # probe
         _client.admin.command("ping")
-        name = os.environ.get("MONGO_DB") or os.environ.get("MONGODB_DB") or "sanka_comic"
+        name = os.environ.get("MONGO_DB") or os.environ.get("MONGODB_DB") or "lumen_comic"
         _db = _client[name]
         # indexes (idempotent)
         _db.manga.create_index([("provider", ASCENDING), ("slug", ASCENDING)], unique=True)
