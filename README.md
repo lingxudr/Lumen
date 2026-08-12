@@ -53,3 +53,16 @@ Atau: `npx vercel` dari folder `lumen`.
 | Markup | `public/index.html` |
 
 Data selalu **live** dari API — refresh halaman = data terbaru.
+
+
+## Hybrid Providers (Komikcast + Komiku)
+
+Scraper/API multi-provider untuk metadata, chapter, dan gambar baca.
+
+- Dokumentasi: [`docs/HYBRID_PROVIDERS.md`](docs/HYBRID_PROVIDERS.md)
+- Kode: `server/hybrid_providers/`
+
+```bash
+pip install -r requirements.txt
+python3 -m server.hybrid_providers.demo
+```
