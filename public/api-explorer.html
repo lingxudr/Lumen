@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b12" />
+  <title>REST API — Sanka Comic</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/hub.css" />
+  <style>
+    .api-main { max-width: 720px; margin: 0 auto; padding: 20px 16px 80px; position: relative; z-index: 1; }
+    .api-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--purple2); text-decoration: none; font-weight: 600; font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+    .api-main h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 6px; }
+    .api-main .lead { color: var(--muted); font-size: 0.92rem; margin-bottom: 20px; }
+    .ep {
+      background: var(--card);
+      border: 1px solid rgba(167,139,250,0.2);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .ep code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.78rem;
+      color: #c4b5fd;
+      word-break: break-all;
+    }
+    .ep .m {
+      display: inline-block;
+      background: #7c3aed;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 6px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .ep p { color: var(--muted); font-size: 0.82rem; margin-top: 8px; }
+    .ep button {
+      margin-top: 10px;
+      border: 0;
+      background: linear-gradient(135deg, #6d28d9, #7c3aed);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 8px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    pre.json {
+      background: #0f0f18;
+      border: 1px solid rgba(167,139,250,0.15);
+      border-radius: 14px;
+      padding: 14px;
+      overflow: auto;
+      max-height: 55vh;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: #e9e4ff;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
+    .row input, .row select {
+      flex: 1;
+      min-width: 120px;
+      border-radius: 10px;
+      border: 1px solid rgba(167,139,250,0.3);
+      background: var(--card);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+  </style>
+</head>
+<body class="hub-body">
+  <div class="bg-glow" aria-hidden="true"></div>
+  <main class="api-main">
+    <a class="api-back" href="/hub.html">← Kembali ke portal</a>
+    <h1>REST API</h1>
+    <p class="lead">
+      Format respons mirip portal modern: <code>status</code>, <code>data.latest</code>, metadata lengkap.
+      Base default: origin yang sama atau <code id="base-label">auto</code>.
+    </p>
+
+    <div class="row">
+      <input id="base" placeholder="Base URL API (kosong = auto)" />
+      <select id="sample">
+        <option value="health">/api/health</option>
+        <option value="latest" selected>/api/latest</option>
+        <option value="search">/api/search?q=</option>
+        <option value="pages">/api/pages (komikcast)</option>
+        <option value="feed">/api/feed (format Sanka-like)</option>
+      </select>
+    </div>
+    <div class="row">
+      <input id="extra" placeholder="Query ekstra, mis. q=solo+leveling" />
+      <button type="button" id="run">Fetch JSON</button>
+    </div>
+
+    <div class="ep">
+      <div><span class="m">GET</span><code>/api/feed?limit=10</code></div>
+      <p>Feed terbaru format mirip Shinigami/Sanka (latest array + meta).</p>
+    </div>
+    <div class="ep">
+      <div><span class="m">GET</span><code>/api/latest?provider=komikcast&amp;limit=20</code></div>
+      <p>Last updated hybrid / per provider.</p>
+    </div>
+    <div class="ep">
+      <div><span class="m">GET</span><code>/api/pages?provider=komikcast&amp;slug=dandadan&amp;number=243</code></div>
+      <p>Gambar chapter untuk playback.</p>
+    </div>
+
+    <h2 style="font-size:1rem;margin:20px 0 10px;">Live response</h2>
+    <pre class="json" id="out">Tekan Fetch JSON…</pre>
+  </main>
+  <script>
+    const bases = ["", "http://127.0.0.1:8080"];
+    async function resolveBase(manual) {
+      if (manual) return manual.replace(/\/$/, "");
+      for (const b of bases) {
+        try {
+          const r = await fetch(b + "/api/health", { signal: AbortSignal.timeout(3000) });
+          if (r.ok) return b || location.origin;
+        } catch (_) {}
+      }
+      return "http://127.0.0.1:8080";
+    }
+    const paths = {
+      health: "/api/health",
+      latest: "/api/latest?limit=5&provider=komikcast",
+      search: "/api/search?q=solo+leveling&limit=5",
+      pages: "/api/pages?provider=komikcast&slug=dandadan&number=243",
+      feed: "/api/feed?limit=5",
+    };
+    document.getElementById("run").onclick = async () => {
+      const out = document.getElementById("out");
+      out.textContent = "Loading…";
+      const base = await resolveBase(document.getElementById("base").value.trim());
+      document.getElementById("base-label").textContent = base;
+      let path = paths[document.getElementById("sample").value] || "/api/health";
+      const extra = document.getElementById("extra").value.trim();
+      if (extra) path += (path.includes("?") ? "&" : "?") + extra.replace(/^\?/, "");
+      try {
+        const r = await fetch(base + path);
+        const j = await r.json();
+        out.textContent = JSON.stringify(j, null, 2);
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    };
+  </script>
+</body>
+</html>

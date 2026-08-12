@@ -1,0 +1,308 @@
+/* Sankaverse-inspired hub — dark purple comic portal */
+:root {
+  --bg: #0b0b12;
+  --bg2: #12121c;
+  --card: #1a1a2e;
+  --card-hover: #22223a;
+  --text: #f3f0ff;
+  --muted: #a39bb8;
+  --purple: #7c3aed;
+  --purple2: #a78bfa;
+  --pink: #f472b6;
+  --blue: #38bdf8;
+  --green: #4ade80;
+  --orange: #fb923c;
+  --radius: 18px;
+  --font: "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+body.is-light {
+  --bg: #f4f1ff;
+  --bg2: #ebe6ff;
+  --card: #ffffff;
+  --card-hover: #f8f5ff;
+  --text: #1a1030;
+  --muted: #6b6280;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body.hub-body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+.bg-glow {
+  position: fixed;
+  inset: -20% -10% auto;
+  height: 55vh;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.35), transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(244, 114, 182, 0.12), transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hub-top {
+  position: relative;
+  z-index: 2;
+  padding: 10px 12px 0;
+}
+
+.marquee {
+  display: flex;
+  gap: 2rem;
+  overflow: hidden;
+  white-space: nowrap;
+  background: linear-gradient(90deg, #6d28d9, #7c3aed 40%, #a21caf);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 8px 0;
+  border-radius: 10px;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.marquee span {
+  animation: scroll 18s linear infinite;
+}
+@keyframes scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: var(--card);
+  color: var(--purple2);
+  font-size: 1.1rem;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.hub-main {
+  position: relative;
+  z-index: 1;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 28px 18px 100px;
+  text-align: center;
+}
+
+.avatar-wrap { margin-bottom: 14px; }
+.avatar-ring {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(135deg, #a78bfa, #ec4899, #7c3aed);
+  box-shadow: 0 0 32px rgba(124, 58, 237, 0.45);
+}
+.avatar-fallback {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #151522;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: var(--purple2);
+  border: 3px solid var(--bg);
+}
+
+.brand-title {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+.brand-title span {
+  background: linear-gradient(90deg, #a78bfa, #f472b6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand-sub {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.brand-desc {
+  margin: 14px auto 0;
+  max-width: 320px;
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 22px 0 18px;
+}
+.stat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--card);
+}
+.stat-value { font-weight: 800; }
+.stat-blue { border-color: rgba(56, 189, 248, 0.45); color: #7dd3fc; }
+.stat-green { border-color: rgba(74, 222, 128, 0.45); color: #86efac; }
+.stat-pink { border-color: rgba(244, 114, 182, 0.45); color: #f9a8d4; }
+.stat-orange { border-color: rgba(251, 146, 60, 0.45); color: #fdba74; }
+.stat-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+}
+
+.hub-search {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  background: #fff;
+}
+.hub-search input {
+  flex: 1;
+  border: 0;
+  padding: 14px 16px;
+  font: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  color: #1a1030;
+}
+.hub-search button {
+  width: 54px;
+  border: 0;
+  background: var(--purple);
+  color: #fff;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.link-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 16px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 55%, #8b5cf6 100%);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 10px 28px rgba(91, 33, 182, 0.35);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.link-card:active { transform: scale(0.98); }
+.link-card:hover { filter: brightness(1.06); }
+.link-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.16);
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.link-text { flex: 1; min-width: 0; }
+.link-text strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.link-text span {
+  display: block;
+  font-size: 0.8rem;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+.link-go {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,0.18);
+  font-weight: 700;
+}
+.badge-baru {
+  position: absolute;
+  top: -8px;
+  right: 48px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+
+.hub-foot {
+  margin-top: 28px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.float-mascot {
+  position: fixed;
+  left: 12px;
+  bottom: 18px;
+  z-index: 5;
+}
+.bubble {
+  background: #fff;
+  color: #1a1030;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  max-width: 180px;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 24px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+@media (min-width: 640px) {
+  .hub-main { padding-top: 40px; }
+  .brand-title { font-size: 2.4rem; }
+}

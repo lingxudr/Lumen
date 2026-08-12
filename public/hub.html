@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b12" />
+  <meta name="description" content="Portal komik & REST API — baca komik online" />
+  <title>Sanka Comic — Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/hub.css" />
+</head>
+<body class="hub-body">
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="hub-top">
+    <div class="marquee">
+      <span>COMIC PORTAL · BACA KOMIK ONLINE · REST API · UPDATE SETIAP HARI · </span>
+      <span>COMIC PORTAL · BACA KOMIK ONLINE · REST API · UPDATE SETIAP HARI · </span>
+    </div>
+    <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle tema">☾</button>
+  </header>
+
+  <main class="hub-main">
+    <div class="avatar-wrap">
+      <div class="avatar-ring">
+        <div class="avatar-fallback">SC</div>
+      </div>
+    </div>
+
+    <h1 class="brand-title">SANKA<span>COMIC</span></h1>
+    <p class="brand-sub">KUMPULAN LINK RESMI · COMIC &amp; API</p>
+    <p class="brand-desc">
+      Baca komik terbaru dari multi-source.<br />
+      Satu portal, REST API bersih, tanpa ribet.
+    </p>
+
+    <div class="stats">
+      <div class="stat stat-blue">
+        <span class="stat-label">Sources</span>
+        <span class="stat-value">2</span>
+      </div>
+      <div class="stat stat-green">
+        <span class="stat-dot"></span>
+        <span class="stat-label">API</span>
+        <span class="stat-value" id="api-status">…</span>
+      </div>
+      <div class="stat stat-pink">
+        <span class="stat-label">Providers</span>
+        <span class="stat-value">KC + KU</span>
+      </div>
+      <div class="stat stat-orange">
+        <span class="stat-label">Mode</span>
+        <span class="stat-value">Hybrid</span>
+      </div>
+    </div>
+
+    <form class="hub-search" id="hub-search" role="search">
+      <input type="search" id="hub-q" placeholder="Cari komik favoritmu…" autocomplete="off" enterkeyhint="search" />
+      <button type="submit" aria-label="Cari">⌕</button>
+    </form>
+
+    <section class="link-list" aria-label="Menu utama">
+      <a class="link-card" href="/index.html#/comic">
+        <div class="link-icon">📖</div>
+        <div class="link-text">
+          <strong>Sanka Comic</strong>
+          <span>Baca Komik Online</span>
+        </div>
+        <div class="link-go">↗</div>
+      </a>
+
+      <a class="link-card" href="/api-explorer.html">
+        <div class="link-icon">⚡</div>
+        <div class="link-text">
+          <strong>REST API</strong>
+          <span>Dokumentasi &amp; Live JSON</span>
+        </div>
+        <span class="badge-baru">API</span>
+        <div class="link-go">↗</div>
+      </a>
+
+      <a class="link-card" href="/index.html#/newest">
+        <div class="link-icon">🔥</div>
+        <div class="link-text">
+          <strong>Update Terbaru</strong>
+          <span>Chapter baru hari ini</span>
+        </div>
+        <div class="link-go">↗</div>
+      </a>
+
+      <a class="link-card" href="/index.html#/search">
+        <div class="link-icon">🔎</div>
+        <div class="link-text">
+          <strong>Cari Judul</strong>
+          <span>Manga · Manhwa · Manhua</span>
+        </div>
+        <div class="link-go">↗</div>
+      </a>
+    </section>
+
+    <p class="hub-foot">
+      Powered by hybrid providers · Komikcast + Komiku
+    </p>
+  </main>
+
+  <div class="float-mascot" aria-hidden="true">
+    <div class="bubble">Chapter baru udah rilis lho! 🔥</div>
+  </div>
+
+  <script>
+    (function () {
+      const statusEl = document.getElementById("api-status");
+      // Coba health API hybrid (kalau di-host bareng) atau relatif
+      const candidates = [
+        "/api/health",
+        "http://127.0.0.1:8080/api/health",
+      ];
+      async function ping() {
+        for (const url of candidates) {
+          try {
+            const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+            if (!r.ok) continue;
+            const j = await r.json();
+            const ok = j.ok && Array.isArray(j.data) && j.data.every((x) => x.ok);
+            statusEl.textContent = ok ? "Online" : "Partial";
+            statusEl.parentElement.classList.toggle("stat-green", ok);
+            return;
+          } catch (_) {}
+        }
+        statusEl.textContent = "Offline";
+      }
+      ping();
+
+      document.getElementById("hub-search").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const q = document.getElementById("hub-q").value.trim();
+        if (!q) return;
+        location.href = "/index.html#/search?q=" + encodeURIComponent(q);
+      });
+
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        document.body.classList.toggle("is-light");
+      });
+    })();
+  </script>
+</body>
+</html>
