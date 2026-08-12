@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0b12" />
   <meta name="description" content="Portal komik & REST API — baca komik online" />
-  <title>Sanka Comic — Portal</title>
+  <title>Sanka Comic</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -62,7 +62,7 @@
     </form>
 
     <section class="link-list" aria-label="Menu utama">
-      <a class="link-card" href="/index.html#/comic">
+      <a class="link-card" href="/comic.html">
         <div class="link-icon">📖</div>
         <div class="link-text">
           <strong>Sanka Comic</strong>
@@ -81,7 +81,7 @@
         <div class="link-go">↗</div>
       </a>
 
-      <a class="link-card" href="/index.html#/newest">
+      <a class="link-card" href="/comic.html#/newest">
         <div class="link-icon">🔥</div>
         <div class="link-text">
           <strong>Update Terbaru</strong>
@@ -90,7 +90,7 @@
         <div class="link-go">↗</div>
       </a>
 
-      <a class="link-card" href="/index.html#/search">
+      <a class="link-card" href="/comic.html#/search">
         <div class="link-icon">🔎</div>
         <div class="link-text">
           <strong>Cari Judul</strong>
@@ -137,7 +137,7 @@
         e.preventDefault();
         const q = document.getElementById("hub-q").value.trim();
         if (!q) return;
-        location.href = "/index.html#/search?q=" + encodeURIComponent(q);
+        location.href = "/comic.html#/search?q=" + encodeURIComponent(q);
       });
 
       document.getElementById("theme-toggle").addEventListener("click", () => {

@@ -40,6 +40,7 @@ from server.hybrid_providers import (  # noqa: E402
     ProviderManager,
 )
 from server.hybrid_providers.models import ChapterInfo  # noqa: E402
+from server.hybrid_providers import mongo as mongo_cache  # noqa: E402
 
 _mgr: ProviderManager | None = None
 
@@ -115,21 +116,32 @@ def handle(method: str, path: str, q: dict[str, str]) -> tuple[int, dict[str, An
 
     if path == "/api/health":
         mgr = get_manager()
-        return _ok([p.health() for p in mgr.providers])
+        return _ok(
+            {
+                "providers": [p.health() for p in mgr.providers],
+                "mongo": mongo_cache.status(),
+            }
+        )
 
     if path == "/api/latest":
         limit = min(int(q.get("limit", "20")), 50)
         page = max(int(q.get("page", "1")), 1)
         provider = q.get("provider")
         mgr = get_manager()
+        cached_from = None
         if provider:
             p = mgr.by_name(provider)
             if not p:
                 return _err(f"provider tidak dikenal: {provider}", 404)
+            cached = mongo_cache.cache_get_latest(provider, page)
+            if cached is not None:
+                return _ok(cached[:limit], count=min(len(cached), limit), cache=True)
             items = p.get_latest(page=page, limit=limit)
-        else:
-            items = mgr.get_latest(limit=limit)
-        return _ok([m.to_dict() for m in items], count=len(items))
+            payload = [m.to_dict() for m in items]
+            mongo_cache.cache_set_latest(provider, page, payload)
+            return _ok(payload[:limit], count=len(payload), cache=False)
+        items = mgr.get_latest(limit=limit)
+        return _ok([m.to_dict() for m in items], count=len(items), cache=False)
 
     if path == "/api/search":
         query = (q.get("q") or q.get("query") or "").strip()
@@ -214,11 +226,21 @@ def handle(method: str, path: str, q: dict[str, str]) -> tuple[int, dict[str, An
                 provider=provider,
             )
 
+        # cache by provider+slug+number
+        slug_key = (slug or "").strip()
+        if slug_key and ch_number is not None:
+            cached = mongo_cache.cache_get_pages(provider, slug_key, ch_number)
+            if cached is not None:
+                return _ok(cached, cache=True)
+
         try:
             pages = p.get_pages(ch)
         except ProviderError as e:
             return _err(str(e), 502)
-        return _ok(pages.to_dict())
+        payload = pages.to_dict()
+        if slug_key and ch_number is not None:
+            mongo_cache.cache_set_pages(provider, slug_key, ch_number, payload)
+        return _ok(payload, cache=False)
 
 
     if path == "/api/feed":
@@ -232,8 +254,36 @@ def handle(method: str, path: str, q: dict[str, str]) -> tuple[int, dict[str, An
             items = mgr.get_latest(limit=limit)
             source_name = "hybrid"
         else:
+            cached = mongo_cache.cache_get_latest(provider, 1)
+            if cached is not None:
+                items_data = cached[:limit]
+                latest = []
+                for m in items_data:
+                    latest.append({
+                        "manga_id": m.get("source_id") or m.get("slug"),
+                        "title": m.get("title"),
+                        "alternative_title": m.get("title_alt"),
+                        "description": m.get("synopsis"),
+                        "cover": m.get("cover_url"),
+                        "status": m.get("status"),
+                        "rating": m.get("rating"),
+                        "genres": [{"name": g, "slug": str(g).lower().replace(" ", "-")} for g in (m.get("genres") or [])],
+                        "format": m.get("type"),
+                        "type": "Mirror",
+                        "slug": m.get("slug"),
+                        "url": m.get("source_url"),
+                        "provider": m.get("provider") or provider,
+                    })
+                return 200, {
+                    "status": "success",
+                    "creator": "Sanka Comic",
+                    "source": provider,
+                    "cache": True,
+                    "data": {"latest": latest},
+                }
             items = p.get_latest(page=1, limit=limit)
             source_name = provider
+            mongo_cache.cache_set_latest(provider, 1, [m.to_dict() for m in items])
         latest = []
         for m in items:
             latest.append({
@@ -258,6 +308,9 @@ def handle(method: str, path: str, q: dict[str, str]) -> tuple[int, dict[str, An
             "source": source_name,
             "data": {"latest": latest},
         }
+
+    if path == "/api/mongo":
+        return _ok(mongo_cache.status())
 
     return _err("not found", 404)
 

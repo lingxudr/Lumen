@@ -80,3 +80,20 @@ python3 -m server.hybrid_providers.demo
 
 Lihat `schema.sql` — tabel:
 `manga`, `manga_source`, `chapter`, `chapter_source`, `page_cache`, `sync_log`.
+
+
+## MongoDB cache
+
+Set env:
+
+```bash
+export MONGO_URI=mongodb://localhost:27017
+export MONGO_DB=sanka_comic
+python3 -m server.hybrid_providers.api
+```
+
+Collections: `latest`, `manga`, `chapters`, `pages`.
+
+Tanpa `MONGO_URI`, API tetap jalan (langsung ke provider).
+
+Cek: `GET /api/mongo` atau `GET /api/health`.
