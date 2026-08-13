@@ -924,6 +924,10 @@ class Handler(BaseHTTPRequestHandler):
                     "sv1.",
                     "sv2.",
                     "sv3.",
+                    "komiku.org",
+                    "thumbnail.komiku.org",
+                    "img.komiku.org",
+                    "sankavollerei.web.id",
                 )
                 if not any(a in src for a in allowed):
                     return self.send_json(403, {"error": "host not allowed"})
