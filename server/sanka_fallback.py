@@ -206,37 +206,62 @@ def get_chapter_images_komiku(slug: str, number) -> dict[str, Any]:
     }
 
 
+def _name_list(val) -> list[str]:
+    """genres/authors/artists: list[dict] atau list[str]."""
+    out = []
+    if not val:
+        return out
+    if isinstance(val, str):
+        return [val]
+    for x in val:
+        if isinstance(x, dict) and x.get("name"):
+            out.append(str(x["name"]))
+        elif isinstance(x, str):
+            out.append(x)
+    return out
+
+
+def _fmt_str(val) -> str | None:
+    """format/type di latest bisa string ('Manhwa') atau list[{name}]."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val.lower()
+    if isinstance(val, list):
+        for f in val:
+            if isinstance(f, dict) and f.get("name"):
+                return str(f["name"]).lower()
+            if isinstance(f, str):
+                return f.lower()
+    return None
+
+
 def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
+    """Map 1 item struktur official Sanka Shinigami latest → bentuk series Lumen."""
     mid = str(m.get("manga_id") or m.get("id") or "")
     title = m.get("title") or ""
+    # prefer portrait; fallback cover banner
     cover = m.get("cover_portrait") or m.get("cover") or ""
     status = (m.get("status") or "").lower() or None
     latest = m.get("latest_chapter")
-    fmt = None
-    for f in m.get("format") or []:
-        if isinstance(f, dict) and f.get("name"):
-            fmt = str(f["name"]).lower()
-            break
-    if not fmt and m.get("country") == "KR":
+    fmt = _fmt_str(m.get("format"))
+    if not fmt and (m.get("country") or "").upper() == "KR":
         fmt = "manhwa"
-    genres = []
-    for g in m.get("genres") or []:
-        if isinstance(g, dict) and g.get("name"):
-            genres.append(g["name"])
-    authors = []
-    for a in m.get("authors") or []:
-        if isinstance(a, dict) and a.get("name"):
-            authors.append(a["name"])
+    typ = _fmt_str(m.get("type")) or "mirror"
+    genres = _name_list(m.get("genres"))
+    authors = _name_list(m.get("authors"))
     ch_label = f"Chapter {latest}" if latest is not None else None
     chapters = []
     if latest is not None:
         chapters.append(
             {
                 "id": m.get("latest_chapter_id"),
+                "createdAt": m.get("latest_chapter_time"),
                 "data": {
                     "index": latest,
                     "title": ch_label,
                     "slug": None,
+                    "chapterId": m.get("latest_chapter_id"),
                 },
                 "provider": "shinigami",
             }
@@ -252,30 +277,53 @@ def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
             "rating": m.get("rating"),
             "status": status,
             "format": fmt,
-            "type": "mirror",
+            "type": typ,
             "genres": genres,
+            "isHot": bool(m.get("is_recommended")),
             "totalChapters": latest,
             "provider": "shinigami",
             "latestChapterLabel": ch_label,
-            "updatedLabel": m.get("latest_chapter_time") or m.get("updated_at"),
+            "updatedLabel": m.get("latest_chapter_time"),
             "mangaId": mid,
+            "country": m.get("country"),
+            "views": m.get("views"),
         },
         "chapters": chapters,
         "provider": "shinigami",
         "_source": "sanka_shinigami",
-        "updatedAt": m.get("latest_chapter_time") or m.get("updated_at"),
+        "updatedAt": m.get("latest_chapter_time"),
     }
 
 
-def get_terbaru_shinigami(limit: int = 20) -> dict[str, Any]:
-    data = _get_json("/comic/shinigami/latest")
+def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
+    """
+    GET /comic/shinigami/latest  (± page)
+    Struktur resmi: status, creator, source, pagination, data[]
+    """
+    page = max(1, int(page or 1))
+    path = f"/comic/shinigami/latest?page={page}"
+    try:
+        data = _get_json(path)
+    except Exception:
+        # beberapa deploy tidak terima query page
+        data = _get_json("/comic/shinigami/latest")
     rows = data.get("data") or []
     items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
+    pag = data.get("pagination") or {}
     return {
         "status": 200,
         "message": "Sanka Shinigami latest (KC down)",
         "data": items,
-        "meta": {"source": "sanka_shinigami", "total": len(items)},
+        "meta": {
+            "source": "sanka_shinigami",
+            "creator": data.get("creator") or "Sanka Vollerei",
+            "upstream_source": data.get("source") or "Shinigami",
+            "total": len(items),
+            "page": pag.get("current_page") or page,
+            "total_pages": pag.get("total_pages"),
+            "total_record": pag.get("total_record"),
+            "page_size": pag.get("page_size"),
+        },
     }
 
 
@@ -384,11 +432,11 @@ def get_pages_shinigami(manga_id: str, number) -> dict[str, Any]:
     return get_pages_shinigami_by_chapter_id(str(chapter_id))
 
 
-def get_terbaru(limit: int = 20, prefer: str = "shinigami") -> dict[str, Any]:
+def get_terbaru(limit: int = 20, prefer: str = "shinigami", page: int = 1) -> dict[str, Any]:
     errors = []
     if prefer == "shinigami":
         try:
-            return get_terbaru_shinigami(limit=limit)
+            return get_terbaru_shinigami(limit=limit, page=page)
         except Exception as e:
             errors.append(f"shinigami: {e}")
         out = get_terbaru_komiku(limit=limit)
@@ -398,7 +446,7 @@ def get_terbaru(limit: int = 20, prefer: str = "shinigami") -> dict[str, Any]:
         return get_terbaru_komiku(limit=limit)
     except Exception as e:
         errors.append(f"komiku: {e}")
-    out = get_terbaru_shinigami(limit=limit)
+    out = get_terbaru_shinigami(limit=limit, page=page)
     out.setdefault("meta", {})["errors"] = errors
     return out
 

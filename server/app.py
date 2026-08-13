@@ -636,7 +636,11 @@ def _sanka_fallback_for_sub(sub: str, qs=None) -> bytes | None:
             elif sort in ("popular", "popularity", "hot", "views"):
                 payload = sf.get_populer(limit=take)
             else:
-                payload = sf.get_terbaru(limit=take, prefer="shinigami")
+                try:
+                page = int((qs.get("page") or ["1"])[0])
+            except Exception:
+                page = 1
+            payload = sf.get_terbaru(limit=take, prefer="shinigami", page=page)
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
         # series/{slug}
