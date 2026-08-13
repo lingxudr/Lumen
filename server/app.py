@@ -74,6 +74,14 @@ _HYBRID_OK = False
 KomikuProvider = None  # type: ignore
 KomikcastProvider = None  # type: ignore
 
+try:
+    from server import sanka_fallback  # type: ignore
+except Exception:
+    try:
+        import sanka_fallback  # type: ignore
+    except Exception:
+        sanka_fallback = None  # type: ignore
+
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
 API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://be.komikcast.cc").rstrip("/")
@@ -822,6 +830,14 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_bytes(
                             200, fb, "application/json; charset=utf-8", extra_headers=extra
                         )
+                    sanka_body = _sanka_fallback_for_sub(sub, qs)
+                    if sanka_body:
+                        extra = dict(rate_headers)
+                        extra["X-Lumen-Cache"] = "SANKA"
+                        extra["Cache-Control"] = "public, max-age=30"
+                        return self.send_bytes(
+                            200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
+                        )
                     return self.send_json(
                         200,
                         {
@@ -844,7 +860,7 @@ class Handler(BaseHTTPRequestHandler):
                     extra["Cache-Control"] = "public, max-age=%d" % min(60, ttl)
                     return self.send_bytes(code, body, ct, extra_headers=extra)
 
-                # upstream gagal → coba SQLite
+                # upstream gagal → SQLite cache, lalu Sanka (sementara KC down)
                 fb = _db_fallback(sub)
                 if fb:
                     extra["X-Lumen-Cache"] = "DB"
@@ -853,9 +869,31 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_bytes(
                         200, fb, "application/json; charset=utf-8", extra_headers=extra
                     )
+
+                sanka_body = _sanka_fallback_for_sub(sub, qs)
+                if sanka_body:
+                    extra["X-Lumen-Cache"] = "SANKA"
+                    extra["X-Lumen-DB"] = "MISS"
+                    extra["Cache-Control"] = "public, max-age=30"
+                    return self.send_bytes(
+                        200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
+                    )
+
+                # JSON error (bukan plain text 503)
+                err = {
+                    "status": code,
+                    "error": "upstream_unavailable",
+                    "message": "Komikcast & fallback tidak tersedia. Coba lagi nanti.",
+                    "path": sub,
+                }
                 extra["X-Lumen-Cache"] = "BYPASS"
                 extra["X-Lumen-DB"] = "MISS"
-                return self.send_bytes(code, body, ct, extra_headers=extra)
+                return self.send_bytes(
+                    200 if code >= 500 else code,
+                    json.dumps(err, ensure_ascii=False).encode("utf-8"),
+                    "application/json; charset=utf-8",
+                    extra_headers=extra,
+                )
 
             if path == "/img":
                 ip = client_ip(self)
