@@ -441,24 +441,51 @@ def get_chapters_shinigami(manga_id: str, max_pages: int = 12) -> dict[str, Any]
 
 
 def get_pages_shinigami_by_chapter_id(chapter_id: str) -> dict[str, Any]:
+    """
+    GET /comic/shinigami/read/{chapter_id}
+    data: chapter_id, manga_id, chapter_number, images[], total_images,
+          prev_chapter, next_chapter, thumbnail, views, release_date
+    """
     data = _get_json(f"/comic/shinigami/read/{chapter_id}")
     d = data.get("data") or {}
     images = [u for u in (d.get("images") or []) if isinstance(u, str)]
+    num = d.get("chapter_number")
+    title = d.get("chapter_title") or (
+        f"Chapter {num}" if num is not None else None
+    )
+    prev_c = d.get("prev_chapter") or {}
+    next_c = d.get("next_chapter") or {}
     return {
         "status": 200,
         "message": "ok",
         "data": {
             "images": images,
-            "index": d.get("chapter_number"),
-            "title": d.get("chapter_title")
-            or (
-                f"Chapter {d.get('chapter_number')}"
-                if d.get("chapter_number") is not None
-                else None
-            ),
-            "chapterId": d.get("chapter_id"),
+            "index": num,
+            "title": title,
+            "chapterId": d.get("chapter_id") or chapter_id,
+            "mangaId": d.get("manga_id"),
+            "thumbnail": d.get("thumbnail"),
+            "views": d.get("views"),
+            "releaseDate": d.get("release_date"),
+            "totalImages": d.get("total_images") or len(images),
+            "prevChapter": {
+                "chapterId": prev_c.get("chapter_id"),
+                "index": prev_c.get("chapter_number"),
+            }
+            if prev_c
+            else None,
+            "nextChapter": {
+                "chapterId": next_c.get("chapter_id"),
+                "index": next_c.get("chapter_number"),
+            }
+            if next_c
+            else None,
         },
-        "meta": {"source": "sanka_shinigami"},
+        "meta": {
+            "source": "sanka_shinigami",
+            "chapter_id": d.get("chapter_id") or chapter_id,
+            "manga_id": d.get("manga_id"),
+        },
     }
 
 
