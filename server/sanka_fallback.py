@@ -346,13 +346,14 @@ def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
     Bentuk B: data = { latest: list manga }  (seperti feed yang user kirim)
     """
     page = max(1, int(page or 1))
+    limit = max(1, min(int(limit or 20), 50))
     data = None
     last_err = None
+    # page_size=limit agar tidak cuma 20 default Sanka
     for path in (
+        f"/comic/shinigami/latest?page={page}&page_size={limit}",
         f"/comic/shinigami/latest?page={page}",
         "/comic/shinigami/latest",
-        "/comic/shinigami/home",
-        "/comic/shinigami",
     ):
         try:
             data = _get_json(path)
@@ -367,7 +368,23 @@ def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
         raise RuntimeError(str(last_err) or "shinigami latest failed")
 
     rows, pag = _extract_manga_rows(data)
-    items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
+
+    # pastikan urut terbaru dulu (latest_chapter_time)
+    def _ts(m):
+        t = m.get("latest_chapter_time") or ""
+        return str(t)
+
+    rows = sorted(
+        [m for m in rows if isinstance(m, dict)],
+        key=_ts,
+        reverse=True,
+    )
+    items = [_shi_item(m) for m in rows[:limit]]
+
+    cur = int(pag.get("current_page") or page)
+    last_page = int(pag.get("total_pages") or 1)
+    total_record = int(pag.get("total_record") or len(rows))
+    # frontend Lumen baca meta.lastPage + meta.total + meta.page
     return {
         "status": 200,
         "message": "Sanka Shinigami latest (KC down)",
@@ -376,11 +393,13 @@ def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
             "source": "sanka_shinigami",
             "creator": data.get("creator") or "Sanka Vollerei",
             "upstream_source": data.get("source") or "Shinigami",
-            "total": len(items),
-            "page": pag.get("current_page") or page,
-            "total_pages": pag.get("total_pages"),
-            "total_record": pag.get("total_record") or len(rows),
-            "page_size": pag.get("page_size"),
+            "page": cur,
+            "lastPage": last_page,
+            "total": total_record,
+            "total_pages": last_page,
+            "total_record": total_record,
+            "page_size": pag.get("page_size") or limit,
+            "take": limit,
         },
     }
 
