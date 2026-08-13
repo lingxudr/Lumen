@@ -375,28 +375,42 @@ def get_detail_shinigami(manga_id: str) -> dict[str, Any]:
     }
 
 
-def get_chapters_shinigami(manga_id: str, max_pages: int = 8) -> dict[str, Any]:
+def get_chapters_shinigami(manga_id: str, max_pages: int = 12) -> dict[str, Any]:
+    """
+    GET /comic/shinigami/chapters/{manga_id}?page=
+    Item: chapter_id, manga_id, chapter_number, chapter_title, thumbnail, views, release_date
+    pagination: current_page, total_pages, total_record, page_size
+    """
     all_ch = []
     page = 1
     total_pages = 1
+    total_record = None
+    page_size = None
     while page <= total_pages and page <= max_pages:
         data = _get_json(f"/comic/shinigami/chapters/{manga_id}?page={page}")
         pag = data.get("pagination") or {}
         total_pages = int(pag.get("total_pages") or 1)
+        total_record = pag.get("total_record", total_record)
+        page_size = pag.get("page_size", page_size)
         for ch in data.get("data") or []:
             if not isinstance(ch, dict):
                 continue
             num = ch.get("chapter_number")
+            title = ch.get("chapter_title")
+            if not title and num is not None:
+                title = f"Chapter {num}"
             all_ch.append(
                 {
                     "id": ch.get("chapter_id"),
                     "createdAt": ch.get("release_date"),
+                    "updatedAt": ch.get("release_date"),
                     "data": {
                         "index": num,
-                        "title": ch.get("chapter_title")
-                        or (f"Chapter {num}" if num is not None else "Chapter"),
+                        "title": title or "Chapter",
                         "slug": None,
                         "chapterId": ch.get("chapter_id"),
+                        "thumbnail": ch.get("thumbnail"),
+                        "views": ch.get("views"),
                     },
                     "provider": "shinigami",
                 }
@@ -415,7 +429,14 @@ def get_chapters_shinigami(manga_id: str, max_pages: int = 8) -> dict[str, Any]:
         "status": 200,
         "message": "ok",
         "data": all_ch,
-        "meta": {"source": "sanka_shinigami", "total": len(all_ch), "manga_id": manga_id},
+        "meta": {
+            "source": "sanka_shinigami",
+            "manga_id": manga_id,
+            "total": len(all_ch),
+            "total_record": total_record,
+            "total_pages": total_pages,
+            "page_size": page_size,
+        },
     }
 
 
