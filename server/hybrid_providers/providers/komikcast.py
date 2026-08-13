@@ -94,13 +94,26 @@ class KomikcastProvider(BaseProvider):
         self._id_to_slug: dict[str, str] = {}
 
     def _get_json(self, path: str, params: dict | None = None) -> dict[str, Any]:
+        """GET JSON dengan retry untuk 502/503/timeout (KC sering unstable)."""
+        import time
+
         url = f"{API_BASE}{path}"
-        try:
-            r = self.session.get(url, params=params, timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            raise ProviderError(self.name, f"GET {path} failed", cause=e) from e
+        last_err: Exception | None = None
+        for attempt in range(4):
+            try:
+                r = self.session.get(url, params=params, timeout=self.timeout)
+                if r.status_code in (502, 503, 504) and attempt < 3:
+                    time.sleep(0.6 * (attempt + 1))
+                    continue
+                r.raise_for_status()
+                return r.json()
+            except Exception as e:
+                last_err = e
+                if attempt < 3:
+                    time.sleep(0.6 * (attempt + 1))
+                    continue
+                break
+        raise ProviderError(self.name, f"GET {path} failed", cause=last_err) from last_err
 
     # ------------------------------------------------------------------
     # list / search

@@ -83,21 +83,34 @@ class ProviderManager:
         return out
 
     def get_latest(self, limit: int = 20) -> list[MangaInfo]:
-        seen: set[str] = set()
-        out: list[MangaInfo] = []
+        """Ambil latest dari semua provider, interleave agar tidak didominasi satu sumber."""
+        buckets: list[list[MangaInfo]] = []
         for p in self.providers:
             try:
                 batch = p.get_latest(page=1, limit=limit)
             except ProviderError:
-                continue
-            for m in batch:
-                key = (m.title or "").strip().lower()
-                if not key or key in seen:
-                    continue
-                seen.add(key)
-                out.append(m)
+                batch = []
+            buckets.append(batch)
+
+        seen: set[str] = set()
+        out: list[MangaInfo] = []
+        idx = [0] * len(buckets)
+        progress = True
+        while len(out) < limit and progress:
+            progress = False
+            for bi, batch in enumerate(buckets):
+                while idx[bi] < len(batch):
+                    m = batch[idx[bi]]
+                    idx[bi] += 1
+                    key = (m.title or "").strip().lower()
+                    if not key or key in seen:
+                        continue
+                    seen.add(key)
+                    out.append(m)
+                    progress = True
+                    break
                 if len(out) >= limit:
-                    return out
+                    break
         return out
 
     # ------------------------------------------------------------------

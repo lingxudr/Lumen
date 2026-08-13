@@ -369,13 +369,13 @@ def _norm_title_key(t):
 
 def _komiku_to_series_item(m):
     """Map MangaInfo Komiku → bentuk item series Komikcast (frontend)."""
+    import re
+
     slug = m.slug or m.source_slug or ""
-    # chapter preview dari latest_chapter
     chapters = []
     ch_name = m.latest_chapter or ""
     ch_num = None
     if ch_name:
-        import re
         mm = re.search(r"([0-9]+(?:\.[0-9]+)?)", ch_name)
         if mm:
             try:
@@ -387,7 +387,9 @@ def _komiku_to_series_item(m):
                 "id": None,
                 "createdAt": None,
                 "data": {
-                    "index": int(ch_num) if ch_num is not None and float(ch_num).is_integer() else ch_num,
+                    "index": int(ch_num)
+                    if ch_num is not None and float(ch_num).is_integer()
+                    else ch_num,
                     "title": ch_name,
                     "slug": None,
                 },
@@ -395,6 +397,9 @@ def _komiku_to_series_item(m):
                 "updated_label": m.updated_label,
             }
         )
+    total_ch = None
+    if ch_num is not None:
+        total_ch = int(ch_num) if float(ch_num).is_integer() else ch_num
     return {
         "id": m.source_id or slug,
         "data": {
@@ -409,33 +414,79 @@ def _komiku_to_series_item(m):
             "type": "mirror",
             "genreIds": [],
             "isHot": False,
-            "totalChapters": None,
+            "totalChapters": total_ch,
             "provider": "komiku",
             "latestChapterLabel": m.latest_chapter,
             "updatedLabel": m.updated_label,
         },
         "createdAt": None,
-        "updatedAt": None,
+        "updatedAt": m.updated_label,
         "chapters": chapters,
         "provider": "komiku",
         "_source": "komiku",
     }
 
 
+def _komikcast_from_mongo_catalog(take=20):
+    """Fallback saat be.komikcast.cc 503 — pakai catalog Mongo jika ada."""
+    out = []
+    try:
+        from server.hybrid_providers import mongo as mongo_cache
+
+        db = mongo_cache.get_db()
+        if db is None:
+            return out
+        cur = (
+            db.catalog.find({"providers": "komikcast"})
+            .sort("updated_at", -1)
+            .limit(take)
+        )
+        for d in cur:
+            slug = (d.get("slug_map") or {}).get("komikcast") or d.get(
+                "canonical_slug"
+            )
+            if not slug:
+                continue
+            ch_label = d.get("latest_chapter")
+            out.append(
+                {
+                    "id": slug,
+                    "data": {
+                        "title": d.get("title"),
+                        "slug": slug,
+                        "coverImage": d.get("cover_url"),
+                        "status": (d.get("status") or "").lower() or None,
+                        "format": (d.get("type") or "").lower() or None,
+                        "provider": "komikcast",
+                        "latestChapterLabel": ch_label,
+                        "updatedLabel": d.get("updated_label"),
+                        "totalChapters": None,
+                    },
+                    "chapters": [],
+                    "provider": "komikcast",
+                    "_source": "komikcast_mongo",
+                }
+            )
+    except Exception:
+        pass
+    return out
+
+
 def build_hybrid_newest(page=1, take=20):
     """
     Gabungan terbaru Komikcast + Komiku untuk tab Terbaru.
-    Dedup by title; prioritaskan yang punya latest_chapter info.
+    Round-robin dedup by title. KC down → fallback Mongo / KU saja.
     """
     take = max(1, min(int(take or 20), 50))
     page = max(1, int(page or 1))
     items = []
     errors = []
+    kc_live = False
 
-    # Komikcast via upstream API shape
+    # Komikcast upstream (retry lebih agresif)
     try:
         url = f"{API_BASE}/series?page={page}&take={take}&sort=updatedAt"
-        code, hdrs, body = fetch(url, timeout=14, retries=1)
+        code, hdrs, body = fetch(url, timeout=16, retries=3)
         if code == 200 and body:
             payload = json.loads(body.decode("utf-8", errors="replace"))
             for it in payload.get("data") or []:
@@ -447,29 +498,52 @@ def build_hybrid_newest(page=1, take=20):
                         it["data"] = dict(it["data"])
                         it["data"]["provider"] = "komikcast"
                     items.append(it)
+            kc_live = bool(payload.get("data"))
+        else:
+            errors.append(f"komikcast: HTTP {code}")
     except Exception as e:
         errors.append(f"komikcast: {e}")
 
-    # Komiku (page 1 only has true "terbaru" homepage order)
+    # Fallback Mongo catalog jika KC API mati
+    if not kc_live and page <= 1:
+        fb = _komikcast_from_mongo_catalog(take=take)
+        if fb:
+            items.extend(fb)
+            errors.append("komikcast: using mongo fallback")
+        else:
+            errors.append("komikcast: unavailable (no mongo fallback)")
+
+    # Komiku homepage #Terbaru (paling akurat untuk "baru diupdate")
     if _HYBRID_OK and KomikuProvider is not None and page <= 1:
         try:
             ku = KomikuProvider()
-            batch = ku.get_latest(limit=take)
+            batch = ku.get_latest(limit=max(take, 20))
             for m in batch:
                 items.append(_komiku_to_series_item(m))
         except Exception as e:
             errors.append(f"komiku: {e}")
 
-    # Split by provider then interleave so Komiku updates always visible
-    kc_list = [it for it in items if (it.get("provider") or (it.get("data") or {}).get("provider")) == "komikcast"]
-    ku_list = [it for it in items if (it.get("provider") or (it.get("data") or {}).get("provider")) == "komiku"]
+    kc_list = [
+        it
+        for it in items
+        if (it.get("provider") or (it.get("data") or {}).get("provider"))
+        == "komikcast"
+    ]
+    ku_list = [
+        it
+        for it in items
+        if (it.get("provider") or (it.get("data") or {}).get("provider"))
+        == "komiku"
+    ]
 
     seen = set()
     merged = []
 
     def _key(it):
         d = it.get("data") or {}
-        return _norm_title_key(d.get("title") or "") or (d.get("slug") or "").lower()
+        return _norm_title_key(d.get("title") or "") or (
+            d.get("slug") or ""
+        ).lower()
 
     def _add(it):
         k = _key(it)
@@ -479,7 +553,7 @@ def build_hybrid_newest(page=1, take=20):
         merged.append(it)
         return True
 
-    # Round-robin KC / KU
+    # Round-robin; jika satu provider kosong, ambil penuh dari yang lain
     i = j = 0
     while len(merged) < take and (i < len(kc_list) or j < len(ku_list)):
         if i < len(kc_list):
@@ -491,6 +565,13 @@ def build_hybrid_newest(page=1, take=20):
             _add(ku_list[j])
             j += 1
 
+    # Jika masih kurang (mis. dedup ketat), isi sisa dari KU lalu KC
+    if len(merged) < take:
+        for it in ku_list[j:] + kc_list[i:]:
+            if len(merged) >= take:
+                break
+            _add(it)
+
     return {
         "status": 200,
         "message": "Hybrid newest (komikcast+komiku)",
@@ -500,8 +581,11 @@ def build_hybrid_newest(page=1, take=20):
             "page": page,
             "take": take,
             "total": len(merged),
-            "komikcast": len([x for x in merged if x.get("provider") == "komikcast"]),
+            "komikcast": len(
+                [x for x in merged if x.get("provider") == "komikcast"]
+            ),
             "komiku": len([x for x in merged if x.get("provider") == "komiku"]),
+            "komikcast_live": kc_live,
             "errors": errors,
             "providers": ["komikcast", "komiku"],
         },
