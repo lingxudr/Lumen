@@ -150,7 +150,7 @@ export function createReaderView(ctx) {
     const idx = ch?.chapterIndex ?? ctx.state.chapterIndex;
     $("#reader-title").textContent = `${d.title || ""} · Ch. ${idx}`;
 
-    const images = ch?.data?.images || [];
+    const images = ch?.data?.images || ch?.images || [];
     const useProxy = $("#use-proxy")?.checked;
     const box = $("#reader-pages");
     box.innerHTML = "";

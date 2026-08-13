@@ -194,14 +194,17 @@ def get_chapter_images_komiku(slug: str, number) -> dict[str, Any]:
         for u in (data.get("images") or [])
         if isinstance(u, str) and "wmkomiku" not in u.lower()
     ]
+    imgs = images or [u for u in (data.get("images") or []) if isinstance(u, str)]
     return {
         "status": 200,
         "message": "ok",
         "data": {
-            "images": images
-            or [u for u in (data.get("images") or []) if isinstance(u, str)],
-            "index": num_s,
-            "title": data.get("chapter_title"),
+            "data": {
+                "images": imgs,
+                "index": num_s,
+                "title": data.get("chapter_title"),
+            },
+            "chapterIndex": num_s,
         },
     }
 
@@ -522,31 +525,38 @@ def get_pages_shinigami_by_chapter_id(chapter_id: str) -> dict[str, Any]:
     )
     prev_c = d.get("prev_chapter") or {}
     next_c = d.get("next_chapter") or {}
+    # Frontend reader: chapterData = res.data; images = chapterData.data.images
+    # → perlu bungkus: { data: { data: { images }, chapterIndex } }
+    inner = {
+        "images": images,
+        "index": num,
+        "title": title,
+        "chapterId": d.get("chapter_id") or chapter_id,
+        "mangaId": d.get("manga_id"),
+        "thumbnail": d.get("thumbnail"),
+        "views": d.get("views"),
+        "releaseDate": d.get("release_date"),
+        "totalImages": d.get("total_images") or len(images),
+        "prevChapter": {
+            "chapterId": prev_c.get("chapter_id"),
+            "index": prev_c.get("chapter_number"),
+        }
+        if prev_c
+        else None,
+        "nextChapter": {
+            "chapterId": next_c.get("chapter_id"),
+            "index": next_c.get("chapter_number"),
+        }
+        if next_c
+        else None,
+    }
     return {
         "status": 200,
         "message": "ok",
         "data": {
-            "images": images,
-            "index": num,
-            "title": title,
-            "chapterId": d.get("chapter_id") or chapter_id,
-            "mangaId": d.get("manga_id"),
-            "thumbnail": d.get("thumbnail"),
-            "views": d.get("views"),
-            "releaseDate": d.get("release_date"),
-            "totalImages": d.get("total_images") or len(images),
-            "prevChapter": {
-                "chapterId": prev_c.get("chapter_id"),
-                "index": prev_c.get("chapter_number"),
-            }
-            if prev_c
-            else None,
-            "nextChapter": {
-                "chapterId": next_c.get("chapter_id"),
-                "index": next_c.get("chapter_number"),
-            }
-            if next_c
-            else None,
+            "data": inner,
+            "chapterIndex": num,
+            "id": d.get("chapter_id") or chapter_id,
         },
         "meta": {
             "source": "sanka_shinigami",
@@ -557,11 +567,15 @@ def get_pages_shinigami_by_chapter_id(chapter_id: str) -> dict[str, Any]:
 
 
 def get_pages_shinigami(manga_id: str, number) -> dict[str, Any]:
+    # Frontend kadang kirim chapter_id UUID langsung
+    if looks_like_uuid(str(number)):
+        return get_pages_shinigami_by_chapter_id(str(number))
     try:
         want = float(number)
     except (TypeError, ValueError):
         want = None
-    chs = get_chapters_shinigami(manga_id, max_pages=8)
+    # Ambil cukup halaman list (page_size besar bila ada)
+    chs = get_chapters_shinigami(manga_id, max_pages=12)
     chapter_id = None
     for c in chs.get("data") or []:
         idx = (c.get("data") or {}).get("index")
