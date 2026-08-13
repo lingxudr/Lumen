@@ -310,21 +310,64 @@ def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_manga_rows(data: dict[str, Any]) -> tuple[list, dict]:
+    """
+    Dukung 2 bentuk response Sanka Shinigami:
+
+    A) { data: [ {...}, ... ], pagination: {...} }          # /comic/shinigami/latest
+    B) { data: { latest: [ {...}, ... ] } }                 # feed / home style
+    """
+    raw = data.get("data")
+    pag = data.get("pagination") or {}
+    rows: list = []
+    if isinstance(raw, list):
+        rows = raw
+    elif isinstance(raw, dict):
+        # data.latest / data.popular / data.comics
+        for key in ("latest", "popular", "populer", "comics", "items", "manga"):
+            if isinstance(raw.get(key), list):
+                rows = raw[key]
+                break
+        if not rows:
+            # kadang data langsung map id->item
+            vals = [v for v in raw.values() if isinstance(v, dict) and (v.get("manga_id") or v.get("title"))]
+            if vals:
+                rows = vals
+        if not pag and isinstance(raw.get("pagination"), dict):
+            pag = raw["pagination"]
+    return rows, pag
+
+
 def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
     """
-    GET /comic/shinigami/latest  (± page)
-    Struktur resmi: status, creator, source, pagination, data[]
+    GET /comic/shinigami/latest (± page)
+
+    Bentuk A: data = list manga
+    Bentuk B: data = { latest: list manga }  (seperti feed yang user kirim)
     """
     page = max(1, int(page or 1))
-    path = f"/comic/shinigami/latest?page={page}"
-    try:
-        data = _get_json(path)
-    except Exception:
-        # beberapa deploy tidak terima query page
-        data = _get_json("/comic/shinigami/latest")
-    rows = data.get("data") or []
+    data = None
+    last_err = None
+    for path in (
+        f"/comic/shinigami/latest?page={page}",
+        "/comic/shinigami/latest",
+        "/comic/shinigami/home",
+        "/comic/shinigami",
+    ):
+        try:
+            data = _get_json(path)
+            rows, _ = _extract_manga_rows(data)
+            if rows:
+                break
+        except Exception as e:
+            last_err = e
+            data = None
+            continue
+    if data is None:
+        raise RuntimeError(str(last_err) or "shinigami latest failed")
+
+    rows, pag = _extract_manga_rows(data)
     items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
-    pag = data.get("pagination") or {}
     return {
         "status": 200,
         "message": "Sanka Shinigami latest (KC down)",
@@ -336,7 +379,7 @@ def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
             "total": len(items),
             "page": pag.get("current_page") or page,
             "total_pages": pag.get("total_pages"),
-            "total_record": pag.get("total_record"),
+            "total_record": pag.get("total_record") or len(rows),
             "page_size": pag.get("page_size"),
         },
     }
@@ -344,13 +387,18 @@ def get_terbaru_shinigami(limit: int = 20, page: int = 1) -> dict[str, Any]:
 
 def get_populer_shinigami(limit: int = 20) -> dict[str, Any]:
     data = _get_json("/comic/shinigami/popular")
-    rows = data.get("data") or []
+    rows, pag = _extract_manga_rows(data)
     items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
     return {
         "status": 200,
         "message": "Sanka Shinigami popular",
         "data": items,
-        "meta": {"source": "sanka_shinigami", "total": len(items)},
+        "meta": {
+            "source": "sanka_shinigami",
+            "total": len(items),
+            "page": pag.get("current_page"),
+            "total_pages": pag.get("total_pages"),
+        },
     }
 
 
