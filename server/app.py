@@ -605,6 +605,69 @@ def build_hybrid_newest(page=1, take=20):
     }
 
 
+def _sanka_fallback_for_sub(sub: str, qs=None) -> bytes | None:
+    """Sanka Vollerei fallback saat KC 503. Prefer Shinigami, lalu Komiku-style."""
+    try:
+        from server import sanka_fallback as sf
+    except Exception:
+        try:
+            import sanka_fallback as sf
+        except Exception as e:
+            print("sanka import fail:", e, flush=True)
+            return None
+    try:
+        qs = qs or {}
+        sub0 = (sub or "").split("?")[0].strip("/")
+        parts = [x for x in sub0.split("/") if x]
+
+        def _take():
+            try:
+                return int((qs.get("take") or qs.get("limit") or ["20"])[0])
+            except Exception:
+                return 20
+
+        # GET series (list)
+        if sub0 == "series" or (len(parts) == 1 and parts[0] == "series"):
+            sort = (qs.get("sort") or ["updatedAt"])[0]
+            qsearch = (qs.get("q") or qs.get("search") or [""])[0].strip()
+            take = _take()
+            if qsearch:
+                payload = sf.search(qsearch, limit=take)
+            elif sort in ("popular", "popularity", "hot", "views"):
+                payload = sf.get_populer(limit=take)
+            else:
+                payload = sf.get_terbaru(limit=take, prefer="shinigami")
+            return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        # series/{slug}
+        # series/{slug}/chapters
+        # series/{slug}/chapters/{index}
+        kind, slug, chapter = _parse_api_sub(sub)
+        if not slug:
+            return None
+
+        # Shinigami UUID routes
+        if sf.looks_like_uuid(slug):
+            if kind == "detail" or (len(parts) == 2 and parts[0] == "series"):
+                payload = sf.get_detail_shinigami(slug)
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            if kind == "chapters" or (len(parts) >= 3 and parts[-1] == "chapters"):
+                payload = sf.get_chapters_shinigami(slug)
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            if kind == "pages" and chapter is not None:
+                payload = sf.get_pages_shinigami(slug, chapter)
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+        # Komiku-style pages by slug+number
+        if kind == "pages" and chapter is not None:
+            payload = sf.get_chapter_images_komiku(slug, chapter)
+            return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except Exception as e:
+        print("sanka fallback error:", e, flush=True)
+    return None
+
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -928,6 +991,8 @@ class Handler(BaseHTTPRequestHandler):
                     "thumbnail.komiku.org",
                     "img.komiku.org",
                     "sankavollerei.web.id",
+                    "shngm.id",
+                    "assets.shngm.id",
                 )
                 if not any(a in src for a in allowed):
                     return self.send_json(403, {"error": "host not allowed"})

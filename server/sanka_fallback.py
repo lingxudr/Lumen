@@ -1,16 +1,10 @@
 """
-Fallback sementara saat Komikcast down — REST Sanka Vollerei.
-
+Fallback saat Komikcast down — REST Sanka Vollerei.
 Base: https://www.sankavollerei.web.id
 
 OK:
-  GET /comic/terbaru
-  GET /comic/populer
-  GET /comic/search?q=
-  GET /comic/chapter/{slug}-chapter-{n}
-  GET /comic/chapter/{slug}/chapter-{n}
-
-Detail/chapter-list sering di-block Plana AI → pakai Komiku HTML bila perlu.
+  /comic/terbaru, /comic/populer, /comic/search?q=, /comic/chapter/{slug}-chapter-{n}
+  /comic/shinigami/latest, /popular, /detail/{id}, /chapters/{id}, /read/{chapter_id}
 """
 
 from __future__ import annotations
@@ -29,7 +23,7 @@ UA = (
 )
 
 
-def _get_json(path: str, timeout: int = 18) -> dict[str, Any]:
+def _get_json(path: str, timeout: int = 20) -> dict[str, Any]:
     url = SANKA_BASE + path
     req = urllib.request.Request(
         url,
@@ -62,15 +56,13 @@ def _get_json(path: str, timeout: int = 18) -> dict[str, Any]:
 def _slug_from_link(link: str | None) -> str:
     if not link:
         return ""
-    # /manga/foo/ or https://komiku.org/manga/foo/
-    parts = link.rstrip("/").split("/")
-    return parts[-1] if parts else ""
+    return link.rstrip("/").split("/")[-1]
 
 
 def _chapter_num(label: str | None) -> float | None:
     if not label:
         return None
-    m = re.search(r"([0-9]+(?:\.[0-9]+)?)", label)
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)", str(label))
     if not m:
         return None
     try:
@@ -79,8 +71,16 @@ def _chapter_num(label: str | None) -> float | None:
         return None
 
 
-def to_series_item(comic: dict[str, Any]) -> dict[str, Any]:
-    """Map item Sanka → bentuk series Komikcast (frontend Lumen)."""
+def looks_like_uuid(s: str) -> bool:
+    return bool(
+        re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            (s or "").lower(),
+        )
+    )
+
+
+def _komiku_item(comic: dict[str, Any]) -> dict[str, Any]:
     title = comic.get("title") or ""
     link = comic.get("link") or comic.get("href") or ""
     slug = comic.get("slug") or _slug_from_link(link)
@@ -93,21 +93,16 @@ def to_series_item(comic: dict[str, Any]) -> dict[str, Any]:
         chapters.append(
             {
                 "id": None,
-                "createdAt": None,
                 "data": {
                     "index": int(ch_num)
                     if ch_num is not None and float(ch_num).is_integer()
                     else ch_num,
                     "title": ch_label,
-                    "slug": f"{slug}-chapter-{int(ch_num)}"
-                    if ch_num is not None and float(ch_num).is_integer()
-                    else None,
+                    "slug": None,
                 },
                 "provider": "sanka",
-                "updated_label": time_ago,
             }
         )
-    fmt = (comic.get("type") or "").lower() or None
     return {
         "id": slug,
         "data": {
@@ -116,10 +111,8 @@ def to_series_item(comic: dict[str, Any]) -> dict[str, Any]:
             "slug": slug,
             "coverImage": image,
             "status": None,
-            "format": fmt,
+            "format": (comic.get("type") or "").lower() or None,
             "type": "mirror",
-            "genreIds": [],
-            "isHot": False,
             "totalChapters": int(ch_num)
             if ch_num is not None and float(ch_num).is_integer()
             else ch_num,
@@ -127,134 +120,303 @@ def to_series_item(comic: dict[str, Any]) -> dict[str, Any]:
             "latestChapterLabel": ch_label or None,
             "updatedLabel": time_ago or None,
         },
-        "createdAt": None,
-        "updatedAt": time_ago,
         "chapters": chapters,
         "provider": "sanka",
-        "_source": "sanka",
+        "_source": "sanka_komiku",
     }
 
 
-def get_terbaru(limit: int = 20) -> dict[str, Any]:
+def get_terbaru_komiku(limit: int = 20) -> dict[str, Any]:
     data = _get_json("/comic/terbaru")
     comics = data.get("comics") or []
-    items = [to_series_item(c) for c in comics[:limit] if isinstance(c, dict)]
+    items = [_komiku_item(c) for c in comics[:limit] if isinstance(c, dict)]
     return {
         "status": 200,
-        "message": "Sanka fallback terbaru (Komikcast down)",
+        "message": "Sanka Komiku terbaru (KC down)",
         "data": items,
-        "meta": {
-            "source": "sanka",
-            "total": len(items),
-            "creator": data.get("creator"),
-            "stale": False,
-        },
+        "meta": {"source": "sanka_komiku", "total": len(items)},
     }
 
 
-def get_populer(limit: int = 20) -> dict[str, Any]:
-    data = _get_json("/comic/populer")
-    comics = data.get("comics") or []
-    items = [to_series_item(c) for c in comics[:limit] if isinstance(c, dict)]
-    return {
-        "status": 200,
-        "message": "Sanka fallback populer",
-        "data": items,
-        "meta": {
-            "source": "sanka",
-            "total": len(items),
-            "creator": data.get("creator"),
-        },
-    }
-
-
-def search(q: str, limit: int = 20) -> dict[str, Any]:
+def search_komiku(q: str, limit: int = 20) -> dict[str, Any]:
     q = (q or "").strip()
     if not q:
-        return {"status": 200, "data": [], "meta": {"source": "sanka"}}
+        return {"status": 200, "data": [], "meta": {"source": "sanka_komiku"}}
     data = _get_json("/comic/search?q=" + urllib.parse.quote(q))
     rows = data.get("data") or []
     items = []
     for c in rows[:limit]:
         if not isinstance(c, dict):
             continue
-        # normalize search shape
-        c2 = {
-            "title": c.get("title"),
-            "slug": c.get("slug"),
-            "link": c.get("href") or c.get("link"),
-            "image": c.get("thumbnail") or c.get("image"),
-            "type": c.get("type"),
-            "chapter": None,
-            "time_ago": c.get("description"),
-            "altTitle": c.get("altTitle"),
-        }
-        items.append(to_series_item(c2))
+        items.append(
+            _komiku_item(
+                {
+                    "title": c.get("title"),
+                    "slug": c.get("slug"),
+                    "link": c.get("href") or c.get("link"),
+                    "image": c.get("thumbnail") or c.get("image"),
+                    "type": c.get("type"),
+                    "time_ago": c.get("description"),
+                    "altTitle": c.get("altTitle"),
+                }
+            )
+        )
     return {
         "status": 200,
-        "message": data.get("message") or "Sanka search",
+        "message": data.get("message") or "search",
         "data": items,
-        "meta": {
-            "source": "sanka",
-            "total": len(items),
-            "q": q,
-            "creator": data.get("creator"),
-        },
+        "meta": {"source": "sanka_komiku", "total": len(items), "q": q},
     }
 
 
-def get_chapter_images(slug: str, number: float | int | str) -> dict[str, Any]:
-    """
-    Ambil gambar chapter.
-    Path: /comic/chapter/{slug}-chapter-{n}
-    """
+def get_chapter_images_komiku(slug: str, number) -> dict[str, Any]:
     slug = (slug or "").strip().strip("/")
     try:
         num_f = float(number)
         num_s = str(int(num_f)) if float(num_f).is_integer() else str(num_f)
     except (TypeError, ValueError):
         num_s = str(number)
-
-    paths = [
+    data = None
+    last_err = None
+    for p in (
         f"/comic/chapter/{slug}-chapter-{num_s}",
         f"/comic/chapter/{slug}/chapter-{num_s}",
-    ]
-    last_err = None
-    data = None
-    for p in paths:
+    ):
         try:
             data = _get_json(p)
             break
         except Exception as e:
             last_err = e
-            continue
     if data is None:
-        raise RuntimeError(str(last_err) or "chapter fetch failed")
-
-    images = data.get("images") or []
-    # skip watermark cover if obvious
-    cleaned = []
-    for u in images:
-        if not isinstance(u, str):
-            continue
-        low = u.lower()
-        if "wmkomiku" in low or "wm-komiku" in low:
-            continue
-        cleaned.append(u)
-
-    proxies = data.get("imagesproxy") or []
-    # prefer direct images; proxy as secondary
+        raise RuntimeError(str(last_err) or "chapter failed")
+    images = [
+        u
+        for u in (data.get("images") or [])
+        if isinstance(u, str) and "wmkomiku" not in u.lower()
+    ]
     return {
         "status": 200,
-        "message": "Sanka chapter pages",
+        "message": "ok",
         "data": {
-            "images": cleaned or [u for u in images if isinstance(u, str)],
-            "images_proxy": proxies,
-            "manga_title": data.get("manga_title"),
-            "chapter_title": data.get("chapter_title"),
-            "navigation": data.get("navigation"),
-            "provider": "sanka",
-            "page_count": len(cleaned or images),
+            "images": images
+            or [u for u in (data.get("images") or []) if isinstance(u, str)],
+            "index": num_s,
+            "title": data.get("chapter_title"),
         },
-        "meta": {"source": "sanka", "slug": slug, "number": num_s},
     }
+
+
+def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
+    mid = str(m.get("manga_id") or m.get("id") or "")
+    title = m.get("title") or ""
+    cover = m.get("cover_portrait") or m.get("cover") or ""
+    status = (m.get("status") or "").lower() or None
+    latest = m.get("latest_chapter")
+    fmt = None
+    for f in m.get("format") or []:
+        if isinstance(f, dict) and f.get("name"):
+            fmt = str(f["name"]).lower()
+            break
+    if not fmt and m.get("country") == "KR":
+        fmt = "manhwa"
+    genres = []
+    for g in m.get("genres") or []:
+        if isinstance(g, dict) and g.get("name"):
+            genres.append(g["name"])
+    authors = []
+    for a in m.get("authors") or []:
+        if isinstance(a, dict) and a.get("name"):
+            authors.append(a["name"])
+    ch_label = f"Chapter {latest}" if latest is not None else None
+    chapters = []
+    if latest is not None:
+        chapters.append(
+            {
+                "id": m.get("latest_chapter_id"),
+                "data": {
+                    "index": latest,
+                    "title": ch_label,
+                    "slug": None,
+                },
+                "provider": "shinigami",
+            }
+        )
+    return {
+        "id": mid,
+        "data": {
+            "title": title,
+            "nativeTitle": m.get("alternative_title"),
+            "slug": mid,
+            "coverImage": cover,
+            "author": ", ".join(authors) if authors else None,
+            "rating": m.get("rating"),
+            "status": status,
+            "format": fmt,
+            "type": "mirror",
+            "genres": genres,
+            "totalChapters": latest,
+            "provider": "shinigami",
+            "latestChapterLabel": ch_label,
+            "updatedLabel": m.get("latest_chapter_time") or m.get("updated_at"),
+            "mangaId": mid,
+        },
+        "chapters": chapters,
+        "provider": "shinigami",
+        "_source": "sanka_shinigami",
+        "updatedAt": m.get("latest_chapter_time") or m.get("updated_at"),
+    }
+
+
+def get_terbaru_shinigami(limit: int = 20) -> dict[str, Any]:
+    data = _get_json("/comic/shinigami/latest")
+    rows = data.get("data") or []
+    items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
+    return {
+        "status": 200,
+        "message": "Sanka Shinigami latest (KC down)",
+        "data": items,
+        "meta": {"source": "sanka_shinigami", "total": len(items)},
+    }
+
+
+def get_populer_shinigami(limit: int = 20) -> dict[str, Any]:
+    data = _get_json("/comic/shinigami/popular")
+    rows = data.get("data") or []
+    items = [_shi_item(m) for m in rows[:limit] if isinstance(m, dict)]
+    return {
+        "status": 200,
+        "message": "Sanka Shinigami popular",
+        "data": items,
+        "meta": {"source": "sanka_shinigami", "total": len(items)},
+    }
+
+
+def get_detail_shinigami(manga_id: str) -> dict[str, Any]:
+    data = _get_json(f"/comic/shinigami/detail/{manga_id}")
+    m = data.get("data") or {}
+    item = _shi_item(m)
+    return {"status": 200, "message": "ok", "data": item, "meta": {"source": "sanka_shinigami"}}
+
+
+def get_chapters_shinigami(manga_id: str, max_pages: int = 8) -> dict[str, Any]:
+    all_ch = []
+    page = 1
+    total_pages = 1
+    while page <= total_pages and page <= max_pages:
+        data = _get_json(f"/comic/shinigami/chapters/{manga_id}?page={page}")
+        pag = data.get("pagination") or {}
+        total_pages = int(pag.get("total_pages") or 1)
+        for ch in data.get("data") or []:
+            if not isinstance(ch, dict):
+                continue
+            num = ch.get("chapter_number")
+            all_ch.append(
+                {
+                    "id": ch.get("chapter_id"),
+                    "createdAt": ch.get("release_date"),
+                    "data": {
+                        "index": num,
+                        "title": ch.get("chapter_title")
+                        or (f"Chapter {num}" if num is not None else "Chapter"),
+                        "slug": None,
+                        "chapterId": ch.get("chapter_id"),
+                    },
+                    "provider": "shinigami",
+                }
+            )
+        page += 1
+
+    def sk(c):
+        n = (c.get("data") or {}).get("index")
+        try:
+            return float(n)
+        except (TypeError, ValueError):
+            return -1
+
+    all_ch.sort(key=sk, reverse=True)
+    return {
+        "status": 200,
+        "message": "ok",
+        "data": all_ch,
+        "meta": {"source": "sanka_shinigami", "total": len(all_ch), "manga_id": manga_id},
+    }
+
+
+def get_pages_shinigami_by_chapter_id(chapter_id: str) -> dict[str, Any]:
+    data = _get_json(f"/comic/shinigami/read/{chapter_id}")
+    d = data.get("data") or {}
+    images = [u for u in (d.get("images") or []) if isinstance(u, str)]
+    return {
+        "status": 200,
+        "message": "ok",
+        "data": {
+            "images": images,
+            "index": d.get("chapter_number"),
+            "title": d.get("chapter_title")
+            or (
+                f"Chapter {d.get('chapter_number')}"
+                if d.get("chapter_number") is not None
+                else None
+            ),
+            "chapterId": d.get("chapter_id"),
+        },
+        "meta": {"source": "sanka_shinigami"},
+    }
+
+
+def get_pages_shinigami(manga_id: str, number) -> dict[str, Any]:
+    try:
+        want = float(number)
+    except (TypeError, ValueError):
+        want = None
+    chs = get_chapters_shinigami(manga_id, max_pages=8)
+    chapter_id = None
+    for c in chs.get("data") or []:
+        idx = (c.get("data") or {}).get("index")
+        try:
+            if want is not None and float(idx) == want:
+                chapter_id = c.get("id") or (c.get("data") or {}).get("chapterId")
+                break
+        except (TypeError, ValueError):
+            continue
+    if not chapter_id:
+        raise RuntimeError(f"chapter {number} not found for {manga_id}")
+    return get_pages_shinigami_by_chapter_id(str(chapter_id))
+
+
+def get_terbaru(limit: int = 20, prefer: str = "shinigami") -> dict[str, Any]:
+    errors = []
+    if prefer == "shinigami":
+        try:
+            return get_terbaru_shinigami(limit=limit)
+        except Exception as e:
+            errors.append(f"shinigami: {e}")
+        out = get_terbaru_komiku(limit=limit)
+        out.setdefault("meta", {})["errors"] = errors
+        return out
+    try:
+        return get_terbaru_komiku(limit=limit)
+    except Exception as e:
+        errors.append(f"komiku: {e}")
+    out = get_terbaru_shinigami(limit=limit)
+    out.setdefault("meta", {})["errors"] = errors
+    return out
+
+
+def get_populer(limit: int = 20) -> dict[str, Any]:
+    try:
+        return get_populer_shinigami(limit=limit)
+    except Exception:
+        data = _get_json("/comic/populer")
+        comics = data.get("comics") or []
+        items = [_komiku_item(c) for c in comics[:limit] if isinstance(c, dict)]
+        return {
+            "status": 200,
+            "message": "Sanka populer",
+            "data": items,
+            "meta": {"source": "sanka_komiku", "total": len(items)},
+        }
+
+
+def search(q: str, limit: int = 20) -> dict[str, Any]:
+    return search_komiku(q, limit=limit)
