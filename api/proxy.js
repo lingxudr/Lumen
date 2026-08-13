@@ -11,7 +11,10 @@ function resolvePath(reqUrl, query) {
   try {
     const u = new URL(reqUrl, "https://localhost");
     let pathname = u.pathname || "";
-    pathname = pathname.replace(/^\/api\/proxy\/?/, "").replace(/^\/api\//, "").replace(/^\/+/, "");
+    pathname = pathname
+      .replace(/^\/api\/proxy\/?/, "")
+      .replace(/^\/api\//, "")
+      .replace(/^\/+/, "");
     if (pathname && pathname !== "proxy") return pathname.replace(/\.\./g, "");
   } catch (_) {}
   return "";
@@ -37,6 +40,47 @@ function collectQuery(query, reqUrl) {
   return qs;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchUpstream(target) {
+  let lastStatus = 0;
+  let lastBuf = Buffer.alloc(0);
+  let lastCt = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const upstream = await fetch(target, {
+        headers: {
+          "User-Agent": UA,
+          Accept: "application/json, text/plain, */*",
+          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+          Origin: "https://v3.komikcast.fit",
+          Referer: "https://v3.komikcast.fit/",
+        },
+        redirect: "follow",
+      });
+      const ct = upstream.headers.get("content-type") || "";
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      lastStatus = upstream.status;
+      lastBuf = buf;
+      lastCt = ct;
+      if (upstream.status >= 500 && attempt < 3) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      return { status: upstream.status, ct, buf };
+    } catch (e) {
+      if (attempt < 3) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  return { status: lastStatus || 503, ct: lastCt, buf: lastBuf };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
@@ -46,26 +90,16 @@ module.exports = async function handler(req, res) {
   try {
     const subPath = resolvePath(req.url || "/", req.query || {});
     if (!subPath) {
-      return res.status(400).json({ error: "missing path", url: req.url || null });
+      return res
+        .status(400)
+        .json({ error: "missing path", url: req.url || null });
     }
 
     const qs = collectQuery(req.query, req.url || "/");
     const q = qs.toString();
     const target = `${API_BASE}/${subPath}${q ? `?${q}` : ""}`;
 
-    const upstream = await fetch(target, {
-      headers: {
-        "User-Agent": UA,
-        Accept: "application/json, text/plain, */*",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        Origin: "https://v3.komikcast.fit",
-        Referer: "https://v3.komikcast.fit/",
-      },
-      redirect: "follow",
-    });
-
-    const ct = upstream.headers.get("content-type") || "";
-    const buf = Buffer.from(await upstream.arrayBuffer());
+    const { status, ct, buf } = await fetchUpstream(target);
     const textStart = buf.subarray(0, 80).toString("utf8").toLowerCase();
 
     // Cloudflare / WAF challenge HTML
@@ -77,15 +111,29 @@ module.exports = async function handler(req, res) {
       return res.status(503).json({
         error: "upstream_blocked",
         message:
-          "Server sumber memblokir IP Vercel (Cloudflare). Deploy proxy di Railway/Render, atau pakai server Python lokal.",
-        status: upstream.status,
+          "Server sumber memblokir IP (Cloudflare). Coba lagi nanti atau pakai backend Railway.",
+        status,
+      });
+    }
+
+    // Upstream 5xx / non-JSON body → JSON error (biar frontend tidak "Respons tidak valid")
+    if (status >= 500) {
+      return res.status(503).json({
+        status: 503,
+        error: "upstream_unavailable",
+        message:
+          "Server Komikcast sedang tidak tersedia (503). Coba lagi beberapa menit.",
+        path: subPath,
       });
     }
 
     res.setHeader("Content-Type", ct || "application/json; charset=utf-8");
     res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=120");
-    return res.status(upstream.status).send(buf);
+    return res.status(status).send(buf);
   } catch (e) {
-    return res.status(502).json({ error: String(e.message || e) });
+    return res.status(502).json({
+      error: "proxy_error",
+      message: String(e.message || e),
+    });
   }
 };

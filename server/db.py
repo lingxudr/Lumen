@@ -206,6 +206,41 @@ def get_manga(slug: str, max_age: float = 7 * 86400):
         return row["payload"].encode("utf-8")
 
 
+def get_newest_list(limit: int = 20, max_age: float = 14 * 86400):
+    """Rebuild series list dari cache manga (upstream 503)."""
+    limit = max(1, min(int(limit or 20), 50))
+    with _LOCK:
+        c = _connect()
+        rows = c.execute(
+            """
+            SELECT payload, updated_at FROM manga
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    items = []
+    now = time.time()
+    for row in rows:
+        if max_age and now - row["updated_at"] > max_age:
+            continue
+        try:
+            item = json.loads(row["payload"])
+            if isinstance(item, dict):
+                items.append(item)
+        except Exception:
+            continue
+    if not items:
+        return None
+    payload = {
+        "status": 200,
+        "message": "Cached series list (upstream unavailable)",
+        "data": items,
+        "meta": {"source": "sqlite_cache", "total": len(items), "stale": True},
+    }
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
 def get_chapter_list(slug: str, max_age: float = 3 * 86400):
     with _LOCK:
         c = _connect()

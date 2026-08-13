@@ -331,9 +331,22 @@ def _db_stats_safe():
 
 
 def _db_fallback(sub: str):
-
+    """Fallback SQLite saat upstream Komikcast 5xx/timeout."""
     kind, slug, chapter = _parse_api_sub(sub)
     try:
+        sub0 = (sub or "").split("?")[0].strip("/")
+        if sub0 == "series" and not slug:
+            take = 20
+            if "?" in (sub or ""):
+                from urllib.parse import parse_qs
+                q = parse_qs((sub or "").split("?", 1)[-1])
+                try:
+                    take = int((q.get("take") or q.get("limit") or ["20"])[0])
+                except Exception:
+                    take = 20
+            raw = lumen_db.get_newest_list(limit=take)
+            if raw:
+                return raw
         if kind == "detail" and slug:
             raw = lumen_db.get_manga(slug)
             if raw:
