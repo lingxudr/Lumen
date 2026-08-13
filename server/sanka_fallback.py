@@ -243,7 +243,20 @@ def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
     # prefer portrait; fallback cover banner
     cover = m.get("cover_portrait") or m.get("cover") or ""
     status = (m.get("status") or "").lower() or None
-    latest = m.get("latest_chapter")
+
+    # latest list: number + latest_chapter_id
+    # detail: { chapter_id, chapter_number, updated_at }
+    latest_raw = m.get("latest_chapter")
+    latest_id = m.get("latest_chapter_id")
+    latest_time = m.get("latest_chapter_time")
+    latest = None
+    if isinstance(latest_raw, dict):
+        latest = latest_raw.get("chapter_number")
+        latest_id = latest_raw.get("chapter_id") or latest_id
+        latest_time = latest_raw.get("updated_at") or latest_time
+    elif latest_raw is not None:
+        latest = latest_raw
+
     fmt = _fmt_str(m.get("format"))
     if not fmt and (m.get("country") or "").upper() == "KR":
         fmt = "manhwa"
@@ -255,13 +268,13 @@ def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
     if latest is not None:
         chapters.append(
             {
-                "id": m.get("latest_chapter_id"),
-                "createdAt": m.get("latest_chapter_time"),
+                "id": latest_id,
+                "createdAt": latest_time,
                 "data": {
                     "index": latest,
                     "title": ch_label,
                     "slug": None,
-                    "chapterId": m.get("latest_chapter_id"),
+                    "chapterId": latest_id,
                 },
                 "provider": "shinigami",
             }
@@ -283,15 +296,17 @@ def _shi_item(m: dict[str, Any]) -> dict[str, Any]:
             "totalChapters": latest,
             "provider": "shinigami",
             "latestChapterLabel": ch_label,
-            "updatedLabel": m.get("latest_chapter_time"),
+            "updatedLabel": latest_time or m.get("updated_at"),
             "mangaId": mid,
             "country": m.get("country"),
             "views": m.get("views"),
+            "rank": m.get("rank"),
+            "description": m.get("description"),
         },
         "chapters": chapters,
         "provider": "shinigami",
         "_source": "sanka_shinigami",
-        "updatedAt": m.get("latest_chapter_time"),
+        "updatedAt": latest_time or m.get("updated_at"),
     }
 
 
@@ -340,10 +355,24 @@ def get_populer_shinigami(limit: int = 20) -> dict[str, Any]:
 
 
 def get_detail_shinigami(manga_id: str) -> dict[str, Any]:
+    """
+    GET /comic/shinigami/detail/{manga_id}
+    latest_chapter = { chapter_id, chapter_number, updated_at }
+    format/type = [{ id, name, slug }]
+    """
     data = _get_json(f"/comic/shinigami/detail/{manga_id}")
     m = data.get("data") or {}
     item = _shi_item(m)
-    return {"status": 200, "message": "ok", "data": item, "meta": {"source": "sanka_shinigami"}}
+    # frontend kadang baca synopsis di data.data / data.synopsis
+    if isinstance(item.get("data"), dict):
+        item["data"]["synopsis"] = m.get("description")
+        item["data"]["description"] = m.get("description")
+    return {
+        "status": 200,
+        "message": "ok",
+        "data": item,
+        "meta": {"source": "sanka_shinigami", "manga_id": manga_id},
+    }
 
 
 def get_chapters_shinigami(manga_id: str, max_pages: int = 8) -> dict[str, Any]:
