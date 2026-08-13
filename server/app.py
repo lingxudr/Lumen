@@ -69,18 +69,10 @@ except Exception as _db_imp_err:
     lumen_db = _DbStub()
 
 
-# Hybrid providers (Komikcast + Komiku) — optional
-try:
-    _LUMEN_ROOT = Path(__file__).resolve().parent.parent
-    if str(_LUMEN_ROOT) not in sys.path:
-        sys.path.insert(0, str(_LUMEN_ROOT))
-    from server.hybrid_providers import KomikuProvider, KomikcastProvider  # type: ignore
-    _HYBRID_OK = True
-except Exception as _hy_err:
-    print("hybrid import failed:", _hy_err, flush=True)
-    KomikuProvider = None  # type: ignore
-    KomikcastProvider = None  # type: ignore
-    _HYBRID_OK = False
+# Komiku hybrid dimatikan — Lumen kembali pure Komikcast (be.komikcast.cc)
+_HYBRID_OK = False
+KomikuProvider = None  # type: ignore
+KomikcastProvider = None  # type: ignore
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
@@ -782,36 +774,7 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
 
-                # Hybrid newest: merge Komiku into Terbaru
-                sub_clean = sub.split("?")[0].strip("/")
-                if sub_clean == "series":
-                    sort = (qs.get("sort") or ["updatedAt"])[0]
-                    # only merge for updated/newest style lists
-                    if sort in ("updatedAt", "updated_at", "newest", "latest", ""):
-                        try:
-                            page = int((qs.get("page") or ["1"])[0])
-                        except ValueError:
-                            page = 1
-                        try:
-                            take = int((qs.get("take") or qs.get("limit") or ["20"])[0])
-                        except ValueError:
-                            take = 20
-                        # skip merge if explicit search query present
-                        qsearch = (qs.get("q") or qs.get("search") or [""])[0].strip()
-                        if not qsearch:
-                            hybrid = build_hybrid_newest(page=page, take=take)
-                            body = json.dumps(hybrid, ensure_ascii=False).encode("utf-8")
-                            extra = dict(rate_headers)
-                            extra["X-Lumen-Hybrid"] = "1"
-                            extra["Cache-Control"] = "public, max-age=30"
-                            return self.send_bytes(
-                                200,
-                                body,
-                                "application/json; charset=utf-8",
-                                extra_headers=extra,
-                            )
-
-
+                # Pure Komikcast proxy (tanpa merge Komiku)
                 url = API_BASE + "/" + sub
                 if parsed.query:
                     url += "?" + parsed.query
@@ -833,7 +796,8 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
                 try:
-                    code, hdrs, body = fetch(url, timeout=12, retries=0)
+                    # retry: be.komikcast.cc sering 503 sebentar
+                    code, hdrs, body = fetch(url, timeout=16, retries=3)
                 except Exception as e:
                     print("upstream error:", sub, e, flush=True)
                     fb = _db_fallback(sub)
