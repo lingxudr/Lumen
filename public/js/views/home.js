@@ -157,7 +157,10 @@ export function createHomeView(ctx) {
       const chapters = item.chapters || [];
       const card = document.createElement("article");
       card.className = "card";
-      card.onclick = () => ctx.openSeries(d.slug || item.id);
+      card.onclick = () => ctx.openSeries(d.slug || item.id, {
+        title: d.title || "",
+        cover: d.coverImage || d.cover || "",
+      });
 
       const badges = [];
       if (d.isHot) badges.push('<span class="badge badge--hot">Hot</span>');

@@ -44,5 +44,8 @@ export function chapterIndex(ch) {
   if (!ch) return null;
   if (ch.chapterIndex != null) return ch.chapterIndex;
   if (ch.data && ch.data.index != null) return ch.data.index;
+  if (ch.index != null) return ch.index;
+  if (ch.chapter_number != null) return ch.chapter_number;
+  if (ch.data && ch.data.chapter_number != null) return ch.data.chapter_number;
   return null;
 }

@@ -3,16 +3,116 @@ import { $, esc, escAttr, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
 
+/** Normalize series detail payload (Sanka / KC / hybrid). */
+function normalizeSeries(payload) {
+  if (!payload) return null;
+  // api() returns full JSON { status, data }
+  let root = payload.data != null ? payload.data : payload;
+  if (!root || typeof root !== "object") return null;
+  // wrapper { id, data: { title, coverImage, ... } }
+  let inner = root.data && typeof root.data === "object" && !Array.isArray(root.data)
+    ? root.data
+    : root;
+  // some paths nest again
+  if (inner.data && typeof inner.data === "object" && (inner.data.title || inner.data.coverImage)) {
+    inner = { ...inner, ...inner.data };
+  }
+  const slug =
+    inner.slug ||
+    root.slug ||
+    root.id ||
+    inner.mangaId ||
+    inner.manga_id ||
+    null;
+  const title = inner.title || root.title || "";
+  const coverImage =
+    inner.coverImage ||
+    inner.cover ||
+    inner.cover_url ||
+    inner.thumbnail ||
+    "";
+  const synopsis =
+    inner.synopsis ||
+    inner.description ||
+    inner.summary ||
+    "";
+  const totalChapters =
+    inner.totalChapters ??
+    inner.total_chapters ??
+    inner.latest_chapter ??
+    null;
+  return {
+    raw: root,
+    slug: slug ? String(slug) : "",
+    title: title || "Tanpa judul",
+    coverImage,
+    synopsis,
+    author: inner.author || inner.authors?.[0]?.name || "",
+    status: inner.status || "",
+    format: Array.isArray(inner.format) ? (inner.format[0]?.name || inner.format[0] || "") : (inner.format || inner.type || ""),
+    type: inner.type || "",
+    genres: inner.genres || [],
+    totalChapters,
+    rating: inner.rating,
+    nativeTitle: inner.nativeTitle || inner.alternative_title || "",
+    // shape expected by rest of app
+    data: {
+      ...inner,
+      slug: slug ? String(slug) : inner.slug,
+      title: title || inner.title,
+      coverImage,
+      synopsis,
+      totalChapters,
+    },
+    id: root.id || slug,
+  };
+}
+
+function normalizeChapters(payload) {
+  if (!payload) return [];
+  let list = payload.data != null ? payload.data : payload;
+  if (!Array.isArray(list)) {
+    if (list && Array.isArray(list.data)) list = list.data;
+    else if (list && Array.isArray(list.chapters)) list = list.chapters;
+    else return [];
+  }
+  return list.map((ch, i) => {
+    if (!ch || typeof ch !== "object") return null;
+    const d = ch.data && typeof ch.data === "object" ? ch.data : {};
+    const index =
+      ch.chapterIndex ??
+      d.index ??
+      ch.index ??
+      ch.chapter_number ??
+      d.chapter_number ??
+      null;
+    return {
+      ...ch,
+      data: {
+        ...d,
+        index: index != null ? Number(index) : d.index,
+        title: d.title || ch.title || (index != null ? `Chapter ${index}` : ""),
+        chapterId: d.chapterId || d.chapter_id || ch.id || ch.chapter_id,
+      },
+      createdAt: ch.createdAt || ch.release_date || d.release_date || ch.published_at,
+      updatedAt: ch.updatedAt || ch.updated_at,
+      chapterIndex: index != null ? Number(index) : null,
+    };
+  }).filter(Boolean);
+}
+
 export function createSeriesView(ctx) {
-  function showSeriesSkeleton() {
+  function showSeriesSkeleton(hint) {
     const detail = $("#series-detail");
     const list = $("#chapter-list");
     if (detail) {
+      const title = hint?.title ? esc(hint.title) : "";
+      const cover = hint?.cover || "";
       detail.innerHTML = `
         <div class="series-skeleton">
-          <div class="sk sk-cover-lg"></div>
+          <div class="sk sk-cover-lg" ${cover ? `style="background-image:url('${escAttr(cover)}');background-size:cover"` : ""}></div>
           <div class="series-skeleton-body">
-            <div class="sk sk-line"></div>
+            ${title ? `<div class="series-title" style="margin:0 0 8px">${title}</div>` : `<div class="sk sk-line"></div>`}
             <div class="sk sk-line sk-line-mid"></div>
             <div class="sk sk-line sk-line-short"></div>
             <div class="sk sk-line"></div>
@@ -26,27 +126,75 @@ export function createSeriesView(ctx) {
     }
   }
 
-  async function openSeries(slugOrId) {
+  async function openSeries(slugOrId, hint) {
     showView("series");
-    showSeriesSkeleton();
+    showSeriesSkeleton(hint);
     loading(true);
+    const id = String(slugOrId || "").trim();
+    if (!id) {
+      loading(false);
+      toast("Slug komik kosong");
+      return;
+    }
     try {
-      // Parallel: detail + chapters (jangan serial 2.5s+4s)
       const detailP = api(
-        `series/${encodeURIComponent(slugOrId)}`,
+        `series/${encodeURIComponent(id)}`,
         { includeMeta: "true" },
-        { ttl: 10 * 60_000, stale: 60 * 60_000 }
+        { ttl: 10 * 60_000, stale: 60 * 60_000, force: false }
       );
       const chaptersP = api(
-        `series/${encodeURIComponent(slugOrId)}/chapters`,
+        `series/${encodeURIComponent(id)}/chapters`,
         {},
-        { ttl: 5 * 60_000, stale: 30 * 60_000 }
+        { ttl: 5 * 60_000, stale: 30 * 60_000, force: false }
       );
-      const [detail, chRes] = await Promise.all([detailP, chaptersP]);
-      const series = detail.data;
-      if (!series) throw new Error("Judul tidak ditemukan");
+      let detail;
+      let chRes;
+      try {
+        [detail, chRes] = await Promise.all([detailP, chaptersP]);
+      } catch (e) {
+        // retry once with force (bypass bad client cache)
+        [detail, chRes] = await Promise.all([
+          api(`series/${encodeURIComponent(id)}`, { includeMeta: "true" }, { force: true }),
+          api(`series/${encodeURIComponent(id)}/chapters`, {}, { force: true }),
+        ]);
+      }
+
+      const series = normalizeSeries(detail);
+      let chapters = normalizeChapters(chRes);
+
+      // chapters empty → force refetch once
+      if (!chapters.length) {
+        try {
+          const retry = await api(
+            `series/${encodeURIComponent(id)}/chapters`,
+            {},
+            { force: true }
+          );
+          chapters = normalizeChapters(retry);
+        } catch (_) {}
+      }
+
+      if (!series || (!series.title && !series.coverImage && !chapters.length)) {
+        throw new Error("Data komik kosong / tidak ditemukan");
+      }
+
+      // fill gaps from list card hint
+      if (hint) {
+        if (!series.coverImage && hint.cover) series.coverImage = hint.cover;
+        if (!series.data.coverImage && hint.cover) series.data.coverImage = hint.cover;
+        if ((!series.title || series.title === "Tanpa judul") && hint.title) {
+          series.title = hint.title;
+          series.data.title = hint.title;
+        }
+      }
+
+      if (!series.data.totalChapters && chapters.length) {
+        series.data.totalChapters = chapters.length;
+        series.totalChapters = chapters.length;
+      }
+
       ctx.state.series = series;
-      ctx.state.chapters = chRes.data || [];
+      ctx.state.chapters = chapters;
       showView("series");
       render();
     } catch (err) {
@@ -60,9 +208,11 @@ export function createSeriesView(ctx) {
           title: "Gagal memuat judul",
           detail: msg,
           retryLabel: "Coba lagi",
-          onRetry: () => openSeries(slugOrId),
+          onRetry: () => openSeries(id, hint),
         });
       }
+      const list = $("#chapter-list");
+      if (list) list.innerHTML = "";
     } finally {
       loading(false);
     }
@@ -81,38 +231,29 @@ export function createSeriesView(ctx) {
 
   function render() {
     const s = ctx.state.series;
-    const d = s.data || {};
-    const meta = s.dataMetadata || s.metadata || {};
+    if (!s) return;
+    const d = s.data || s;
     const slug = d.slug || s.slug || "";
     const bookmarked = isBookmarked(slug);
     const order = getPrefs().chapterOrder || "desc";
     const detail = $("#series-detail");
+    const chCount = d.totalChapters ?? ctx.state.chapters?.length ?? 0;
 
-    detail.innerHTML = `
-      <img alt="" />
-      <div>
-        <h1>${esc(d.title || "")}</h1>
-        <div class="series-meta">
-          ${esc(d.author || "—")} · ${esc(d.status || "")} · ${esc(d.format || "")} ·
-          ${esc(String(d.totalChapters ?? ctx.state.chapters.length))} chapter
-          ${meta.dailyViews != null ? " · " + Number(meta.dailyViews).toLocaleString("id-ID") + " views" : ""}
-        </div>
-        <div class="badges" style="margin-bottom:12px">
-          ${(d.genres || [])
-            .map((g) => {
-              const name = g.data?.name || g.name || "";
-              return name ? `<span class="badge">${esc(name)}</span>` : "";
-            })
-            .join("")}
-        </div>
-        <div class="series-actions">
-          <button type="button" class="btn ${bookmarked ? "btn-primary" : "btn-ghost"}" id="btn-bookmark">
-            ${bookmarked ? "★ Favorit" : "☆ Favorit"}
-          </button>
-        </div>
-        <div class="series-synopsis">${esc(d.synopsis || "Belum ada sinopsis.")}</div>
-      </div>`;
-    setImg(detail.querySelector("img"), d.coverImage || "");
+    if (detail) {
+      detail.innerHTML = `
+        <div class="series-hero-inner">
+          <img class="series-cover" alt="" />
+          <div class="series-hero-body">
+            <h1 class="series-title">${esc(d.title || s.title || slug)}</h1>
+            <div class="series-meta">
+              ${esc([d.author, d.status, d.format || d.type, `${chCount} chapter`].filter(Boolean).join(" · "))}
+            </div>
+            <button type="button" class="btn" id="btn-bookmark">${bookmarked ? "★ Favorit" : "☆ Favorit"}</button>
+            <div class="series-synopsis">${esc(d.synopsis || "Belum ada sinopsis.")}</div>
+          </div>
+        </div>`;
+      setImg(detail.querySelector("img"), d.coverImage || s.coverImage || "");
+    }
 
     const bm = $("#btn-bookmark");
     if (bm) {
@@ -147,7 +288,14 @@ export function createSeriesView(ctx) {
     }
 
     const list = $("#chapter-list");
+    if (!list) return;
     const chapters = orderedChapters();
+    if (!chapters.length) {
+      list.innerHTML = `<div class="state-detail" style="padding:16px">Belum ada chapter. <button type="button" class="btn" id="btn-retry-ch">Muat ulang</button></div>`;
+      const btn = $("#btn-retry-ch");
+      if (btn) btn.onclick = () => openSeries(slug, { title: d.title, cover: d.coverImage });
+      return;
+    }
     list.innerHTML = chapters
       .map((ch) => {
         const idx = chapterIndex(ch);
@@ -155,7 +303,7 @@ export function createSeriesView(ctx) {
         const neu = isNew(ch.createdAt);
         return `
           <div class="ch-item" data-idx="${escAttr(String(idx))}">
-            <span class="num">Chapter ${esc(String(idx))}${neu ? ' <span class="badge badge--new">Baru</span>' : ""}</span>
+            <span class="num">Chapter ${esc(String(idx ?? "?"))}${neu ? ' <span class="badge badge--new">Baru</span>' : ""}</span>
             <span class="time">${esc(t)}</span>
           </div>`;
       })

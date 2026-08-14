@@ -41,7 +41,7 @@ export function createLibraryView(ctx) {
       const card = document.createElement("article");
       card.className = "card";
       card.onclick = () => {
-        Promise.resolve(ctx.openSeries(item.slug)).then(() => {
+        Promise.resolve(ctx.openSeries(item.slug, { title: item.title || "", cover: item.cover || "" })).then(() => {
           if (mode === "history" && item.chapter != null) {
             setTimeout(() => ctx.openChapter(String(item.chapter)), 60);
           }
