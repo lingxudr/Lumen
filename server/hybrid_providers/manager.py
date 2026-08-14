@@ -1,34 +1,111 @@
 """
-ProviderManager — hybrid orchestrator.
+ProviderManager — single authority untuk semua sumber.
 
-- Metadata: coba provider by priority sampai berhasil, merge field kosong.
-- Chapters: ambil dari semua provider, merge by number, simpan source per chapter.
-- Pages: coba provider yang punya chapter itu by priority sampai dapat gambar.
+Frontend / route / service TIDAK boleh:
+  if komikcast... / if sanka...
+
+Cukup:
+  manager.get_series(slug)
+  manager.get_chapters(slug_map)
+  manager.get_pages(chapter)
+  manager.get_latest(limit)
+  manager.health_snapshot()
+
+Manager menentukan: priority, health, fallback, timeout/retry (di provider), cache policy di service.
 """
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict
-from typing import Any
+from typing import Any, Callable
 
 from .base import BaseProvider, ProviderError
 from .chapter_dedup import dedupe_provider_chapter_infos
+from .health import REGISTRY
 from .models import ChapterInfo, ChapterPages, MangaInfo
 
 
 class ProviderManager:
     def __init__(self, providers: list[BaseProvider] | None = None):
-        self.providers = sorted(providers or [], key=lambda p: p.priority)
+        self.providers = list(providers or [])
+        self._sort()
 
     def add(self, provider: BaseProvider) -> None:
         self.providers.append(provider)
-        self.providers.sort(key=lambda p: p.priority)
+        self._sort()
 
     def by_name(self, name: str) -> BaseProvider | None:
         for p in self.providers:
             if p.name == name:
                 return p
         return None
+
+    def _sort(self) -> None:
+        """Static priority, lalu health (healthy < degraded < down)."""
+        status_rank = {"healthy": 0, "unknown": 1, "degraded": 2, "down": 3}
+
+        def key(p: BaseProvider):
+            h = REGISTRY.get(p.name)
+            return (status_rank.get(h.status, 1), p.priority, p.name)
+
+        self.providers.sort(key=key)
+
+    def active_providers(self) -> list[BaseProvider]:
+        """Skip provider yang circuit-open / down (kecuali semua down → coba semua)."""
+        self._sort()
+        alive = []
+        for p in self.providers:
+            h = REGISTRY.get(p.name)
+            if h.status == "down":
+                continue
+            alive.append(p)
+        return alive or list(self.providers)
+
+    def _call(self, provider: BaseProvider, fn: Callable, *args, **kwargs):
+        """Jalankan call + catat health (latency / error)."""
+        t0 = time.time()
+        try:
+            result = fn(*args, **kwargs)
+            ms = (time.time() - t0) * 1000
+            REGISTRY.get(provider.name).record_success(ms)
+            return result
+        except Exception as e:
+            ms = (time.time() - t0) * 1000
+            REGISTRY.get(provider.name).record_failure(ms, str(e))
+            raise
+
+    def health_snapshot(self) -> list[dict[str, Any]]:
+        # pastikan semua provider terdaftar
+        for p in self.providers:
+            REGISTRY.get(p.name)
+        return REGISTRY.snapshot()
+
+    # ---- Public API (single authority) ----
+
+    def get_series(self, slug_map: dict[str, str], *, merge: bool = True) -> MangaInfo | None:
+        """Alias get_manga — single entry detail."""
+        return self.get_manga(slug_map, merge=merge)
+
+    def get_chapters(self, slug_map: dict[str, str]) -> list[dict[str, Any]]:
+        """Alias get_chapters_merged."""
+        return self.get_chapters_merged(slug_map)
+
+    def probe_all(self) -> list[dict[str, Any]]:
+        """Health check aktif (1 latest item) per provider."""
+        rows = []
+        for p in self.providers:
+            t0 = time.time()
+            try:
+                batch = p.get_latest(page=1, limit=1)
+                ms = (time.time() - t0) * 1000
+                REGISTRY.get(p.name).record_success(ms)
+                rows.append({"provider": p.name, "ok": True, "latency_ms": round(ms, 1), "sample": len(batch)})
+            except Exception as e:
+                ms = (time.time() - t0) * 1000
+                REGISTRY.get(p.name).record_failure(ms, str(e))
+                rows.append({"provider": p.name, "ok": False, "latency_ms": round(ms, 1), "error": str(e)[:200]})
+        return rows
 
     # ------------------------------------------------------------------
     # Metadata
@@ -67,10 +144,10 @@ class ProviderManager:
         """Gabungan search semua provider, dedupe by title lower."""
         seen: set[str] = set()
         out: list[MangaInfo] = []
-        for p in self.providers:
+        for p in self.active_providers():
             try:
-                batch = p.search(keyword, limit=limit)
-            except ProviderError:
+                batch = self._call(p, p.search, keyword, limit=limit)
+            except Exception:
                 continue
             for m in batch:
                 key = (m.title or "").strip().lower()
@@ -82,13 +159,13 @@ class ProviderManager:
                     return out
         return out
 
-    def get_latest(self, limit: int = 20) -> list[MangaInfo]:
-        """Ambil latest dari semua provider, interleave agar tidak didominasi satu sumber."""
+    def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
+        """Ambil latest dari provider aktif (health-aware), interleave."""
         buckets: list[list[MangaInfo]] = []
-        for p in self.providers:
+        for p in self.active_providers():
             try:
-                batch = p.get_latest(page=1, limit=limit)
-            except ProviderError:
+                batch = self._call(p, p.get_latest, page=page, limit=limit)
+            except Exception:
                 batch = []
             buckets.append(batch)
 

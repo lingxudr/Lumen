@@ -716,6 +716,16 @@ class Handler(BaseHTTPRequestHandler):
                         lumen_db.prune()
                     except Exception:
                         pass
+                providers = None
+                try:
+                    from services.manga_service import provider_status
+                    providers = provider_status()
+                except Exception:
+                    try:
+                        from server.services.manga_service import provider_status
+                        providers = provider_status()
+                    except Exception as e:
+                        providers = {"error": str(e)}
                 return self.send_json(
                     200,
                     {
@@ -723,6 +733,7 @@ class Handler(BaseHTTPRequestHandler):
                         "api_base": API_BASE,
                         "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
                         "db": _db_stats_safe(),
+                        "providers": providers,
                         "rate_limit": {
                             "api": RATE_LIMIT_API,
                             "img": RATE_LIMIT_IMG,
@@ -730,6 +741,14 @@ class Handler(BaseHTTPRequestHandler):
                         },
                     },
                 )
+
+            if path in ("/api/providers/health", "/api/providers/health/"):
+                try:
+                    from services.manga_service import provider_status
+                    return self.send_json(200, provider_status())
+                except Exception:
+                    from server.services.manga_service import provider_status
+                    return self.send_json(200, provider_status())
 
 
             if path.startswith("/api/"):

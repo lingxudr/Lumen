@@ -160,22 +160,32 @@ def resolve_upstream_failure(sub: str, qs: dict | None = None) -> tuple[bytes | 
 
 
 def provider_status() -> dict[str, Any]:
-    """Health ringkas untuk /api/health."""
+    """Health ringkas untuk /api/health — lewat ProviderManager bila ada."""
     out: dict[str, Any] = {
         "sqlite": lumen_db is not None,
         "sanka": sanka_provider is not None,
-        "source_of_truth": "provider_live",
+        "source_of_truth": "canonical_db_when_synced_else_provider",
         "cache": "sqlite_read_through",
-        "mongo": "optional_catalog_only",
+        "mongo": "optional_catalog_primary_when_present",
+        "architecture": "ProviderManager is single authority",
     }
-    if sanka_provider is not None:
-        try:
-            sample = sanka_provider.get_terbaru(limit=1, prefer="shinigami", page=1)
-            out["sanka_ok"] = bool(sample.get("data"))
-            out["sanka_meta"] = sample.get("meta")
-        except Exception as e:
-            out["sanka_ok"] = False
-            out["sanka_error"] = str(e)
+    try:
+        from server.hybrid_providers import default_manager
+        mgr = default_manager()
+        out["providers"] = mgr.health_snapshot()
+        # light probe (non-blocking-ish): only if empty stats
+        if all(r.get("successes", 0) + r.get("failures", 0) == 0 for r in out["providers"]):
+            out["probe"] = mgr.probe_all()
+            out["providers"] = mgr.health_snapshot()
+    except Exception as e:
+        out["manager_error"] = str(e)
+        if sanka_provider is not None:
+            try:
+                sample = sanka_provider.get_terbaru(limit=1, prefer="shinigami", page=1)
+                out["sanka_ok"] = bool(sample.get("data"))
+            except Exception as e2:
+                out["sanka_ok"] = False
+                out["sanka_error"] = str(e2)
     return out
 
 
