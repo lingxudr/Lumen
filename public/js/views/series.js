@@ -31,12 +31,21 @@ export function createSeriesView(ctx) {
     showSeriesSkeleton();
     loading(true);
     try {
-      const detail = await api(`series/${encodeURIComponent(slugOrId)}`, { includeMeta: "true" }, { ttl: 5 * 60_000, stale: 30 * 60_000 });
+      // Parallel: detail + chapters (jangan serial 2.5s+4s)
+      const detailP = api(
+        `series/${encodeURIComponent(slugOrId)}`,
+        { includeMeta: "true" },
+        { ttl: 10 * 60_000, stale: 60 * 60_000 }
+      );
+      const chaptersP = api(
+        `series/${encodeURIComponent(slugOrId)}/chapters`,
+        {},
+        { ttl: 5 * 60_000, stale: 30 * 60_000 }
+      );
+      const [detail, chRes] = await Promise.all([detailP, chaptersP]);
       const series = detail.data;
       if (!series) throw new Error("Judul tidak ditemukan");
       ctx.state.series = series;
-      const slug = series.data?.slug || series.slug || String(slugOrId);
-      const chRes = await api(`series/${encodeURIComponent(slug)}/chapters`, {}, { ttl: 3 * 60_000, stale: 20 * 60_000 });
       ctx.state.chapters = chRes.data || [];
       showView("series");
       render();

@@ -90,7 +90,7 @@ export function createHomeView(ctx) {
         fromDb ? "Data tersimpan (DB) — mungkin belum update terbaru" : "Dari cache — sedang diperbarui…"
       );
       loading(false);
-      api("series", params, { ttl: 90_000, stale: 10 * 60_000, force: false })
+      api("series", params, { ttl: 5 * 60_000, stale: 30 * 60_000, force: false })
         .then((data) => {
           applyListData(data);
           const db = data.meta && data.meta.source === "sqlite";

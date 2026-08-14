@@ -488,7 +488,7 @@ def build_hybrid_newest(page=1, take=20):
     # Komikcast upstream (retry lebih agresif)
     try:
         url = f"{API_BASE}/series?page={page}&take={take}&sort=updatedAt"
-        code, hdrs, body = fetch(url, timeout=16, retries=3)
+        code, hdrs, body = fetch(url, timeout=6, retries=1)
         if code == 200 and body:
             payload = json.loads(body.decode("utf-8", errors="replace"))
             for it in payload.get("data") or []:
@@ -938,7 +938,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 try:
                     # retry: be.komikcast.cc sering 503 sebentar
-                    code, hdrs, body = fetch(url, timeout=16, retries=3)
+                    code, hdrs, body = fetch(url, timeout=6, retries=1)
                 except Exception as e:
                     print("upstream error:", sub, e, flush=True)
                     fb = _db_fallback(sub)
@@ -952,9 +952,11 @@ class Handler(BaseHTTPRequestHandler):
                         )
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body:
+                        cache_set(cache_key, sanka_body, ttl)
                         extra = dict(rate_headers)
                         extra["X-Lumen-Cache"] = "SANKA"
-                        extra["Cache-Control"] = "public, max-age=30"
+                        extra["X-Lumen-Cache-TTL"] = str(ttl)
+                        extra["Cache-Control"] = "public, max-age=%d" % min(120, ttl)
                         return self.send_bytes(
                             200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
                         )
@@ -992,9 +994,11 @@ class Handler(BaseHTTPRequestHandler):
 
                 sanka_body = _sanka_fallback_for_sub(sub, qs)
                 if sanka_body:
+                    cache_set(cache_key, sanka_body, ttl)
                     extra["X-Lumen-Cache"] = "SANKA"
                     extra["X-Lumen-DB"] = "MISS"
-                    extra["Cache-Control"] = "public, max-age=30"
+                    extra["X-Lumen-Cache-TTL"] = str(ttl)
+                    extra["Cache-Control"] = "public, max-age=%d" % min(120, ttl)
                     return self.send_bytes(
                         200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
                     )
