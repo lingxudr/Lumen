@@ -110,18 +110,21 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _ttl_for(sub_path):
+    """TTL cache API (detik) — production-oriented."""
     s = (sub_path or "").split("?")[0].strip("/")
-    if s == "genres" or s.startswith("genres/"):
-        return 30 * 60
-    if "/chapters/" in s:
-        return 15 * 60
-    if s.endswith("/chapters"):
-        return 3 * 60
-    if s.startswith("series/") and "/chapters" not in s:
-        return 5 * 60
-    if s == "series":
-        return 60
-    return 90
+    # latest / list
+    if s == "series" or s.startswith("series?"):
+        return 10 * 60  # 10 menit
+    # chapter pages
+    if "/chapters/" in s and s.count("/") >= 3:
+        return 3 * 24 * 3600  # 3 hari
+    # chapter list
+    if s.endswith("/chapters") or "/chapters" in s:
+        return 30 * 60  # 30 menit
+    # series detail
+    if s.startswith("series/"):
+        return 12 * 3600  # 12 jam metadata
+    return 15 * 60
 
 
 def cache_get(key):
@@ -814,6 +817,40 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
 
+                # Search local-first: ?title= / ?q= → SQLite dulu, baru upstream
+                qsearch = (qs.get("title") or qs.get("q") or qs.get("search") or [""])[0].strip()
+                if qsearch and (sub or "").split("?")[0].strip("/") == "series":
+                    try:
+                        limit = int((qs.get("take") or qs.get("limit") or ["20"])[0])
+                    except Exception:
+                        limit = 20
+                    try:
+                        items = lumen_db.search_manga(qsearch, limit=min(50, max(1, limit)))
+                    except Exception:
+                        items = []
+                    if items:
+                        body = json.dumps(
+                            {
+                                "status": 200,
+                                "message": "Local search",
+                                "data": items,
+                                "meta": {
+                                    "source": "sqlite_search",
+                                    "total": len(items),
+                                    "page": 1,
+                                    "lastPage": 1,
+                                    "q": qsearch,
+                                },
+                            },
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                        extra = dict(rate_headers)
+                        extra["X-Lumen-Cache"] = "LOCAL_SEARCH"
+                        extra["Cache-Control"] = "public, max-age=120"
+                        return self.send_bytes(
+                            200, body, "application/json; charset=utf-8", extra_headers=extra
+                        )
+
                 # DB-first: Mongo canonical catalog untuk list series
                 sub0 = (sub or "").split("?")[0].strip("/")
                 if sub0 == "series":
@@ -957,26 +994,13 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
                 src = (qs.get("u") or [""])[0].strip()
-                if not (src.startswith("http://") or src.startswith("https://")):
-                    return self.send_json(400, {"error": "missing or invalid u"})
-                allowed = (
-                    "imgkc1.my.id",
-                    "komikcast.fit",
-                    "komikcast.com",
-                    "minio.",
-                    "cdn.",
-                    "sv1.",
-                    "sv2.",
-                    "sv3.",
-                    "komiku.org",
-                    "thumbnail.komiku.org",
-                    "img.komiku.org",
-                    "sankavollerei.web.id",
-                    "shngm.id",
-                    "assets.shngm.id",
-                )
-                if not any(a in src for a in allowed):
-                    return self.send_json(403, {"error": "host not allowed"})
+                try:
+                    from security import validate_image_url, MAX_IMAGE_BYTES
+                except Exception:
+                    from server.security import validate_image_url, MAX_IMAGE_BYTES  # type: ignore
+                ok_url, reason = validate_image_url(src)
+                if not ok_url:
+                    return self.send_json(403, {"error": "host not allowed", "reason": reason})
 
                 want_webp = False
                 fmt = ((qs.get("fmt") or [""])[0] or "").lower()
@@ -991,7 +1015,8 @@ class Handler(BaseHTTPRequestHandler):
                     body, ct = cached
                     extra = dict(rate_headers)
                     extra["X-Lumen-Cache"] = "HIT"
-                    extra["Cache-Control"] = "public, max-age=86400"
+                    extra["Cache-Control"] = "public, max-age=604800, immutable"
+                    extra["X-Content-Type-Options"] = "nosniff"
                     if "webp" in (ct or ""):
                         extra["X-Lumen-Image"] = "webp"
                     return self.send_bytes(200, body, ct, extra_headers=extra)
@@ -1007,8 +1032,15 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 ct = hdrs.get("content-type") or "image/jpeg"
                 extra = dict(rate_headers)
+                extra["X-Content-Type-Options"] = "nosniff"
 
                 if code == 200 and body:
+                    try:
+                        from security import MAX_IMAGE_BYTES as _MAX_IMG
+                    except Exception:
+                        _MAX_IMG = 12 * 1024 * 1024
+                    if len(body) > _MAX_IMG:
+                        return self.send_json(502, {"error": "image_too_large", "bytes": len(body)})
                     # already webp from CDN
                     if want_webp and "webp" not in (ct or "").lower():
                         converted = convert_to_webp(body, max_width=max_w)

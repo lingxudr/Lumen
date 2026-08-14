@@ -1,4 +1,9 @@
+/**
+ * Edge proxy → be.komikcast.cc ONLY.
+ * Anti-SSRF: path relative saja, tidak boleh URL absolut / host asing.
+ */
 const API_BASE = "https://be.komikcast.cc";
+const ALLOWED_HOST = "be.komikcast.cc";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36";
 
@@ -6,18 +11,28 @@ function resolvePath(reqUrl, query) {
   let p = query && query.path;
   if (Array.isArray(p)) p = p.join("/");
   if (typeof p === "string" && p.length) {
-    return decodeURIComponent(p).replace(/^\/+/, "").replace(/\.\./g, "");
+    p = decodeURIComponent(p);
+  } else {
+    try {
+      const u = new URL(reqUrl, "https://localhost");
+      let pathname = u.pathname || "";
+      pathname = pathname
+        .replace(/^\/api\/proxy\/?/, "")
+        .replace(/^\/api\//, "")
+        .replace(/^\/+/, "");
+      p = pathname && pathname !== "proxy" ? pathname : "";
+    } catch (_) {
+      p = "";
+    }
   }
-  try {
-    const u = new URL(reqUrl, "https://localhost");
-    let pathname = u.pathname || "";
-    pathname = pathname
-      .replace(/^\/api\/proxy\/?/, "")
-      .replace(/^\/api\//, "")
-      .replace(/^\/+/, "");
-    if (pathname && pathname !== "proxy") return pathname.replace(/\.\./g, "");
-  } catch (_) {}
-  return "";
+  p = String(p || "");
+  // Reject absolute URLs / scheme tricks / traversal
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p)) return ""; // http:, file:, etc
+  if (p.includes("://") || p.includes("\\")) return "";
+  p = p.replace(/^\/+/, "").replace(/\.\./g, "");
+  // only safe path chars
+  if (!/^[a-zA-Z0-9._~\-\/]*$/.test(p)) return "";
+  return p;
 }
 
 function collectQuery(query, reqUrl) {
@@ -44,6 +59,19 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function assertTargetSafe(target) {
+  let u;
+  try {
+    u = new URL(target);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  if (u.hostname !== ALLOWED_HOST) return false;
+  if (u.username || u.password) return false;
+  return true;
+}
+
 async function fetchUpstream(target) {
   let lastStatus = 0;
   let lastBuf = Buffer.alloc(0);
@@ -58,10 +86,30 @@ async function fetchUpstream(target) {
           Origin: "https://v3.komikcast.fit",
           Referer: "https://v3.komikcast.fit/",
         },
-        redirect: "follow",
+        redirect: "manual", // prevent redirect-to-internal SSRF
       });
+      // disallow redirect off-host
+      if (upstream.status >= 300 && upstream.status < 400) {
+        const loc = upstream.headers.get("location") || "";
+        if (!loc || !assertTargetSafe(new URL(loc, target).toString())) {
+          return {
+            status: 502,
+            ct: "application/json",
+            buf: Buffer.from(
+              JSON.stringify({ error: "redirect_blocked", message: "Unsafe redirect" })
+            ),
+          };
+        }
+      }
       const ct = upstream.headers.get("content-type") || "";
       const buf = Buffer.from(await upstream.arrayBuffer());
+      if (buf.length > 4 * 1024 * 1024) {
+        return {
+          status: 502,
+          ct: "application/json",
+          buf: Buffer.from(JSON.stringify({ error: "response_too_large" })),
+        };
+      }
       lastStatus = upstream.status;
       lastBuf = buf;
       lastCt = ct;
@@ -90,19 +138,22 @@ module.exports = async function handler(req, res) {
   try {
     const subPath = resolvePath(req.url || "/", req.query || {});
     if (!subPath) {
-      return res
-        .status(400)
-        .json({ error: "missing path", url: req.url || null });
+      return res.status(400).json({
+        error: "invalid_path",
+        message: "Path relatif wajib; URL absolut ditolak (anti-SSRF).",
+      });
     }
 
     const qs = collectQuery(req.query, req.url || "/");
     const q = qs.toString();
     const target = `${API_BASE}/${subPath}${q ? `?${q}` : ""}`;
+    if (!assertTargetSafe(target)) {
+      return res.status(403).json({ error: "host_not_allowed" });
+    }
 
     const { status, ct, buf } = await fetchUpstream(target);
     const textStart = buf.subarray(0, 80).toString("utf8").toLowerCase();
 
-    // Cloudflare / WAF challenge HTML
     if (
       ct.includes("text/html") ||
       textStart.includes("<!doctype") ||
@@ -110,25 +161,23 @@ module.exports = async function handler(req, res) {
     ) {
       return res.status(503).json({
         error: "upstream_blocked",
-        message:
-          "Server sumber memblokir IP (Cloudflare). Coba lagi nanti atau pakai backend Railway.",
+        message: "Upstream blocked or HTML challenge.",
         status,
       });
     }
 
-    // Upstream 5xx / non-JSON body → JSON error (biar frontend tidak "Respons tidak valid")
     if (status >= 500) {
       return res.status(503).json({
         status: 503,
         error: "upstream_unavailable",
-        message:
-          "Server Komikcast sedang tidak tersedia (503). Coba lagi beberapa menit.",
+        message: "Server sumber sedang tidak tersedia (503).",
         path: subPath,
       });
     }
 
     res.setHeader("Content-Type", ct || "application/json; charset=utf-8");
-    res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=120");
+    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     return res.status(status).send(buf);
   } catch (e) {
     return res.status(502).json({
