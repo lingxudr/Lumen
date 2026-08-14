@@ -14,8 +14,10 @@ from urllib.request import Request, urlopen
 
 import sys
 _SERVER_DIR = Path(__file__).resolve().parent
-if str(_SERVER_DIR) not in sys.path:
-    sys.path.insert(0, str(_SERVER_DIR))
+_ROOT_DIR = _SERVER_DIR.parent
+for _p in (_SERVER_DIR, _ROOT_DIR):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 try:
     import db as lumen_db
 except Exception as _db_imp_err:

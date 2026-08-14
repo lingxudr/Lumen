@@ -26,7 +26,10 @@ def main():
     print("=" * 50, flush=True)
 
     here = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, here)
+    root = os.path.dirname(here)  # repo root (contains server/)
+    for p in (here, root):
+        if p not in sys.path:
+            sys.path.insert(0, p)
 
     try:
         import app as lumen_app

@@ -170,10 +170,12 @@ def provider_status() -> dict[str, Any]:
         "architecture": "ProviderManager is single authority",
     }
     try:
-        from server.hybrid_providers import default_manager
+        try:
+            from server.hybrid_providers import default_manager
+        except Exception:
+            from hybrid_providers import default_manager  # type: ignore
         mgr = default_manager()
         out["providers"] = mgr.health_snapshot()
-        # light probe (non-blocking-ish): only if empty stats
         if all(r.get("successes", 0) + r.get("failures", 0) == 0 for r in out["providers"]):
             out["probe"] = mgr.probe_all()
             out["providers"] = mgr.health_snapshot()
