@@ -79,6 +79,104 @@ class ChapterInfo:
 
 
 @dataclass
+class ChapterSource:
+    """Identity chapter di satu provider (bukan number saja)."""
+
+    provider: str
+    source_chapter_id: str | None = None
+    url: str | None = None
+    name: str | None = None
+    published_at: str | None = None
+    available: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "source_chapter_id": self.source_chapter_id,
+            "url": self.url,
+            "name": self.name,
+            "published_at": self.published_at,
+            "available": self.available,
+        }
+
+    def to_chapter_info(self, number: float | None, fallback_name: str = "") -> "ChapterInfo":
+        return ChapterInfo(
+            number=number,
+            name=self.name or fallback_name or "",
+            url=self.url,
+            source_chapter_id=self.source_chapter_id,
+            published_at=self.published_at,
+            provider=self.provider,
+        )
+
+
+@dataclass
+class CanonicalChapter:
+    """
+    Identity lintas provider.
+
+    canonical_chapter_id
+      ├── provider=komikcast  source_chapter_id=abc
+      ├── provider=komiku     source_chapter_id=xyz
+      └── provider=sanka      source_chapter_id=uuid
+
+    number hanya label/sort — BUKAN identity.
+    Pages tetap provider-specific (ambil via source map).
+    """
+
+    key: str  # normalize_chapter_key
+    number: float | None
+    name: str | None = None
+    volume: int | None = None
+    part: int | None = None
+    sources: dict[str, ChapterSource] = field(default_factory=dict)
+
+    @property
+    def canonical_chapter_id(self) -> str:
+        # stabil untuk DB: key numerik atau name-slug
+        return self.key
+
+    @property
+    def providers(self) -> list[str]:
+        return list(self.sources.keys())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "canonical_chapter_id": self.canonical_chapter_id,
+            "key": self.key,
+            "number": self.number,
+            "name": self.name,
+            "volume": self.volume,
+            "part": self.part,
+            "sources": {k: v.to_dict() for k, v in self.sources.items()},
+            "providers": self.providers,
+        }
+
+    @staticmethod
+    def from_merged_dict(d: dict[str, Any]) -> "CanonicalChapter":
+        srcs: dict[str, ChapterSource] = {}
+        for pname, meta in (d.get("sources") or {}).items():
+            if not isinstance(meta, dict):
+                continue
+            srcs[pname] = ChapterSource(
+                provider=pname,
+                source_chapter_id=meta.get("source_chapter_id"),
+                url=meta.get("url"),
+                name=meta.get("name"),
+                published_at=meta.get("published_at"),
+                available=meta.get("available", True),
+            )
+        return CanonicalChapter(
+            key=str(d.get("key") or d.get("canonical_chapter_id") or ""),
+            number=d.get("number"),
+            name=d.get("name"),
+            volume=d.get("volume"),
+            part=d.get("part"),
+            sources=srcs,
+        )
+
+
+@dataclass
 class PageInfo:
     """
     Satu halaman reader.

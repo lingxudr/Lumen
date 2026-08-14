@@ -35,7 +35,7 @@ from .base import (
 from .chapter_dedup import dedupe_provider_chapter_infos
 from .health import REGISTRY
 from .rate_limit import LIMITER
-from .models import ChapterInfo, ChapterPages, MangaInfo
+from .models import CanonicalChapter, ChapterInfo, ChapterPages, ChapterSource, MangaInfo
 
 
 class ProviderManager:
@@ -299,11 +299,15 @@ class ProviderManager:
                     "available": True,
                     "name": meta.get("name"),
                 }
+            key = entry.get("key")
             merged.append(
                 {
+                    "canonical_chapter_id": key,
                     "number": entry.get("number"),
                     "name": entry.get("name"),
-                    "key": entry.get("key"),
+                    "key": key,
+                    "volume": entry.get("volume"),
+                    "part": entry.get("part"),
                     "sources": sources,
                     "providers": list(sources.keys()),
                 }
@@ -318,48 +322,80 @@ class ProviderManager:
 
     def get_pages(
         self,
-        merged_chapter: dict[str, Any],
+        merged_chapter: dict[str, Any] | CanonicalChapter,
         preferred: list[str] | None = None,
     ) -> ChapterPages:
         """
-        Coba ambil gambar dari provider yang punya chapter ini.
-        preferred: urutan nama provider override priority default.
+        Pages fallback per-SOURCE, bukan satu ChapterInfo generik.
+
+        Canonical chapter punya:
+          sources.komikcast.source_chapter_id
+          sources.komiku.source_chapter_id
+          sources.sanka.source_chapter_id
+
+        Komikcast FAIL → bangun ChapterInfo dari source Komiku → dst.
+        Number saja BUKAN identity.
         """
-        sources: dict[str, Any] = merged_chapter.get("sources") or {}
+        if isinstance(merged_chapter, CanonicalChapter):
+            canon = merged_chapter
+        else:
+            canon = CanonicalChapter.from_merged_dict(merged_chapter)
+
+        sources = canon.sources
+        if not sources:
+            raise ProviderError("manager", "chapter has no provider sources")
+
+        # urutan: preferred → health-aware providers yang ada di sources + CAP_PAGES
         order: list[BaseProvider] = []
+        seen: set[str] = set()
         if preferred:
             for name in preferred:
                 p = self.by_name(name)
-                if p and name in sources:
+                if p and name in sources and p.supports(CAP_PAGES) and name not in seen:
                     order.append(p)
-        for p in self.providers:
-            if p not in order and p.name in sources:
+                    seen.add(name)
+        for p in self.providers_for(CAP_PAGES):
+            if p.name in sources and p.name not in seen:
                 order.append(p)
+                seen.add(p.name)
 
         errors: list[str] = []
         for p in order:
-            meta = sources[p.name]
-            ch = ChapterInfo(
-                number=merged_chapter.get("number"),
-                name=meta.get("name") or merged_chapter.get("name") or "",
-                url=meta.get("url"),
-                source_chapter_id=meta.get("source_chapter_id"),
-                published_at=meta.get("published_at"),
-                provider=p.name,
-            )
+            src = sources[p.name]
+            if isinstance(src, ChapterSource):
+                if src.available is False:
+                    errors.append(f"{p.name}: marked unavailable")
+                    continue
+                ch = src.to_chapter_info(canon.number, canon.name or "")
+            else:
+                # dict fallback
+                meta = src if isinstance(src, dict) else {}
+                ch = ChapterInfo(
+                    number=canon.number,
+                    name=meta.get("name") or canon.name or "",
+                    url=meta.get("url"),
+                    source_chapter_id=meta.get("source_chapter_id"),
+                    published_at=meta.get("published_at"),
+                    provider=p.name,
+                )
             try:
-                pages = p.get_pages(ch)
-                if pages.images:
+                pages = self._call(p, p.get_pages, ch)
+                if pages and pages.images:
                     return pages
-                errors.append(f"{p.name}: empty images")
+                errors.append(f"{p.name}: empty images (id={ch.source_chapter_id})")
             except ProviderError as e:
-                errors.append(str(e))
+                errors.append(f"{p.name}: {e.kind} {e}")
+                if not self._should_try_next(e):
+                    # tetap lanjut pages — source lain boleh beda
+                    pass
             except Exception as e:
                 errors.append(f"{p.name}: {e}")
 
         raise ProviderError(
             "manager",
-            "semua provider gagal ambil pages: " + " | ".join(errors),
+            "semua source gagal ambil pages untuk "
+            f"canonical_chapter_id={canon.canonical_chapter_id}: "
+            + " | ".join(errors),
         )
 
     # ------------------------------------------------------------------

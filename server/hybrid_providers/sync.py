@@ -445,10 +445,11 @@ class SyncJob:
             srcs = entry.get("sources") or {}
             payload = {
                 "canonical_slug": canonical,
+                "canonical_chapter_id": key,
                 "key": key,
                 "number": num,
                 "name": entry.get("name"),
-                "sources": srcs,
+                "sources": srcs,  # {provider: {source_chapter_id, url, ...}}
                 "providers": list(srcs.keys()),
                 "updated_at": _now(),
             }
