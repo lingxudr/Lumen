@@ -58,7 +58,7 @@ class MangaInfo:
 
 @dataclass
 class ChapterInfo:
-    """Satu chapter dari satu provider."""
+    """Satu chapter dari satu provider (number bukan identity tunggal)."""
 
     number: float | None
     name: str
@@ -66,6 +66,10 @@ class ChapterInfo:
     source_chapter_id: str | None = None
     published_at: str | None = None
     provider: str | None = None
+    volume: int | None = None
+    part: int | None = None
+    chapter_type: str = "normal"  # normal | extra | prologue | side | special
+    raw_name: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +79,10 @@ class ChapterInfo:
             "source_chapter_id": self.source_chapter_id,
             "published_at": self.published_at,
             "provider": self.provider,
+            "volume": self.volume,
+            "part": self.part,
+            "type": self.chapter_type,
+            "raw_name": self.raw_name or self.name,
         }
 
 

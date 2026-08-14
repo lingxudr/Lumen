@@ -237,7 +237,9 @@ class SyncJob:
                     )
                     candidates.append(c)
                     meta_ref[(prov, c.slug_norm or c.title_norm)] = m
-            clusters = cluster_candidates(candidates, threshold=0.92)
+            clusters, match_candidates = cluster_candidates(candidates)
+            if match_candidates:
+                self.stats.setdefault("match_candidates", []).extend(match_candidates[:50])
             groups = []
             for cluster in clusters:
                 sources = {}

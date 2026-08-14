@@ -23,10 +23,11 @@ from typing import Any
 class ParsedChapter:
     number: float | None  # main chapter number (12, 12.5)
     volume: int | None = None
-    part: int | None = None  # Part 2 / 12-1 second component as part when intentional
-    fraction: float | None = None  # .5 / .1 from 12.5
+    part: int | None = None
+    fraction: float | None = None
+    chapter_type: str = "normal"  # normal | extra | prologue | side | special | notice
     raw_title: str = ""
-    sort_tuple: tuple = ()  # for stable numeric sort
+    sort_tuple: tuple = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,6 +35,7 @@ class ParsedChapter:
             "volume": self.volume,
             "part": self.part,
             "fraction": self.fraction,
+            "type": self.chapter_type,
             "raw_title": self.raw_title,
             "sort_key": list(self.sort_tuple),
         }
@@ -135,10 +137,28 @@ def parse_chapter_rich(name: str | None, number: float | None = None) -> ParsedC
     if main is not None and frac is None and not float(main).is_integer():
         frac = main - int(main)
 
-    # sort: volume, main number, part, raw
+    # chapter type from raw name
+    low = raw.lower()
+    chapter_type = "normal"
+    if re.search(r"\bprolog(?:ue)?\b", low):
+        chapter_type = "prologue"
+        if main is None:
+            main = 0.0
+    elif re.search(r"\b(side\s*story|ss)\b", low):
+        chapter_type = "side"
+    elif re.search(r"\b(extra|special|bonus)\b", low):
+        chapter_type = "extra"
+    elif re.search(r"\b(notice|announcement|info)\b", low):
+        chapter_type = "notice"
+
+    # sort: volume, main, type rank, part, raw
+    type_rank = {"prologue": -1, "normal": 0, "side": 1, "extra": 2, "special": 2, "notice": 3}.get(
+        chapter_type, 0
+    )
     sort_tuple = (
         volume if volume is not None else -1,
         main if main is not None else float("-inf"),
+        type_rank,
         part if part is not None else -1,
         raw.lower(),
     )
@@ -147,6 +167,7 @@ def parse_chapter_rich(name: str | None, number: float | None = None) -> ParsedC
         volume=volume,
         part=part,
         fraction=frac,
+        chapter_type=chapter_type,
         raw_title=raw,
         sort_tuple=sort_tuple,
     )

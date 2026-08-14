@@ -34,7 +34,7 @@ def test_cluster():
         MatchCandidate("komiku", "solo leveling", "solo-leveling"),
         MatchCandidate("sanka", "Solo Leveling Ragnarok", "solo-leveling-ragnarok"),
     ]
-    groups = cluster_candidates(items)
+    groups, _cands = cluster_candidates(items)
     assert len(groups) == 2
 
 

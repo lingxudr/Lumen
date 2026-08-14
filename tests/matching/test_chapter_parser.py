@@ -68,10 +68,22 @@ def test_key_stable():
     assert normalize_chapter_key(10.5, "Ch. 10.5") == "10.5"
 
 
+
+def test_special_types():
+    from server.hybrid_providers.chapter_dedup import parse_chapter_rich
+    assert parse_chapter_rich("Prologue").chapter_type == "prologue"
+    assert parse_chapter_rich("Chapter 12 Side Story").chapter_type == "side"
+    assert parse_chapter_rich("Extra 1").chapter_type == "extra"
+    p = parse_chapter_rich("Chapter 12 Part 2")
+    assert p.number == 12.0 and p.part == 2
+
+
 if __name__ == "__main__":
+
     test_formats()
     test_volume_part()
     test_sort_not_string()
     test_dedupe_sort_desc()
     test_key_stable()
+    test_special_types()
     print("chapter parser ok")
