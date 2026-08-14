@@ -9,7 +9,7 @@ Goals:
 
 Env:
   CACHE_WARM_ON_START=1   (default 1)
-  CACHE_WARM_INTERVAL=300 (seconds, 0 = once only)
+  CACHE_WARM_INTERVAL=900 (seconds, 0 = once only)
   CACHE_WARM_TOP=12       (series to warm)
   CACHE_WARM_DELAY=8      (seconds after boot)
 """
@@ -219,8 +219,8 @@ def start_background_warmer(
         return
 
     fetch = fetch_json or _default_fetch_json
-    delay = _env_int("CACHE_WARM_DELAY", 8)
-    interval = _env_int("CACHE_WARM_INTERVAL", 300)
+    delay = _env_int("CACHE_WARM_DELAY", 15)
+    interval = _env_int("CACHE_WARM_INTERVAL", 900)
 
     def loop() -> None:
         time.sleep(max(0, delay))

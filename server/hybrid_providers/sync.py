@@ -207,7 +207,7 @@ class SyncJob:
         except Exception:
             pass
 
-                self.stats["finished_at"] = _now().isoformat()
+        self.stats["finished_at"] = _now().isoformat()
         try:
             try:
                 from server.cache_policy import invalidate_list, bump_generation
