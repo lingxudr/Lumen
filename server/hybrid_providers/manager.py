@@ -26,6 +26,11 @@ from .base import (
     classify_exception,
     EmptyResult,
     HTTPError,
+    CAP_LATEST,
+    CAP_SEARCH,
+    CAP_DETAIL,
+    CAP_CHAPTERS,
+    CAP_PAGES,
 )
 from .chapter_dedup import dedupe_provider_chapter_infos
 from .health import REGISTRY
@@ -67,6 +72,11 @@ class ProviderManager:
                 continue
             alive.append(p)
         return alive or list(self.providers)
+
+    def providers_for(self, capability: str) -> list[BaseProvider]:
+        """Provider aktif yang supports(capability)."""
+        out = [p for p in self.active_providers() if p.supports(capability)]
+        return out
 
     def _call(self, provider: BaseProvider, fn: Callable, *args, **kwargs):
         """
@@ -115,10 +125,15 @@ class ProviderManager:
         return True
 
     def health_snapshot(self) -> list[dict[str, Any]]:
-        # pastikan semua provider terdaftar
         for p in self.providers:
             REGISTRY.get(p.name)
-        return REGISTRY.snapshot()
+        rows = REGISTRY.snapshot()
+        by_name = {p.name: p for p in self.providers}
+        for r in rows:
+            p = by_name.get(r.get("provider") or "")
+            if p is not None:
+                r["capabilities"] = p.capability_map()
+        return rows
 
     # ---- Public API (single authority) ----
 
@@ -161,7 +176,7 @@ class ProviderManager:
         Ambil dari provider berurutan; merge field yang kosong jika merge=True.
         """
         result: MangaInfo | None = None
-        for p in self.active_providers():
+        for p in self.providers_for(CAP_DETAIL):
             src_slug = slug_map.get(p.name)
             if not src_slug:
                 continue
@@ -185,7 +200,7 @@ class ProviderManager:
         """Gabungan search semua provider, dedupe by title lower."""
         seen: set[str] = set()
         out: list[MangaInfo] = []
-        for p in self.active_providers():
+        for p in self.providers_for(CAP_SEARCH):
             try:
                 batch = self._call(p, p.search, keyword, limit=limit)
             except Exception:
@@ -203,7 +218,7 @@ class ProviderManager:
     def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
         """Ambil latest dari provider aktif (health-aware), interleave."""
         buckets: list[list[MangaInfo]] = []
-        for p in self.active_providers():
+        for p in self.providers_for(CAP_LATEST):
             try:
                 batch = self._call(p, p.get_latest, page=page, limit=limit)
             except Exception:

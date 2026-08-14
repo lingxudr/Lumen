@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..base import BaseProvider, ProviderError
+from ..base import ALL_CAPABILITIES, BaseProvider, ProviderError
 from ..models import ChapterInfo, ChapterPages, MangaInfo
 
 
@@ -27,6 +27,8 @@ def _sf():
 class SankaProvider(BaseProvider):
     name = "sanka"
     priority = 30  # setelah komikcast(10)/komiku(20); naik bila mereka down
+    # full stack via Shinigami routes; ubah bila endpoint dicabut
+    capabilities = ALL_CAPABILITIES
 
     def search(self, keyword: str, limit: int = 20) -> list[MangaInfo]:
         try:

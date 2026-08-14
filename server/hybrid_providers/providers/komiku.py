@@ -20,7 +20,7 @@ from urllib.parse import quote_plus, urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from ..base import BaseProvider, ProviderError
+from ..base import ALL_CAPABILITIES, BaseProvider, ProviderError
 from ..models import ChapterInfo, ChapterPages, MangaInfo
 
 BASE_SITE = "https://komiku.org"
@@ -128,6 +128,7 @@ def filter_watermark(images: list[str]) -> list[str]:
 
 
 class KomikuProvider(BaseProvider):
+    capabilities = ALL_CAPABILITIES
     name = "komiku"
     priority = 20
 

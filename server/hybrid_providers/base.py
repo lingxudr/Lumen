@@ -1,13 +1,11 @@
 """
-BaseProvider + error taxonomy.
+BaseProvider + error taxonomy + capability system.
 
-ProviderError
-├── NetworkError
-├── TimeoutError
-├── HTTPError (403 / 404 / 429 / 5xx / other)
-├── ParseError
-├── EmptyResult
-└── ProviderBlocked  (Cloudflare / captcha / WAF)
+Capability:
+  search | latest | detail | chapters | pages | health
+
+Manager: provider.supports("latest") sebelum memanggil.
+Tidak semua provider wajib penuh.
 """
 
 from __future__ import annotations
@@ -17,10 +15,19 @@ from typing import Any
 
 from .models import ChapterInfo, ChapterPages, MangaInfo
 
+CAP_SEARCH = "search"
+CAP_LATEST = "latest"
+CAP_DETAIL = "detail"
+CAP_CHAPTERS = "chapters"
+CAP_PAGES = "pages"
+CAP_HEALTH = "health"
+
+ALL_CAPABILITIES = frozenset(
+    {CAP_SEARCH, CAP_LATEST, CAP_DETAIL, CAP_CHAPTERS, CAP_PAGES, CAP_HEALTH}
+)
+
 
 class ProviderError(Exception):
-    """Base error semua provider."""
-
     kind: str = "provider"
     retryable: bool = False
     skip_other_providers: bool = False
@@ -118,14 +125,11 @@ class ProviderBlocked(ProviderError):
 
 
 def classify_exception(provider: str, exc: Exception) -> ProviderError:
-    """Map exception generik → taksonomi."""
     if isinstance(exc, ProviderError):
         return exc
-
     name = type(exc).__name__.lower()
     msg = str(exc) or name
     low = msg.lower()
-
     if "timeout" in name or "timeout" in low or "timed out" in low:
         return TimeoutError(provider, msg, exc)
     if any(x in low for x in ("cloudflare", "just a moment", "cf-ray", "attention required", "captcha")):
@@ -147,13 +151,26 @@ def classify_exception(provider: str, exc: Exception) -> ProviderError:
         return HTTPError(provider, msg, code, exc)
     if any(x in low for x in ("json", "parse", "decode", "expecting", "html instead")):
         return ParseError(provider, msg, exc)
-
     return ProviderError(provider, msg, exc)
 
 
 class BaseProvider(ABC):
+    """
+    Adapter provider.
+
+    Set `capabilities` di subclass bila tidak full-stack.
+    Manager memanggil supports("latest") sebelum get_latest, dll.
+    """
+
     name: str = "base"
     priority: int = 100
+    capabilities: frozenset[str] = ALL_CAPABILITIES
+
+    def supports(self, capability: str) -> bool:
+        return capability in (self.capabilities or ALL_CAPABILITIES)
+
+    def capability_map(self) -> dict[str, bool]:
+        return {c: self.supports(c) for c in sorted(ALL_CAPABILITIES)}
 
     @abstractmethod
     def search(self, keyword: str, limit: int = 20) -> list[MangaInfo]:
@@ -176,9 +193,24 @@ class BaseProvider(ABC):
         ...
 
     def health(self) -> dict[str, Any]:
+        if not self.supports(CAP_HEALTH):
+            return {"provider": self.name, "ok": False, "error": "no health capability"}
         try:
-            items = self.get_latest(page=1, limit=1)
-            return {"provider": self.name, "ok": True, "sample": len(items)}
+            sample = 0
+            if self.supports(CAP_LATEST):
+                items = self.get_latest(page=1, limit=1)
+                sample = len(items)
+            return {
+                "provider": self.name,
+                "ok": True,
+                "sample": sample,
+                "capabilities": self.capability_map(),
+            }
         except Exception as e:
             err = classify_exception(self.name, e)
-            return {"provider": self.name, "ok": False, "error": err.to_dict()}
+            return {
+                "provider": self.name,
+                "ok": False,
+                "error": err.to_dict(),
+                "capabilities": self.capability_map(),
+            }

@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 import requests
 
-from ..base import BaseProvider, ProviderError
+from ..base import ALL_CAPABILITIES, BaseProvider, ProviderError
 from ..models import ChapterInfo, ChapterPages, MangaInfo
 
 API_BASE = "https://be.komikcast.cc"
@@ -83,6 +83,7 @@ def _filter_images(images: list[str]) -> list[str]:
 
 
 class KomikcastProvider(BaseProvider):
+    capabilities = ALL_CAPABILITIES
     name = "komikcast"
     priority = 10
 
