@@ -183,7 +183,10 @@ def _komiku_detail_payload(slug: str) -> dict | None:
         p = KomikuProvider()
         info = p.get_manga(slug)
         if not info:
-            # search fallback
+            import re
+            if re.fullmatch(r"[0-9a-fA-F-]{36}", slug or ""):
+                return None
+            # search fallback only for human slugs
             hits = p.search(slug.replace("-", " "), limit=5)
             for h in hits:
                 if (h.slug or h.source_slug) == slug or slug in (h.slug or ""):
@@ -246,10 +249,9 @@ def _komiku_chapters_payload(slug: str) -> dict | None:
 
 def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     """
-    Fallback chain saat KC down:
-      Sanka Shinigami → (403 ban) → Komiku direct (komiku.org)
+    Nama historis (dipakai app.py). Isi: Komiku direct saja.
+    Sanka dihapus karena IP Railway banned.
     """
-    global _SANKA_BANNED
     qs = qs or {}
     sub0 = (sub or "").split("?")[0].strip("/")
     parts = [x for x in sub0.split("/") if x]
@@ -266,6 +268,13 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         except Exception:
             return 1
 
+    def _is_uuid(s: str) -> bool:
+        import re
+        return bool(re.fullmatch(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+            (s or "").strip(),
+        ))
+
     # --- list ---
     if sub0 == "series" or (len(parts) == 1 and parts[0] == "series"):
         sort = (qs.get("sort") or ["updatedAt"])[0]
@@ -273,24 +282,6 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         take = _take()
         page = _page()
         popular = sort in ("popular", "popularity", "hot", "views")
-
-        if sanka_provider is not None and not _SANKA_BANNED:
-            try:
-                if qsearch:
-                    payload = sanka_provider.search(qsearch, limit=take)
-                elif popular:
-                    payload = sanka_provider.get_populer(limit=take)
-                else:
-                    payload = sanka_provider.get_terbaru(
-                        limit=take, prefer="shinigami", page=page
-                    )
-                if payload and payload.get("data"):
-                    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            except Exception as e:
-                print("manga_service.sanka_fallback error:", e, flush=True)
-                _mark_sanka_banned(e)
-
-        # Komiku direct
         payload = _komiku_list_payload(take=take, page=page, q=qsearch, popular=popular)
         if payload and payload.get("data"):
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -300,47 +291,30 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     if not slug:
         return None
 
-    # UUID → Sanka only (if not banned)
-    is_uuid = getattr(sanka_provider, "looks_like_uuid", lambda _s: False)(slug) if sanka_provider else False
-    if is_uuid and sanka_provider is not None and not _SANKA_BANNED:
-        try:
-            if kind == "detail" or (len(parts) == 2 and parts[0] == "series"):
-                payload = sanka_provider.get_detail_shinigami(slug)
-                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            if kind == "chapters" or (len(parts) >= 3 and parts[-1] == "chapters"):
-                payload = sanka_provider.get_chapters_shinigami(slug)
-                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            if kind == "pages" and chapter is not None:
-                payload = sanka_provider.get_pages_shinigami(slug, chapter)
-                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        except Exception as e:
-            print("manga_service.sanka uuid error:", e, flush=True)
-            _mark_sanka_banned(e)
+    # UUID Shinigami lama — tidak ada di Komiku; jangan search sampah
+    if _is_uuid(slug):
+        print("komiku_fallback: skip UUID slug (legacy Sanka id)", slug, flush=True)
+        return None
 
-    # Komiku slug path
     if kind == "detail" or (len(parts) == 2 and parts[0] == "series"):
         payload = _komiku_detail_payload(slug)
         if payload:
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return None
+
     if kind == "chapters" or (len(parts) >= 3 and parts[-1] == "chapters"):
         payload = _komiku_chapters_payload(slug)
         if payload:
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return None
+
     if kind == "pages" and chapter is not None:
-        if sanka_provider is not None and not _SANKA_BANNED:
-            try:
-                payload = sanka_provider.get_chapter_images_komiku(slug, chapter)
-                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            except Exception as e:
-                _mark_sanka_banned(e)
-        # KomikuProvider pages
         try:
             try:
                 from server.hybrid_providers.providers.komiku import KomikuProvider
                 from server.hybrid_providers.models import ChapterInfo
             except Exception:
                 from hybrid_providers.providers.komiku import KomikuProvider  # type: ignore
-                from hybrid_providers.models import ChapterInfo  # type: ignore
             p = KomikuProvider()
             chs = p.get_chapters(slug)
             target = None
@@ -374,6 +348,7 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     return None
 
 
+
 def resolve_upstream_failure(sub: str, qs: dict | None = None) -> tuple[bytes | None, str]:
     """
     Chain fallback setelah Komikcast gagal.
@@ -392,15 +367,16 @@ def provider_status() -> dict[str, Any]:
     """Health ringkas untuk /api/health — lewat ProviderManager bila ada."""
     out: dict[str, Any] = {
         "sqlite": lumen_db is not None,
-        "sanka": sanka_provider is not None,
-        "sanka_banned": _SANKA_BANNED,
-        "sanka_ban_reason": _SANKA_BAN_REASON,
-        "sanka_ok": sanka_provider is not None and not _SANKA_BANNED,
+        "sanka": False,
+        "sanka_removed": True,
+        "sanka_banned": True,
+        "sanka_ban_reason": "removed: IP permanently banned",
+        "sanka_ok": False,
         "source_of_truth": "canonical_db_when_synced_else_provider",
         "cache": "sqlite_read_through",
         "mongo": "optional_catalog_primary_when_present",
         "architecture": "ProviderManager is single authority",
-        "fallback_chain": ["komikcast", "sanka_shinigami", "komiku_direct"],
+        "fallback_chain": ["komikcast", "komiku_direct"],
     }
     try:
         try:
