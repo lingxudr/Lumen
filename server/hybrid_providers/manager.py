@@ -20,7 +20,13 @@ import time
 from collections import defaultdict
 from typing import Any, Callable
 
-from .base import BaseProvider, ProviderError
+from .base import (
+    BaseProvider,
+    ProviderError,
+    classify_exception,
+    EmptyResult,
+    HTTPError,
+)
 from .chapter_dedup import dedupe_provider_chapter_infos
 from .health import REGISTRY
 from .models import ChapterInfo, ChapterPages, MangaInfo
@@ -63,7 +69,15 @@ class ProviderManager:
         return alive or list(self.providers)
 
     def _call(self, provider: BaseProvider, fn: Callable, *args, **kwargs):
-        """Jalankan call + catat health (latency / error)."""
+        """
+        Jalankan call + catat health berdasarkan taksonomi error.
+
+        - timeout/network/5xx → retryable, degrade singkat
+        - 429 → cooldown panjang
+        - 403/blocked → degrade
+        - 404/empty → tidak selalu hukum provider
+        - parse → degrade + kind parse
+        """
         t0 = time.time()
         try:
             result = fn(*args, **kwargs)
@@ -72,8 +86,33 @@ class ProviderManager:
             return result
         except Exception as e:
             ms = (time.time() - t0) * 1000
-            REGISTRY.get(provider.name).record_failure(ms, str(e))
-            raise
+            err = classify_exception(provider.name, e)
+            h = REGISTRY.get(provider.name)
+            # EmptyResult / pure 404: jangan naikkan consecutive sekeras down
+            if isinstance(err, EmptyResult) or (
+                isinstance(err, HTTPError) and err.status == 404
+            ):
+                h.last_check = time.time()
+                h.last_error = str(err)[:240]
+                h.last_error_kind = err.kind
+                # tidak record_failure penuh
+            else:
+                h.record_failure(
+                    ms,
+                    str(err),
+                    kind=err.kind,
+                    force_cooldown=err.cooldown_sec if err.degrade_provider else None,
+                )
+            raise err from e
+
+    def _should_try_next(self, err: Exception) -> bool:
+        """Apakah manager boleh lanjut ke provider berikutnya."""
+        if isinstance(err, ProviderError):
+            if err.skip_other_providers:
+                return False
+            # 404 pada detail: tetap boleh coba provider lain (slug beda)
+            return True
+        return True
 
     def health_snapshot(self) -> list[dict[str, Any]]:
         # pastikan semua provider terdaftar
@@ -122,13 +161,15 @@ class ProviderManager:
         Ambil dari provider berurutan; merge field yang kosong jika merge=True.
         """
         result: MangaInfo | None = None
-        for p in self.providers:
+        for p in self.active_providers():
             src_slug = slug_map.get(p.name)
             if not src_slug:
                 continue
             try:
-                info = p.get_manga(src_slug)
-            except ProviderError:
+                info = self._call(p, p.get_manga, src_slug)
+            except ProviderError as e:
+                if not self._should_try_next(e):
+                    break
                 continue
             if not info:
                 continue

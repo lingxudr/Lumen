@@ -27,6 +27,7 @@ class ProviderHealth:
     total_latency_ms: float = 0.0
     last_latency_ms: float | None = None
     last_error: str | None = None
+    last_error_kind: str | None = None
     last_check: float | None = None  # unix ts
     consecutive_failures: int = 0
     circuit_open_until: float = 0.0  # unix ts
@@ -42,16 +43,34 @@ class ProviderHealth:
         if self.circuit_open_until and time.time() >= self.circuit_open_until:
             self.circuit_open_until = 0.0
 
-    def record_failure(self, latency_ms: float, error: str, *, open_for: float = 60.0) -> None:
+    def record_failure(
+        self,
+        latency_ms: float,
+        error: str,
+        *,
+        open_for: float | None = None,
+        kind: str | None = None,
+        force_cooldown: float | None = None,
+    ) -> None:
         self.failures += 1
         self.total_latency_ms += latency_ms
         self.last_latency_ms = latency_ms
         self.last_check = time.time()
         self.last_error = (error or "")[:240]
+        self.last_error_kind = kind
         self.consecutive_failures += 1
-        # buka circuit setelah 3 gagal beruntun
+
+        # cooldown eksplisit dari taksonomi (429/403/blocked)
+        if force_cooldown and force_cooldown > 0:
+            self.circuit_open_until = max(
+                self.circuit_open_until, time.time() + force_cooldown
+            )
+            return
+
+        # default: buka circuit setelah 3 gagal beruntun
+        sec = 60.0 if open_for is None else open_for
         if self.consecutive_failures >= 3:
-            self.circuit_open_until = time.time() + open_for
+            self.circuit_open_until = time.time() + sec
 
     @property
     def total(self) -> int:
@@ -105,6 +124,7 @@ class ProviderHealth:
             "failures": self.failures,
             "consecutive_failures": self.consecutive_failures,
             "last_error": self.last_error,
+            "last_error_kind": self.last_error_kind,
             "last_check_ago_sec": age,
             "circuit_open": bool(self.circuit_open_until and time.time() < self.circuit_open_until),
         }
