@@ -822,10 +822,11 @@ class KomikuProvider(BaseProvider):
         if not pages:
             raise ProviderError(self.name, f"tidak ada gambar valid: {chapter.url}")
 
-        return ChapterPages(
-            images=pages,
+        return ChapterPages.from_urls(
+            list(pages),
             provider=self.name,
             chapter_number=chapter.number,
             chapter_name=chapter.name,
             source_url=chapter.url,
+            ttl_seconds=6 * 3600,
         )

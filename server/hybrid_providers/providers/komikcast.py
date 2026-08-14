@@ -283,12 +283,13 @@ class KomikcastProvider(BaseProvider):
         if not images:
             raise ProviderError(self.name, f"images kosong: {api_url}")
 
-        return ChapterPages(
-            images=images,
+        return ChapterPages.from_urls(
+            list(images),
             provider=self.name,
             chapter_number=chapter.number,
             chapter_name=chapter.name,
             source_url=api_url,
+            ttl_seconds=6 * 3600,
         )
 
     def _resolve_chapter_api_url(self, chapter: ChapterInfo) -> str | None:
