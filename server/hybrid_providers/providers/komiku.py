@@ -33,6 +33,27 @@ BASE_MIRRORS = [
 ]
 REST_BASE = f"{BASE_SITE}/wp-json/wp/v2"
 
+def _proxy_base() -> str:
+    """Optional Vercel/other proxy to bypass Railway IP ban on Komiku."""
+    import os
+    return (os.environ.get("KOMIKU_PROXY_BASE") or "").rstrip("/")
+
+def _via_proxy(absolute_url: str) -> str:
+    """
+    Map https://komiku.org/wp-json/... → {PROXY}/api/komiku/wp-json/...
+    """
+    pb = _proxy_base()
+    if not pb:
+        return absolute_url
+    from urllib.parse import urlparse
+    u = urlparse(absolute_url)
+    path = u.path or "/"
+    q = ("?" + u.query) if u.query else ""
+    # proxy expects /api/komiku{path}
+    if pb.endswith("/api/komiku"):
+        return f"{pb}{path}{q}"
+    return f"{pb}/api/komiku{path}{q}"
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -176,10 +197,12 @@ class KomikuProvider(BaseProvider):
                 continue
             seen.add(u)
             try:
+                fetch_url = _via_proxy(u) if _proxy_base() else u
                 r = self.session.get(
-                    u,
+                    fetch_url,
                     timeout=self.timeout,
-                    headers={**HEADERS, "Accept": "text/html,*/*", "Referer": u.rsplit("/", 1)[0] + "/"},
+                    headers={**HEADERS, "Accept": "text/html,*/*", "Referer": "https://komiku.org/"},
+                    allow_redirects=True,
                     **kwargs,
                 )
                 r.raise_for_status()
@@ -188,6 +211,21 @@ class KomikuProvider(BaseProvider):
             except Exception as e:
                 last_err = e
                 continue
+        # last: try proxy-only for original url
+        if _proxy_base():
+            try:
+                fetch_url = _via_proxy(url)
+                r = self.session.get(
+                    fetch_url,
+                    timeout=self.timeout,
+                    headers={**HEADERS, "Accept": "text/html,*/*", "Referer": "https://komiku.org/"},
+                    **kwargs,
+                )
+                r.raise_for_status()
+                r.encoding = r.apparent_encoding or "utf-8"
+                return r.text
+            except Exception as e:
+                last_err = e
         raise ProviderError(self.name, f"GET HTML failed: {url}", cause=last_err) from last_err
 
     def _get_json(self, path: str, params: dict | None = None) -> Any:
@@ -195,6 +233,12 @@ class KomikuProvider(BaseProvider):
             candidates = [path]
         else:
             candidates = [f"{base}/wp-json/wp/v2{path}" for base in BASE_MIRRORS]
+        # Prefer proxy first when configured (Railway ban bypass)
+        if _proxy_base():
+            proxied = []
+            for u in candidates:
+                proxied.append(_via_proxy(u))
+            candidates = proxied + candidates
         last_err: Exception | None = None
         for url in candidates:
             try:
@@ -205,8 +249,9 @@ class KomikuProvider(BaseProvider):
                     headers={
                         **HEADERS,
                         "Accept": "application/json",
-                        "Referer": url.split("/wp-json")[0] + "/",
+                        "Referer": "https://komiku.org/",
                     },
+                    allow_redirects=True,
                 )
                 r.raise_for_status()
                 return r.json(), r.headers

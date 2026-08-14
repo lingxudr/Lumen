@@ -1,19 +1,56 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/img", "destination": "/api/img" },
-    { "source": "/api/check-hotlink", "destination": "/api/check-hotlink" },
-    { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" },
-    { "source": "/latest", "destination": "/index.html" },
-    { "source": "/popular", "destination": "/index.html" },
-    { "source": "/search", "destination": "/index.html" },
-    { "source": "/manga/(.*)", "destination": "/index.html" },
-    { "source": "/read/(.*)", "destination": "/index.html" }
+    {
+      "source": "/img",
+      "destination": "/api/img"
+    },
+    {
+      "source": "/api/check-hotlink",
+      "destination": "/api/check-hotlink"
+    },
+    {
+      "source": "/api/komiku",
+      "destination": "/api/komiku"
+    },
+    {
+      "source": "/api/komiku/(.*)",
+      "destination": "/api/komiku"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/proxy?path=$1"
+    },
+    {
+      "source": "/latest",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/popular",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/search",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/manga/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/read/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
-      "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }]
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
     }
   ]
 }
