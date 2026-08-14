@@ -3,7 +3,12 @@
   "rewrites": [
     { "source": "/img", "destination": "/api/img" },
     { "source": "/api/check-hotlink", "destination": "/api/check-hotlink" },
-    { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" }
+    { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" },
+    { "source": "/latest", "destination": "/index.html" },
+    { "source": "/popular", "destination": "/index.html" },
+    { "source": "/search", "destination": "/index.html" },
+    { "source": "/manga/(.*)", "destination": "/index.html" },
+    { "source": "/read/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {

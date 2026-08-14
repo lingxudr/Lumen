@@ -745,13 +745,50 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
 
-            if path in ("/api/providers/health", "/api/providers/health/"):
+            if path in (
+                "/api/providers/health",
+                "/api/providers/health/",
+                "/api/providers",
+                "/api/providers/",
+            ):
                 try:
                     from services.manga_service import provider_status
                     return self.send_json(200, provider_status())
                 except Exception:
                     from server.services.manga_service import provider_status
                     return self.send_json(200, provider_status())
+
+            if path in ("/api/metrics", "/api/metrics/"):
+                try:
+                    from services.manga_service import provider_status
+                    st = provider_status()
+                except Exception as e:
+                    st = {"error": str(e)}
+                providers = st.get("providers") or []
+                metrics = {
+                    "ok": True,
+                    "providers": [
+                        {
+                            "provider": r.get("provider"),
+                            "status": r.get("status"),
+                            "latency": r.get("latency_ms"),
+                            "avg_latency": r.get("avg_latency_ms"),
+                            "error_rate": (r.get("error_rate") or 0) / 100.0
+                            if (r.get("error_rate") or 0) > 1
+                            else r.get("error_rate"),
+                            "last_check_ago_sec": r.get("last_check_ago_sec"),
+                            "successes": r.get("successes"),
+                            "failures": r.get("failures"),
+                            "circuit_open": r.get("circuit_open"),
+                            "last_error": r.get("last_error"),
+                        }
+                        for r in providers
+                        if isinstance(r, dict)
+                    ],
+                    "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                    "db": _db_stats_safe(),
+                }
+                return self.send_json(200, metrics)
 
 
             if path.startswith("/api/"):
