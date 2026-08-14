@@ -432,8 +432,11 @@ class KomikuProvider(BaseProvider):
 
     # ---- ranking (HTML panels) ----
     def get_ranking(self, period: str = "mingguan", limit: int = 20) -> list[MangaInfo]:
-        """Popular via homepage rank-{mingguan|harian|total}."""
-        rows = self.engine.ranking(period=period, limit=limit)
+        """Popular via homepage rank panel; fallback REST modified."""
+        try:
+            rows = self.engine.ranking(period=period, limit=limit)
+        except Exception:
+            rows = []
         out: list[MangaInfo] = []
         for r in rows:
             slug = _slug_from_url(r.get("url") or "")
@@ -452,7 +455,9 @@ class KomikuProvider(BaseProvider):
                     raw=r,
                 )
             )
-        return out
+        if out:
+            return out
+        return self.get_latest(limit=limit, page=1)
 
     def search(self, keyword: str, limit: int = 20) -> list[MangaInfo]:
         per_page = min(max(limit, 1), 100)
@@ -469,12 +474,10 @@ class KomikuProvider(BaseProvider):
 
     def get_latest(self, limit: int = 20, page: int = 1) -> list[MangaInfo]:
         """
-        Prioritas page 1:
-          HTML #Terbaru (chapter + waktu update) di-merge dengan REST metadata.
-        Page > 1:
-          REST orderby=modified.
-        Fallback: HTML cards.
+        REST-first (andal di server yang HTML di-block/403).
+        HTML merge opsional; gagal HTML tidak menggugurkan REST.
         """
+        rest_items: list[MangaInfo] = []
         rest_by_slug: dict[str, MangaInfo] = {}
         try:
             rest_items = self._rest_manga_list(
@@ -488,21 +491,21 @@ class KomikuProvider(BaseProvider):
             for m in rest_items:
                 if m.slug:
                     rest_by_slug[m.slug] = m
-        except ProviderError:
+        except Exception as e:
+            print("komiku get_latest REST:", e, flush=True)
             rest_items = []
 
-        if page <= 1:
+        # Optional HTML enrich — never required
+        if page <= 1 and rest_items:
             try:
                 html_items = self._latest_terbaru_html(limit=max(limit, 20))
-            except ProviderError:
+            except Exception:
                 html_items = []
-
             if html_items:
                 merged: list[MangaInfo] = []
                 for h in html_items:
                     r = rest_by_slug.get(h.slug)
                     if r:
-                        # REST metadata + HTML latest chapter/time/cover
                         merged.append(
                             MangaInfo(
                                 slug=h.slug,
@@ -529,13 +532,9 @@ class KomikuProvider(BaseProvider):
                             )
                         )
                     else:
-                        # HTML only — pastikan field latest terisi dari raw
                         h.latest_chapter = h.latest_chapter or (h.raw or {}).get(
                             "latest_chapter"
                         )
-                        h.latest_chapter_url = h.latest_chapter_url or (
-                            h.raw or {}
-                        ).get("latest_chapter_url")
                         h.updated_label = h.updated_label or (h.raw or {}).get(
                             "updated_label"
                         )
@@ -547,7 +546,14 @@ class KomikuProvider(BaseProvider):
 
         if rest_items:
             return rest_items[:limit]
-        return self._latest_html(limit=limit)
+
+        # last resort HTML only
+        try:
+            return self._latest_html(limit=limit)
+        except Exception as e:
+            print("komiku get_latest HTML fallback failed:", e, flush=True)
+            return []
+
     def _latest_terbaru_html(self, limit: int = 20) -> list[MangaInfo]:
         """Parse blok #Terbaru di beranda Komiku (sumber update yang user lihat)."""
         html_text = self._get_html(BASE_SITE + "/")
