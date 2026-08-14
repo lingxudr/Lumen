@@ -1,20 +1,42 @@
-# Architecture
+# Lumen Backend Architecture
+
+## Masalah
+
+`server/app.py` menumpuk routing + provider + fallback + DB + cache.
+Sulit diuji dan diganti provider.
+
+## Target layer
 
 ```
-Browser
-  │
-  ├─ public/*          static assets
-  │
-  ├─ /api/*            proxy → upstream manga API
-  ├─ /img?u=           image proxy
-  └─ /api/check-hotlink
+Route (Handler)
+  → Service (services/manga_service.py)
+  → Provider chain (Komikcast → SQLite → Sanka Shinigami → Sanka Komiku)
+  → Repository (db.py / mongo opsional)
 ```
 
-- **Local:** `server/app.py` handles all routes.
-- **Vercel:** `api/*.js` serverless; static from `public/`.
+## Source of truth (production)
 
-Frontend modules (ESM):
+| Layer | Peran | SoT? |
+|-------|--------|------|
+| Provider live (Komikcast / Sanka) | Konten, chapter, gambar | **YA** |
+| SQLite (`lumen.db`) | Read-through cache | Tidak (SWR) |
+| MongoDB (`MONGO_URI`) | Catalog/sync opsional | Tidak |
+
+Aturan:
+1. Baca selalu coba provider dulu.
+2. Provider 5xx → SQLite bila ada.
+3. SQLite kosong → Sanka (Shinigami lalu Komiku-style).
+4. Mongo tidak dipakai untuk pages kritis.
+5. Tanpa MONGO_URI app tetap jalan.
+
+## Struktur
 
 ```
-app.js → views/* → api.js / ui.js / utils.js / config.js
+server/
+├── app.py
+├── db.py
+├── providers/sanka.py
+├── services/manga_service.py
+├── hybrid_providers/   # models, manager, sync, mongo
+└── routes/             # next: pecah handler
 ```
