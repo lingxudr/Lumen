@@ -795,6 +795,31 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
 
+                # DB-first: Mongo canonical catalog untuk list series
+                sub0 = (sub or "").split("?")[0].strip("/")
+                if sub0 == "series":
+                    try:
+                        from services.manga_service import catalog_newest
+                    except Exception:
+                        try:
+                            from server.services.manga_service import catalog_newest
+                        except Exception:
+                            catalog_newest = None
+                    if catalog_newest:
+                        try:
+                            take = int((qs.get("take") or qs.get("limit") or ["20"])[0])
+                        except Exception:
+                            take = 20
+                        cat = catalog_newest(take=take)
+                        if cat:
+                            extra = dict(rate_headers)
+                            extra["X-Lumen-Cache"] = "MONGO"
+                            extra["X-Lumen-DB"] = "CATALOG"
+                            extra["Cache-Control"] = "public, max-age=60"
+                            return self.send_bytes(
+                                200, cat, "application/json; charset=utf-8", extra_headers=extra
+                            )
+
                 # Pure Komikcast proxy (tanpa merge Komiku)
                 url = API_BASE + "/" + sub
                 if parsed.query:

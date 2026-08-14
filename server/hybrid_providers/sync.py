@@ -53,6 +53,16 @@ from server.hybrid_providers.chapter_dedup import (  # noqa: E402
     pick_better_name,
 )
 from server.hybrid_providers.models import ChapterInfo, MangaInfo  # noqa: E402
+try:
+    from server.services.canonical_match import (  # noqa: E402
+        MatchCandidate,
+        cluster_candidates,
+        pick_canonical_slug,
+        normalize_text,
+    )
+    _HAS_CANONICAL = True
+except Exception:
+    _HAS_CANONICAL = False
 
 
 def _now() -> datetime:
@@ -184,11 +194,51 @@ class SyncJob:
         self, latest_map: dict[str, list[MangaInfo]]
     ) -> list[dict[str, Any]]:
         """
-        Group entries from different providers that refer to the same manga.
-        Key: normalized title, fallback slug.
+        Group entries lintas provider → satu canonical.
+        Canonical match: slug / title / alt / author / fuzzy>=0.92 / alias.
         """
-        buckets: dict[str, dict[str, Any]] = {}
+        if _HAS_CANONICAL:
+            candidates = []
+            meta_ref = {}
+            for prov, items in latest_map.items():
+                for m in items:
+                    slug = getattr(m, "source_slug", None) or getattr(m, "slug", None)
+                    c = MatchCandidate(
+                        provider=prov,
+                        title=getattr(m, "title", None) or "",
+                        slug=slug,
+                        source_id=str(getattr(m, "source_id", None) or "") or None,
+                        title_alt=getattr(m, "title_alt", None),
+                        author=getattr(m, "author", None),
+                    )
+                    candidates.append(c)
+                    meta_ref[(prov, c.slug_norm or c.title_norm)] = m
+            clusters = cluster_candidates(candidates, threshold=0.92)
+            groups = []
+            for cluster in clusters:
+                sources = {}
+                title = cluster[0].title
+                for c in cluster:
+                    m = meta_ref.get((c.provider, c.slug_norm or c.title_norm))
+                    if m is not None:
+                        sources[c.provider] = m
+                        if getattr(m, "title", None):
+                            title = m.title
+                groups.append(
+                    {
+                        "key": normalize_text(title),
+                        "title": title,
+                        "title_norm": normalize_text(title),
+                        "sources": sources,
+                        "canonical_slug": pick_canonical_slug(cluster),
+                    }
+                )
+            groups.sort(
+                key=lambda g: (-len(g["sources"]), (g.get("title") or "").lower())
+            )
+            return groups
 
+        buckets: dict[str, dict[str, Any]] = {}
         for provider, items in latest_map.items():
             for m in items:
                 key = _norm_title(m.title) or (m.slug or "").lower()
@@ -196,18 +246,11 @@ class SyncJob:
                     continue
                 g = buckets.get(key)
                 if not g:
-                    g = {
-                        "key": key,
-                        "title": m.title,
-                        "sources": {},  # provider -> MangaInfo
-                    }
+                    g = {"key": key, "title": m.title, "sources": {}}
                     buckets[key] = g
-                # prefer longer title
                 if m.title and len(m.title) > len(g.get("title") or ""):
                     g["title"] = m.title
                 g["sources"][provider] = m
-
-        # order: manga yang muncul di lebih banyak provider dulu, lalu by title
         groups = list(buckets.values())
         groups.sort(
             key=lambda g: (-len(g["sources"]), (g.get("title") or "").lower())

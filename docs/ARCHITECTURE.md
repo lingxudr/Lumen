@@ -1,42 +1,83 @@
 # Lumen Backend Architecture
 
-## Masalah
-
-`server/app.py` menumpuk routing + provider + fallback + DB + cache.
-Sulit diuji dan diganti provider.
-
-## Target layer
+## Arah resmi: DB-first
 
 ```
-Route (Handler)
-  → Service (services/manga_service.py)
-  → Provider chain (Komikcast → SQLite → Sanka Shinigami → Sanka Komiku)
-  → Repository (db.py / mongo opsional)
+Provider (Komikcast / Sanka / …)
+        ↓
+   Sync Worker (cron)
+        ↓
+ Normalizer + Canonical Match + Deduper
+        ↓
+   Canonical DB (Mongo catalog + chapter_index)
+        ↓
+   Lumen API (baca DB dulu)
+        ↓
+   Web Reader
 ```
 
-## Source of truth (production)
+Bukan: setiap request user → hit provider langsung.
+
+## Source of truth
 
 | Layer | Peran | SoT? |
 |-------|--------|------|
-| Provider live (Komikcast / Sanka) | Konten, chapter, gambar | **YA** |
-| SQLite (`lumen.db`) | Read-through cache | Tidak (SWR) |
-| MongoDB (`MONGO_URI`) | Catalog/sync opsional | Tidak |
+| **Canonical DB** (Mongo `catalog`, `chapter_index`) | Metadata + chapter index hasil sync | **YA — API reads** |
+| **Provider live** | Input sync worker + emergency fallback | Input / fallback |
+| **SQLite** | Edge cache pages di Railway | Cache lokal pages |
 
-Aturan:
-1. Baca selalu coba provider dulu.
-2. Provider 5xx → SQLite bila ada.
-3. SQLite kosong → Sanka (Shinigami lalu Komiku-style).
-4. Mongo tidak dipakai untuk pages kritis.
-5. Tanpa MONGO_URI app tetap jalan.
+### Read path API
+
+1. **Mongo catalog** (DB-first) bila `MONGO_URI` + data ada  
+2. SQLite cache  
+3. Provider live (Sanka saat KC down; Komikcast saat hidup)
+
+### Write path
+
+Sync Worker saja yang menulis catalog / chapter_index.
+User request **tidak** men-trigger scrape massal.
+
+## Canonical matching (`services/canonical_match.py`)
+
+Urutan:
+1. exact provider ID  
+2. normalized slug  
+3. normalized title  
+4. alternative title overlap  
+5. author + fuzzy title  
+6. fuzzy similarity ≥ **0.92**  
+7. manual alias  
+
+Proteksi: `solo-leveling` ≠ `solo-leveling-ragnarok` (slug suffix distinct).
+
+## Chapter dedup
+
+`chapter_dedup.normalize_chapter_key` + merge `sources` per chapter.
+Incremental: `last_synced_chapter` di `sync_state`.
+
+## Menjalankan sync
+
+```bash
+export MONGO_URI=mongodb+srv://...
+export MONGO_DB=lumen_comic
+python3 -m server.hybrid_providers.sync --limit 40 --chapters
+```
+
+Cron contoh: setiap 15–30 menit.
 
 ## Struktur
 
 ```
 server/
 ├── app.py
-├── db.py
+├── services/
+│   ├── manga_service.py      # read path + fallback
+│   └── canonical_match.py    # cluster / alias / fuzzy
 ├── providers/sanka.py
-├── services/manga_service.py
-├── hybrid_providers/   # models, manager, sync, mongo
-└── routes/             # next: pecah handler
+├── hybrid_providers/
+│   ├── sync.py               # Sync Worker
+│   ├── chapter_dedup.py
+│   ├── mongo.py
+│   └── manager.py
+└── db.py                     # SQLite pages cache
 ```

@@ -177,3 +177,81 @@ def provider_status() -> dict[str, Any]:
             out["sanka_ok"] = False
             out["sanka_error"] = str(e)
     return out
+
+
+def catalog_newest(take: int = 20) -> bytes | None:
+    """
+    DB-first: baca canonical catalog Mongo bila ada.
+    Return body JSON bentuk series list, atau None.
+    """
+    try:
+        from server.hybrid_providers import mongo as mongo_cache
+    except Exception:
+        try:
+            from hybrid_providers import mongo as mongo_cache  # type: ignore
+        except Exception:
+            return None
+    db = mongo_cache.get_db()
+    if db is None:
+        return None
+    try:
+        cur = db.catalog.find({}).sort("updated_at", -1).limit(max(1, min(take, 50)))
+        items = []
+        for d in cur:
+            slug = d.get("canonical_slug") or (d.get("slug_map") or {}).get("komikcast")
+            if not slug:
+                continue
+            items.append(
+                {
+                    "id": slug,
+                    "data": {
+                        "title": d.get("title"),
+                        "slug": slug,
+                        "coverImage": d.get("cover_url"),
+                        "status": (d.get("status") or "").lower() or None,
+                        "format": (d.get("type") or "").lower() or None,
+                        "provider": "canonical",
+                        "latestChapterLabel": d.get("latest_chapter"),
+                        "updatedLabel": d.get("updated_label"),
+                        "providers": d.get("providers") or [],
+                    },
+                    "chapters": [],
+                    "provider": "canonical",
+                    "_source": "mongo_catalog",
+                }
+            )
+        if not items:
+            return None
+        payload = {
+            "status": 200,
+            "message": "Canonical catalog (DB-first)",
+            "data": items,
+            "meta": {
+                "source": "mongo_catalog",
+                "total": len(items),
+                "page": 1,
+                "lastPage": 1,
+            },
+        }
+        return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except Exception as e:
+        print("catalog_newest error:", e, flush=True)
+        return None
+
+
+def resolve_list_request(sub: str, qs: dict | None = None) -> tuple[bytes | None, str]:
+    """
+    DB-first list:
+      1. Mongo catalog (jika ada data segar)
+      2. SQLite
+      3. Sanka live
+    """
+    qs = qs or {}
+    try:
+        take = int((qs.get("take") or qs.get("limit") or ["20"])[0])
+    except Exception:
+        take = 20
+    body = catalog_newest(take=take)
+    if body:
+        return body, "mongo_catalog"
+    return resolve_upstream_failure(sub, qs)
