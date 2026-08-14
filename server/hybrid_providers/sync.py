@@ -1,26 +1,21 @@
 #!/usr/bin/env python3
 """
-SYNC JOB — update proaktif (bukan on-demand user).
+SYNC JOB — DB-first, incremental, 3 level (bukan download semua pages).
 
-Alur:
-  KomikCast latest ──┐
-                     ├── match manga ── merge metadata ── DB
-  Komiku latest    ──┘
-                     │
-                     ▼
-              per manga: incremental chapters
-                     │
-              last_synced_chapter → hanya chapter baru
-                     │
-                     ▼
-              merge sources + dedup → MongoDB
+Level 1 Catalog  — title, slug, cover, author, status, genres
+Level 2 Chapters — number, title, date, provider URL  (incremental)
+Level 3 Pages    — image URLs  **ON-DEMAND saja** (reader / prefetch)
+
+Concurrency:
+  SyncQueue max_workers=5
+  + per-provider rate_limit (KC=2, Komiku=3, Sanka=5)
+
+Incremental chapters:
+  DB last = 500, provider = 501 → hanya proses 501
+  Jangan scrape ulang 1–500.
 
 Jalankan:
-  cd lumen
-  export MONGO_URI=...
-  export MONGO_DB=lumen_comic
-  python3 -m server.hybrid_providers.sync
-  python3 -m server.hybrid_providers.sync --limit 30 --chapters
+  python3 -m server.hybrid_providers.sync --limit 40 --chapters
 """
 
 from __future__ import annotations
@@ -53,6 +48,7 @@ from server.hybrid_providers.chapter_dedup import (  # noqa: E402
     pick_better_name,
 )
 from server.hybrid_providers.models import ChapterInfo, MangaInfo  # noqa: E402
+from server.hybrid_providers.sync_queue import Job, SyncQueue  # noqa: E402
 try:
     from server.services.canonical_match import (  # noqa: E402
         MatchCandidate,
@@ -138,16 +134,29 @@ class SyncJob:
         # ensure indexes for catalog
         self._ensure_indexes(db)
 
-        # 1) fetch latest both providers
+        # 1) Level 1 catalog — latest via worker queue (bukan 100 paralel)
         latest_map: dict[str, list[MangaInfo]] = {}
-        for p in self.mgr.providers:
-            try:
-                batch = p.get_latest(page=1, limit=limit)
-                latest_map[p.name] = batch
-                self.stats["latest_fetched"][p.name] = len(batch)
-            except ProviderError as e:
-                latest_map[p.name] = []
-                self.stats["errors"].append(f"latest {p.name}: {e}")
+        q = SyncQueue(max_workers=5)
+
+        def _latest(prov):
+            def _():
+                return prov.get_latest(page=1, limit=limit)
+            return _
+
+        jobs = [
+            Job(name=f"latest:{p.name}", fn=_latest(p), provider=p.name)
+            for p in self.mgr.providers
+            if p.supports("latest")
+        ]
+        for res in q.map(jobs):
+            name = res.get("provider") or "?"
+            if res.get("ok"):
+                batch = res.get("value") or []
+                latest_map[name] = batch
+                self.stats["latest_fetched"][name] = len(batch)
+            else:
+                latest_map[name] = []
+                self.stats["errors"].append(f"latest {name}: {res.get('error')}")
 
         # 2) match by normalized title + slug
         groups = self._match_groups(latest_map)
@@ -162,14 +171,29 @@ class SyncJob:
 
         # 4) incremental chapters
         if sync_chapters:
-            # prioritaskan yang baru muncul di latest
+            # Level 2 chapters only — NEVER Level 3 pages in sync
             targets = groups[:max_manga_chapters]
-            for group in targets:
-                try:
-                    self._sync_chapters_incremental(db, group)
-                except Exception as e:
-                    title = group.get("title") or "?"
-                    self.stats["errors"].append(f"chapters {title}: {e}")
+            q = SyncQueue(max_workers=5)
+
+            def _make(g):
+                def _():
+                    self._sync_chapters_incremental(db, g)
+                    return True
+                return _
+
+            jobs = [
+                Job(
+                    name=f"chapters:{(g.get('title') or '')[:40]}",
+                    fn=_make(g),
+                    provider=None,
+                )
+                for g in targets
+            ]
+            for res in q.map(jobs):
+                if not res.get("ok"):
+                    self.stats["errors"].append(
+                        f"chapters {res.get('name')}: {res.get('error')}"
+                    )
 
         # meta job log
         try:
@@ -381,7 +405,8 @@ class SyncJob:
 
             provider_checked[p.name] = _now().isoformat()
 
-            # incremental filter: keep new chapters + few near the tip for source merge
+            # Incremental: DB 1–500 + provider 1–501 → hanya ~501 (+ tip -3 untuk merge source)
+            # JANGAN scrape ulang 1–500. Pages TIDAK diambil di sini.
             filtered = []
             for ch in chapters:
                 num = parse_chapter_number(ch.name, ch.number)

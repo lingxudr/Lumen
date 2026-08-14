@@ -81,3 +81,13 @@ server/
 │   └── manager.py
 └── db.py                     # SQLite pages cache
 ```
+
+## Sync levels (penting)
+
+| Level | Isi | Kapan |
+|-------|-----|--------|
+| 1 Catalog | title, slug, cover, author, status, genres | schedule latest |
+| 2 Chapters | number, title, date, provider URL | incremental vs last_synced |
+| 3 Pages | image URLs | **on-demand reader/prefetch only** |
+
+Concurrency: `SyncQueue(max_workers=5)` + per-provider rate_limit.
