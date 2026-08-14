@@ -34,6 +34,7 @@ from .base import (
 )
 from .chapter_dedup import dedupe_provider_chapter_infos
 from .health import REGISTRY
+from .rate_limit import LIMITER
 from .models import ChapterInfo, ChapterPages, MangaInfo
 
 
@@ -90,7 +91,8 @@ class ProviderManager:
         """
         t0 = time.time()
         try:
-            result = fn(*args, **kwargs)
+            with LIMITER.acquire(provider.name):
+                result = fn(*args, **kwargs)
             ms = (time.time() - t0) * 1000
             REGISTRY.get(provider.name).record_success(ms)
             return result
@@ -129,10 +131,13 @@ class ProviderManager:
             REGISTRY.get(p.name)
         rows = REGISTRY.snapshot()
         by_name = {p.name: p for p in self.providers}
+        limits = LIMITER.snapshot()
         for r in rows:
             p = by_name.get(r.get("provider") or "")
             if p is not None:
                 r["capabilities"] = p.capability_map()
+            if r.get("provider") in limits:
+                r["rate_limit"] = limits[r["provider"]]
         return rows
 
     # ---- Public API (single authority) ----

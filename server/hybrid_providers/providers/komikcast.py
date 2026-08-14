@@ -17,6 +17,7 @@ from urllib.parse import quote
 import requests
 
 from ..base import ALL_CAPABILITIES, BaseProvider, ProviderError
+from ..http_client import request_json
 from ..models import ChapterInfo, ChapterPages, MangaInfo
 
 API_BASE = "https://be.komikcast.cc"
@@ -87,7 +88,7 @@ class KomikcastProvider(BaseProvider):
     name = "komikcast"
     priority = 10
 
-    def __init__(self, timeout: int = 25):
+    def __init__(self, timeout: int = 10):
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update(HEADERS)
@@ -95,26 +96,19 @@ class KomikcastProvider(BaseProvider):
         self._id_to_slug: dict[str, str] = {}
 
     def _get_json(self, path: str, params: dict | None = None) -> dict[str, Any]:
-        """GET JSON dengan retry untuk 502/503/timeout (KC sering unstable)."""
-        import time
-
+        """GET JSON — retry/backoff di http_client (bukan image download)."""
         url = f"{API_BASE}{path}"
-        last_err: Exception | None = None
-        for attempt in range(4):
-            try:
-                r = self.session.get(url, params=params, timeout=self.timeout)
-                if r.status_code in (502, 503, 504) and attempt < 3:
-                    time.sleep(0.6 * (attempt + 1))
-                    continue
-                r.raise_for_status()
-                return r.json()
-            except Exception as e:
-                last_err = e
-                if attempt < 3:
-                    time.sleep(0.6 * (attempt + 1))
-                    continue
-                break
-        raise ProviderError(self.name, f"GET {path} failed", cause=last_err) from last_err
+        data = request_json(
+            self.name,
+            "GET",
+            url,
+            session=self.session,
+            params=params,
+            timeout=self.timeout,
+        )
+        if not isinstance(data, dict):
+            return {"data": data}
+        return data
 
     # ------------------------------------------------------------------
     # list / search
