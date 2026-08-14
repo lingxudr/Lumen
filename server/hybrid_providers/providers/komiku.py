@@ -1,9 +1,10 @@
 """
-Adapter Komiku (komiku.org)
+Adapter Komiku (komiku.org) — BaseProvider.
 
-- Katalog / search / latest → WordPress REST API (JSON)
-- Detail (synopsis/author) + chapters + pages → HTML scrape
-- Taxonomy ID → nama di-cache (genre, tipe, statusmanga)
+Engine: komiku_scraper.KomikuEngine (REST + ranking HTML + chapters/pages).
+- Catalog/search/latest → WP REST
+- Ranking → HTML panels rank-mingguan/harian/total
+- Chapters/pages → HTML (URL only; no image download)
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from bs4 import BeautifulSoup
 
 from ..base import ALL_CAPABILITIES, BaseProvider, ProviderError
 from ..models import ChapterInfo, ChapterPages, MangaInfo
+from .komiku_scraper import KomikuEngine
 
 BASE_SITE = "https://komiku.org"
 REST_BASE = f"{BASE_SITE}/wp-json/wp/v2"
@@ -149,6 +151,7 @@ class KomikuProvider(BaseProvider):
         self._tax_dir = Path(tax_cache_dir) if tax_cache_dir else _DEFAULT_TAX_DIR
         self._tax_dir.mkdir(parents=True, exist_ok=True)
         # warm dari disk (tanpa network)
+        self.engine = KomikuEngine(timeout=float(self.timeout))
         self._load_tax_disk_all()
     # ------------------------------------------------------------------
     # HTTP helpers
@@ -425,6 +428,31 @@ class KomikuProvider(BaseProvider):
     # ------------------------------------------------------------------
     # search / latest (REST dulu, fallback HTML)
     # ------------------------------------------------------------------
+
+
+    # ---- ranking (HTML panels) ----
+    def get_ranking(self, period: str = "mingguan", limit: int = 20) -> list[MangaInfo]:
+        """Popular via homepage rank-{mingguan|harian|total}."""
+        rows = self.engine.ranking(period=period, limit=limit)
+        out: list[MangaInfo] = []
+        for r in rows:
+            slug = _slug_from_url(r.get("url") or "")
+            if not slug:
+                continue
+            out.append(
+                MangaInfo(
+                    slug=slug,
+                    title=_strip_title(r.get("title")) or slug,
+                    cover_url=_clean_cover(r.get("cover")),
+                    latest_chapter=r.get("latest_chapter"),
+                    updated_label=r.get("views"),
+                    source_slug=slug,
+                    source_url=r.get("url"),
+                    provider=self.name,
+                    raw=r,
+                )
+            )
+        return out
 
     def search(self, keyword: str, limit: int = 20) -> list[MangaInfo]:
         per_page = min(max(limit, 1), 100)
@@ -765,68 +793,65 @@ class KomikuProvider(BaseProvider):
         )
 
     def get_chapters(self, source_slug: str) -> list[ChapterInfo]:
-        url = f"{BASE_SITE}/manga/{source_slug}/"
-        html_text = self._get_html(url)
-        soup = BeautifulSoup(html_text, "html.parser")
-
-        chapters: list[ChapterInfo] = []
-        seen: set[str] = set()
-        for tr in soup.select("#Daftar_Chapter tr"):
-            a = tr.select_one("td.judulseries a") or tr.select_one("a")
-            if not a:
-                continue
-            href = a.get("href") or ""
-            name = a.get_text(strip=True)
-            if not href or not name:
-                continue
-            full = _abs(href)
-            if not full or full in seen:
-                continue
-            seen.add(full)
-            date_el = tr.select_one("td.tanggalseries")
-            chapters.append(
+        slug = (source_slug or "").strip().strip("/")
+        if not slug:
+            return []
+        rows = self.engine.manga_chapters(slug)
+        out: list[ChapterInfo] = []
+        for r in rows:
+            title = r.get("title") or ""
+            num = r.get("number")
+            if num is None:
+                num = _chapter_number(title)
+            out.append(
                 ChapterInfo(
-                    number=_chapter_number(name),
-                    name=name,
-                    url=full,
-                    published_at=date_el.get_text(strip=True) if date_el else None,
+                    number=num,
+                    name=title,
+                    url=r.get("url"),
+                    source_chapter_id=r.get("url"),
+                    published_at=r.get("date"),
                     provider=self.name,
+                    raw_name=title,
                 )
             )
-        return chapters
-
-    # ------------------------------------------------------------------
-    # pages
-    # ------------------------------------------------------------------
+        return out
 
     def get_pages(self, chapter: ChapterInfo) -> ChapterPages:
-        if not chapter.url:
-            raise ProviderError(self.name, "chapter.url kosong")
-        html_text = self._get_html(chapter.url)
-        soup = BeautifulSoup(html_text, "html.parser")
-
-        images: list[str] = []
-        for img in soup.select("#Baca_Komik img, .imgstory img"):
-            u = _clean_cover(img.get("data-src") or img.get("src"))
-            if u:
-                images.append(u)
-
-        seen: set[str] = set()
-        unique: list[str] = []
-        for u in images:
-            if u not in seen:
-                seen.add(u)
-                unique.append(u)
-
-        pages = filter_watermark(unique)
-        if not pages:
-            raise ProviderError(self.name, f"tidak ada gambar valid: {chapter.url}")
-
+        """Ambil URL gambar saja (tanpa download binary)."""
+        url = chapter.url
+        if not url and chapter.source_chapter_id:
+            # source_chapter_id kadang slug path
+            cid = str(chapter.source_chapter_id)
+            if cid.startswith("http"):
+                url = cid
+            elif "/" in cid:
+                url = urljoin(BASE_SITE, cid)
+        if not url:
+            raise ProviderError(self.name, "chapter url required for pages")
+        try:
+            images = self.engine.chapter_images(url)
+        except Exception:
+            # fallback legacy scrape
+            images = []
+            try:
+                html_text = self._get_html(url)
+                soup = BeautifulSoup(html_text, "html.parser")
+                for img in soup.find_all("img"):
+                    src = img.get("data-src") or img.get("src") or ""
+                    if src:
+                        images.append(src)
+            except Exception as e:
+                raise ProviderError(self.name, f"pages failed: {e}", e) from e
+        images = filter_watermark(images)
+        if not images:
+            raise ProviderError(self.name, "empty chapter images")
         return ChapterPages.from_urls(
-            list(pages),
+            list(images),
             provider=self.name,
             chapter_number=chapter.number,
             chapter_name=chapter.name,
-            source_url=chapter.url,
+            source_url=url,
+            referer=BASE_SITE + "/",
             ttl_seconds=6 * 3600,
         )
+
