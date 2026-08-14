@@ -393,10 +393,14 @@ def provider_status() -> dict[str, Any]:
     out: dict[str, Any] = {
         "sqlite": lumen_db is not None,
         "sanka": sanka_provider is not None,
+        "sanka_banned": _SANKA_BANNED,
+        "sanka_ban_reason": _SANKA_BAN_REASON,
+        "sanka_ok": sanka_provider is not None and not _SANKA_BANNED,
         "source_of_truth": "canonical_db_when_synced_else_provider",
         "cache": "sqlite_read_through",
         "mongo": "optional_catalog_primary_when_present",
         "architecture": "ProviderManager is single authority",
+        "fallback_chain": ["komikcast", "sanka_shinigami", "komiku_direct"],
     }
     try:
         try:
