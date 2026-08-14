@@ -134,6 +134,17 @@ except Exception:
     )
 
 # path context for cache_set (thread-local-ish via key parse)
+def _warmer_status():
+    try:
+        try:
+            from cache_warmer import status as _ws
+        except Exception:
+            from server.cache_warmer import status as _ws
+        return _ws()
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def _ttl_for(sub_path):
     soft, hard = _policy_ttl(sub_path)
     return hard  # backward compat: hard TTL
@@ -749,6 +760,7 @@ class Handler(BaseHTTPRequestHandler):
                         "ok": True,
                         "api_base": API_BASE,
                         "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                        "cache_warmer": _warmer_status(),
                         "db": _db_stats_safe(),
                         "providers": providers,
                         "rate_limit": {
@@ -800,6 +812,7 @@ class Handler(BaseHTTPRequestHandler):
                         if isinstance(r, dict)
                     ],
                     "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                    "cache_warmer": _warmer_status(),
                     "db": _db_stats_safe(),
                 }
                 return self.send_json(200, metrics)
@@ -1228,6 +1241,15 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    try:
+        try:
+            from cache_warmer import start_background_warmer
+        except Exception:
+            from server.cache_warmer import start_background_warmer  # type: ignore
+        start_background_warmer()
+    except Exception as _warm_err:
+        print("cache_warmer start failed:", _warm_err, flush=True)
+
     global PORT, HOST
     HOST = "0.0.0.0"
     try:
