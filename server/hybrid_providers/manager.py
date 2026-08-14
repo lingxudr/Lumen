@@ -154,6 +154,9 @@ class ProviderManager:
         """Health check aktif (1 latest item) per provider."""
         rows = []
         for p in self.providers:
+            if not p.supports(CAP_LATEST):
+                rows.append({"provider": p.name, "ok": False, "error": "no latest capability", "skipped": True})
+                continue
             t0 = time.time()
             try:
                 batch = p.get_latest(page=1, limit=1)
@@ -162,8 +165,20 @@ class ProviderManager:
                 rows.append({"provider": p.name, "ok": True, "latency_ms": round(ms, 1), "sample": len(batch)})
             except Exception as e:
                 ms = (time.time() - t0) * 1000
-                REGISTRY.get(p.name).record_failure(ms, str(e))
-                rows.append({"provider": p.name, "ok": False, "latency_ms": round(ms, 1), "error": str(e)[:200]})
+                err = classify_exception(p.name, e)
+                REGISTRY.get(p.name).record_failure(
+                    ms,
+                    str(err),
+                    kind=err.kind,
+                    force_cooldown=err.cooldown_sec if err.degrade_provider else None,
+                )
+                rows.append({
+                    "provider": p.name,
+                    "ok": False,
+                    "latency_ms": round(ms, 1),
+                    "error": str(err)[:200],
+                    "kind": err.kind,
+                })
         return rows
 
     # ------------------------------------------------------------------
