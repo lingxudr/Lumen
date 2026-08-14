@@ -97,10 +97,13 @@ class SankaProvider(BaseProvider):
                 raise ProviderError(self.name, "need chapter_id UUID for sanka pages")
             inner = (payload.get("data") or {}).get("data") or payload.get("data") or {}
             images = inner.get("images") or []
-            return ChapterPages(
-                images=list(images),
+            return ChapterPages.from_urls(
+                list(images),
                 provider=self.name,
                 chapter_number=chapter.number,
+                chapter_name=chapter.name,
+                referer="https://www.sankavollerei.web.id/",
+                ttl_seconds=6 * 3600,
             )
         except ProviderError:
             raise
