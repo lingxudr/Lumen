@@ -5,6 +5,7 @@ const KEYS = {
   prefs: "lumen:readerPrefs",
   bookmarks: "lumen:bookmarks",
   history: "lumen:history",
+  progress: "lumen:readingProgress",
 };
 
 function readJSON(key, fallback) {
@@ -47,6 +48,8 @@ export function getPrefs() {
     theme: "dark",
     fit: "width",
     chapterOrder: "desc", // desc = terbaru dulu, asc = dari ch 1
+    mode: "webtoon", // webtoon | vertical | single | double
+    autoNext: true,
     ...readJSON(KEYS.prefs, {}),
   };
 }
@@ -108,4 +111,26 @@ export function pushHistory(entry) {
 
 export function clearHistory() {
   writeJSON(KEYS.history, []);
+}
+
+
+/* —— Progress halaman per (slug, chapter) —— */
+export function getReadingProgress(slug, chapter) {
+  const all = readJSON(KEYS.progress, {});
+  const key = `${slug}::${chapter}`;
+  return all[key] || null;
+}
+
+export function saveReadingProgress(slug, chapter, page, total) {
+  if (!slug || chapter == null) return;
+  const all = readJSON(KEYS.progress, {});
+  const key = `${slug}::${chapter}`;
+  all[key] = { page: page || 0, total: total || 0, at: Date.now() };
+  // cap keys
+  const keys = Object.keys(all).sort((a, b) => (all[b].at || 0) - (all[a].at || 0));
+  const trimmed = {};
+  keys.slice(0, 300).forEach((k) => {
+    trimmed[k] = all[k];
+  });
+  writeJSON(KEYS.progress, trimmed);
 }

@@ -1,7 +1,7 @@
 import { api, apiPrefetch, proxyImageUrl, checkImageStatus } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
-import { saveLastRead, getPrefs, savePrefs } from "../storage.js";
+import { saveLastRead, getPrefs, savePrefs, saveReadingProgress } from "../storage.js";
 
 export function createReaderView(ctx) {
   let scrollBound = false;
@@ -60,6 +60,9 @@ export function createReaderView(ctx) {
   }
 
   function bindScroll() {
+    window.removeEventListener("scroll", maybeEarlyPrefetchNext);
+    window.addEventListener("scroll", maybeEarlyPrefetchNext, { passive: true });
+
     if (scrollBound) return;
     scrollBound = true;
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -85,14 +88,35 @@ export function createReaderView(ctx) {
     const idxs = ctx.state.chapters.map((c) => String(chapterIndex(c)));
     const pos = idxs.indexOf(String(currentIndex));
     if (pos < 0) return;
-    // list newest-first: pos-1 = newer, pos+1 = older
-    for (const p of [pos - 1, pos + 1]) {
+    // prefetch tetangga segera — jangan tunggu last image
+    for (const p of [pos - 1, pos + 1, pos - 2]) {
       if (p < 0 || p >= idxs.length) continue;
       apiPrefetch(
         `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(idxs[p])}`,
         {},
         { ttl: 15 * 60_000, stale: 30 * 60_000 }
       );
+    }
+  }
+
+  let _earlyPrefetchDone = false;
+  function maybeEarlyPrefetchNext() {
+    if (_earlyPrefetchDone) return;
+    const prefs = getPrefs();
+    if (prefs.autoNext === false) return;
+    const el = document.documentElement;
+    const max = el.scrollHeight - el.clientHeight;
+    if (max <= 0) return;
+    const ratio = window.scrollY / max;
+    if (ratio >= 0.4) {
+      _earlyPrefetchDone = true;
+      prefetchNeighborChapters(ctx.state.chapterIndex);
+    }
+    const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
+    const images = ctx.state.chapterData?.data?.images || ctx.state.chapterData?.images || [];
+    if (slug && images.length) {
+      const page = Math.min(images.length - 1, Math.floor(ratio * images.length));
+      saveReadingProgress(slug, ctx.state.chapterIndex, page, images.length);
     }
   }
 

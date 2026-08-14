@@ -1,10 +1,13 @@
 {
   "name": "lumen",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Lumen manga reader",
   "scripts": {
-    "start": "python3 -u server/app.py",
-    "dev": "python3 -u server/app.py"
+    "start": "python3 -u server/boot.py",
+    "dev": "python3 -u server/boot.py",
+    "test": "python3 tests/matching/test_canonical.py && python3 tests/security/test_ssrf.py",
+    "check": "python3 -m compileall -q server && npm test",
+    "lint:py": "python3 -m compileall -q server"
   }
 }
