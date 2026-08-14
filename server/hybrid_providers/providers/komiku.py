@@ -26,6 +26,11 @@ from ..models import ChapterInfo, ChapterPages, MangaInfo
 from .komiku_scraper import KomikuEngine
 
 BASE_SITE = "https://komiku.org"
+BASE_MIRRORS = [
+    "https://komiku.org",
+    "https://komiku.id",
+    "https://api.komiku.org",
+]
 REST_BASE = f"{BASE_SITE}/wp-json/wp/v2"
 
 HEADERS = {
@@ -158,32 +163,60 @@ class KomikuProvider(BaseProvider):
     # ------------------------------------------------------------------
 
     def _get_html(self, url: str, **kwargs: Any) -> str:
-        try:
-            r = self.session.get(
-                url,
-                timeout=self.timeout,
-                headers={**HEADERS, "Accept": "text/html,*/*"},
-                **kwargs,
-            )
-            r.raise_for_status()
-            r.encoding = r.apparent_encoding or "utf-8"
-            return r.text
-        except Exception as e:
-            raise ProviderError(self.name, f"GET HTML failed: {url}", cause=e) from e
+        urls = [url]
+        # swap host across mirrors when url is on komiku family
+        for base in BASE_MIRRORS:
+            for host in ("https://komiku.org", "https://komiku.id", "https://api.komiku.org"):
+                if host in url and base != host:
+                    urls.append(url.replace(host, base))
+        last_err: Exception | None = None
+        seen: set[str] = set()
+        for u in urls:
+            if u in seen:
+                continue
+            seen.add(u)
+            try:
+                r = self.session.get(
+                    u,
+                    timeout=self.timeout,
+                    headers={**HEADERS, "Accept": "text/html,*/*", "Referer": u.rsplit("/", 1)[0] + "/"},
+                    **kwargs,
+                )
+                r.raise_for_status()
+                r.encoding = r.apparent_encoding or "utf-8"
+                return r.text
+            except Exception as e:
+                last_err = e
+                continue
+        raise ProviderError(self.name, f"GET HTML failed: {url}", cause=last_err) from last_err
 
     def _get_json(self, path: str, params: dict | None = None) -> Any:
-        url = path if path.startswith("http") else f"{REST_BASE}{path}"
-        try:
-            r = self.session.get(
-                url,
-                params=params,
-                timeout=self.timeout,
-                headers={**HEADERS, "Accept": "application/json"},
-            )
-            r.raise_for_status()
-            return r.json(), r.headers
-        except Exception as e:
-            raise ProviderError(self.name, f"GET JSON failed: {url}", cause=e) from e
+        if path.startswith("http"):
+            candidates = [path]
+        else:
+            candidates = [f"{base}/wp-json/wp/v2{path}" for base in BASE_MIRRORS]
+        last_err: Exception | None = None
+        for url in candidates:
+            try:
+                r = self.session.get(
+                    url,
+                    params=params,
+                    timeout=self.timeout,
+                    headers={
+                        **HEADERS,
+                        "Accept": "application/json",
+                        "Referer": url.split("/wp-json")[0] + "/",
+                    },
+                )
+                r.raise_for_status()
+                return r.json(), r.headers
+            except Exception as e:
+                last_err = e
+                print(f"komiku mirror fail {url}: {e}", flush=True)
+                continue
+        raise ProviderError(
+            self.name, f"GET JSON failed: {path}", cause=last_err
+        ) from last_err
 
     # ------------------------------------------------------------------
     # Taxonomy map (lazy + disk + stale-while-revalidate)

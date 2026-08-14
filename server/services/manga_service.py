@@ -171,7 +171,38 @@ def _komiku_list_payload(take: int = 20, page: int = 1, q: str = "", popular: bo
         }
     except Exception as e:
         print("komiku_direct list error:", e, flush=True)
-        return None
+
+    # Last resort: bundled seed (when Railway IP blocked from all mirrors)
+    try:
+        from pathlib import Path
+        seed_paths = [
+            Path(__file__).resolve().parent.parent / "static" / "komiku_seed_latest.json",
+            Path(__file__).resolve().parent.parent / "data" / "komiku_seed_latest.json",
+            Path("server/static/komiku_seed_latest.json"),
+            Path("server/data/komiku_seed_latest.json"),
+            Path("/app/server/static/komiku_seed_latest.json"),
+        ]
+        for sp in seed_paths:
+            if sp.is_file():
+                import json as _json
+                payload = _json.loads(sp.read_text(encoding="utf-8"))
+                data = payload.get("data") or []
+                if page > 1:
+                    # seed only has page 1
+                    return {
+                        "status": 200,
+                        "message": "Seed cache (page limited)",
+                        "data": [],
+                        "meta": {"source": "seed_file", "page": page, "lastPage": 1, "total": 0},
+                    }
+                payload["data"] = data[:take]
+                payload.setdefault("meta", {})["source"] = "seed_file"
+                payload["meta"]["take"] = take
+                print("komiku_direct: using seed file", sp, flush=True)
+                return payload
+    except Exception as e2:
+        print("seed load error:", e2, flush=True)
+    return None
 
 
 def _komiku_detail_payload(slug: str) -> dict | None:
