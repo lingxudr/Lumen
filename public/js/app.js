@@ -27,15 +27,15 @@ const home = createHomeView(ctx);
 const series = createSeriesView(ctx);
 const reader = createReaderView(ctx);
 const library = createLibraryView(ctx);
-ctx.openSeries = async (slug) => {
+ctx.openSeries = async (slug, hint) => {
   navigate({ name: "series", slug });
   setMeta({
-    title: `Lumen — ${slug}`,
-    description: `Baca ${slug} online di Lumen`,
+    title: `Lumen — ${hint?.title || slug}`,
+    description: `Baca ${hint?.title || slug} online di Lumen`,
     url: location.origin + pathFor({ name: "series", slug }),
     type: "article",
   });
-  return series.openSeries(slug);
+  return series.openSeries(slug, hint);
 };
 ctx.openChapter = async (index) => {
   const slug = state.series?.data?.slug || state.series?.slug || "";
