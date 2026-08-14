@@ -207,7 +207,17 @@ class SyncJob:
         except Exception:
             pass
 
-        self.stats["finished_at"] = _now().isoformat()
+                self.stats["finished_at"] = _now().isoformat()
+        try:
+            try:
+                from server.cache_policy import invalidate_list, bump_generation
+            except Exception:
+                from cache_policy import invalidate_list, bump_generation  # type: ignore
+            invalidate_list()
+            bump_generation()
+            self.stats["cache_invalidated"] = True
+        except Exception:
+            self.stats["cache_invalidated"] = False
         return self.stats
 
     # ------------------------------------------------------------------

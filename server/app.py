@@ -100,58 +100,70 @@ import threading
 import time
 from collections import defaultdict, deque
 
-# ── Tiered API cache (agresif, hemat upstream) ───────────────────────
-# list/search: 60s | series detail: 5m | chapter list: 3m
-# single chapter: 15m | genres: 30m | images: 2h
-API_CACHE = {}
+# ── Tiered API cache + tag invalidation (see cache_policy.py) ────────
 IMG_CACHE = {}
-API_CACHE_MAX = 256
 IMG_CACHE_MAX = 48
 IMG_CACHE_TTL = 2 * 3600
 _CACHE_LOCK = threading.Lock()
 
+try:
+    from cache_policy import (  # type: ignore
+        cache_get as _policy_get,
+        cache_set as _policy_set,
+        ttl_for as _policy_ttl,
+        invalidate as cache_invalidate,
+        invalidate_series as cache_invalidate_series,
+        invalidate_list as cache_invalidate_list,
+        flush_all as cache_flush_all,
+        stats as cache_stats,
+        generation as cache_generation,
+        bump_generation as cache_bump_generation,
+    )
+except Exception:
+    from server.cache_policy import (  # type: ignore
+        cache_get as _policy_get,
+        cache_set as _policy_set,
+        ttl_for as _policy_ttl,
+        invalidate as cache_invalidate,
+        invalidate_series as cache_invalidate_series,
+        invalidate_list as cache_invalidate_list,
+        flush_all as cache_flush_all,
+        stats as cache_stats,
+        generation as cache_generation,
+        bump_generation as cache_bump_generation,
+    )
 
+# path context for cache_set (thread-local-ish via key parse)
 def _ttl_for(sub_path):
-    """TTL cache API (detik) — production-oriented."""
-    s = (sub_path or "").split("?")[0].strip("/")
-    # latest / list
-    if s == "series" or s.startswith("series?"):
-        return 10 * 60  # 10 menit
-    # chapter pages
-    if "/chapters/" in s and s.count("/") >= 3:
-        return 3 * 24 * 3600  # 3 hari
-    # chapter list
-    if s.endswith("/chapters") or "/chapters" in s:
-        return 30 * 60  # 30 menit
-    # series detail
-    if s.startswith("series/"):
-        return 12 * 3600  # 12 jam metadata
-    return 15 * 60
+    soft, hard = _policy_ttl(sub_path)
+    return hard  # backward compat: hard TTL
 
 
-def cache_get(key):
-    with _CACHE_LOCK:
-        row = API_CACHE.get(key)
-        if not row:
-            return None
-        body, exp, ttl = row
-        if time.time() > exp:
-            API_CACHE.pop(key, None)
-            return None
-        return body, max(0, int(exp - time.time())), ttl
+def cache_get(key, allow_stale=True):
+    hit = _policy_get(key, allow_stale=allow_stale)
+    if hit is None:
+        return None
+    body, meta = hit
+    return body, meta.get("age_left_hard", 0), meta.get("hard_ttl") or meta.get("age_left_hard", 0), meta
 
 
-def cache_set(key, body, ttl):
-    with _CACHE_LOCK:
-        if len(API_CACHE) >= API_CACHE_MAX:
-            now = time.time()
-            for k, v in list(API_CACHE.items()):
-                if now > v[1]:
-                    API_CACHE.pop(k, None)
-            if len(API_CACHE) >= API_CACHE_MAX:
-                for k in list(API_CACHE.keys())[: API_CACHE_MAX // 2]:
-                    API_CACHE.pop(k, None)
-        API_CACHE[key] = (body, time.time() + ttl, ttl)
+def cache_set(key, body, ttl, sub_path=None):
+    # ttl arg = hard; derive soft as min(ttl, soft_default)
+    sp = sub_path or ""
+    if not sp and key.startswith("GET "):
+        # extract path after host-ish
+        try:
+            from urllib.parse import urlparse
+            u = urlparse(key[4:].strip())
+            sp = (u.path or "").lstrip("/")
+            if u.query:
+                sp = sp  # tags ignore query
+        except Exception:
+            sp = ""
+    soft, hard = _policy_ttl(sp)
+    if ttl and ttl > 0:
+        hard = int(ttl)
+    _policy_set(key, body, sp, soft=soft, hard=hard)
 
 
 def img_cache_get(key):
@@ -736,7 +748,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         "api_base": API_BASE,
-                        "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                        "cache": {**cache_stats(), "img": len(IMG_CACHE)},
                         "db": _db_stats_safe(),
                         "providers": providers,
                         "rate_limit": {
@@ -787,7 +799,7 @@ class Handler(BaseHTTPRequestHandler):
                         for r in providers
                         if isinstance(r, dict)
                     ],
-                    "cache": {"api": len(API_CACHE), "img": len(IMG_CACHE)},
+                    "cache": {**cache_stats(), "img": len(IMG_CACHE)},
                     "db": _db_stats_safe(),
                 }
                 return self.send_json(200, metrics)
@@ -922,13 +934,14 @@ class Handler(BaseHTTPRequestHandler):
 
                 cache_key = "GET " + url
                 ttl = _ttl_for(sub)
-                hit = cache_get(cache_key)
+                hit = cache_get(cache_key, allow_stale=True)
                 if hit is not None:
-                    body, age_left, used_ttl = hit
+                    body, age_left, used_ttl, meta = hit
                     extra = dict(rate_headers)
-                    extra["X-Lumen-Cache"] = "HIT"
+                    extra["X-Lumen-Cache"] = "STALE" if meta.get("stale") else "HIT"
                     extra["X-Lumen-Cache-TTL"] = str(used_ttl)
-                    extra["Cache-Control"] = "public, max-age=%d" % min(age_left, used_ttl)
+                    extra["X-Lumen-Cache-Gen"] = str(meta.get("gen") or "")
+                    extra["Cache-Control"] = "public, max-age=%d" % min(age_left, used_ttl or age_left)
                     return self.send_bytes(
                         200,
                         body,
@@ -952,7 +965,7 @@ class Handler(BaseHTTPRequestHandler):
                         )
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body:
-                        cache_set(cache_key, sanka_body, ttl)
+                        cache_set(cache_key, sanka_body, ttl, sub_path=sub)
                         extra = dict(rate_headers)
                         extra["X-Lumen-Cache"] = "SANKA"
                         extra["X-Lumen-Cache-TTL"] = str(ttl)
@@ -974,7 +987,7 @@ class Handler(BaseHTTPRequestHandler):
                 ct = hdrs.get("content-type") or "application/json; charset=utf-8"
                 extra = dict(rate_headers)
                 if code == 200:
-                    cache_set(cache_key, body, ttl)
+                    cache_set(cache_key, body, ttl, sub_path=sub)
                     _persist_upstream(sub, body)
                     extra["X-Lumen-Cache"] = "MISS"
                     extra["X-Lumen-Cache-TTL"] = str(ttl)
@@ -994,7 +1007,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 sanka_body = _sanka_fallback_for_sub(sub, qs)
                 if sanka_body:
-                    cache_set(cache_key, sanka_body, ttl)
+                    cache_set(cache_key, sanka_body, ttl, sub_path=sub)
                     extra["X-Lumen-Cache"] = "SANKA"
                     extra["X-Lumen-DB"] = "MISS"
                     extra["X-Lumen-Cache-TTL"] = str(ttl)
