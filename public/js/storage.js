@@ -50,6 +50,10 @@ export function getPrefs() {
     chapterOrder: "desc", // desc = terbaru dulu, asc = dari ch 1
     mode: "webtoon", // webtoon | vertical | single | double
     autoNext: true,
+    showProgress: true,
+    tapNav: true,
+    fullscreen: false,
+    mode: "webtoon",
     ...readJSON(KEYS.prefs, {}),
   };
 }

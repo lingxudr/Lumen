@@ -9,15 +9,39 @@ export function createReaderView(ctx) {
 
   function applyPrefs() {
     const prefs = getPrefs();
-    const stage = $("#reader-stage") || document.body;
     document.body.dataset.readerTheme = prefs.theme || "dark";
     document.body.dataset.readerFit = prefs.fit || "width";
-    document.querySelectorAll(".seg-btn[data-theme]").forEach((b) => {
-      b.classList.toggle("is-active", b.dataset.theme === prefs.theme);
+    const root = document.getElementById("view-reader");
+    if (root) {
+      root.classList.toggle("lumen-reader--hide-progress", prefs.showProgress === false);
+      root.classList.toggle("lumen-reader--no-tap", prefs.tapNav === false);
+    }
+    // segment active states
+    document.querySelectorAll("#reader-menu [data-theme]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.theme === (prefs.theme || "dark"));
     });
-    document.querySelectorAll(".seg-btn[data-fit]").forEach((b) => {
-      b.classList.toggle("is-active", b.dataset.fit === prefs.fit);
+    document.querySelectorAll("#reader-menu [data-fit]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.fit === (prefs.fit || "width"));
     });
+    document.querySelectorAll("#reader-menu [data-mode]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.mode === (prefs.mode || "webtoon"));
+    });
+    const map = {
+      "pref-auto-next": prefs.autoNext !== false,
+      "pref-show-progress": prefs.showProgress !== false,
+      "pref-tap-nav": prefs.tapNav !== false,
+      "pref-fullscreen": !!prefs.fullscreen,
+    };
+    Object.entries(map).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = val;
+    });
+    if (prefs.fullscreen && document.fullscreenElement == null) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+    if (!prefs.fullscreen && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
   }
 
   function setTheme(theme) {
@@ -31,13 +55,13 @@ export function createReaderView(ctx) {
   }
 
   function updateProgress() {
-    const bar = $("#reader-progress-bar");
-    const wrap = $("#reader-progress");
-    if (!bar || !wrap) return;
     const el = document.documentElement;
     const max = el.scrollHeight - el.clientHeight;
-    const pct = max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0;
-    bar.style.width = pct + "%";
+    const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    const bar = document.getElementById("reader-progress-bar");
+    if (bar) bar.style.width = `${Math.round(ratio * 100)}%`;
+    const pct = document.getElementById("reader-progress-pct");
+    if (pct) pct.textContent = `${Math.round(ratio * 100)}%`;
   }
 
   function onScroll() {
@@ -172,7 +196,14 @@ export function createReaderView(ctx) {
     const ch = ctx.state.chapterData;
     const d = ctx.state.series?.data || {};
     const idx = ch?.chapterIndex ?? ctx.state.chapterIndex;
-    $("#reader-title").textContent = `${d.title || ""} · Ch. ${idx}`;
+    const mangaTitleEl = document.getElementById("reader-manga-title");
+    if (mangaTitleEl) mangaTitleEl.textContent = d.title || "—";
+    const titleEl = $("#reader-title");
+    if (titleEl) titleEl.textContent = `Chapter ${idx}`;
+    const navCh = document.getElementById("reader-nav-chapter-label");
+    if (navCh) navCh.textContent = `Chapter ${idx}`;
+    const endLab = document.getElementById("reader-end-chapter-label");
+    if (endLab) endLab.textContent = `Chapter ${idx}`;
 
     const images = ch?.data?.images || ch?.images || [];
     const useProxy = $("#use-proxy")?.checked;
@@ -180,7 +211,12 @@ export function createReaderView(ctx) {
     box.innerHTML = "";
 
     if (!images.length) {
-      box.innerHTML = '<div class="img-error">Halaman tidak tersedia untuk chapter ini.</div>';
+      box.innerHTML = `<div class="lumen-reader-img-error img-error">
+        <div class="lumen-reader-chibi" aria-hidden="true">💭</div>
+        <strong>Gambar gagal dimuat</strong>
+        <span>Terjadi masalah saat memuat gambar.</span>
+        <button type="button" class="lumen-reader-btn-primary" onclick="App.reloadChapter()">Coba Lagi</button>
+      </div>`;
       return;
     }
 
@@ -347,6 +383,17 @@ export function createReaderView(ctx) {
         .join("");
   }
 
+  function setPref(key, value) {
+    const patch = { [key]: value };
+    savePrefs(patch);
+    applyPrefs();
+  }
+
+  function setMode(mode) {
+    savePrefs({ mode: mode || "webtoon" });
+    applyPrefs();
+  }
+
   return {
     openChapter,
     render,
@@ -355,6 +402,8 @@ export function createReaderView(ctx) {
     reload: render,
     setTheme,
     setFit,
+    setMode,
+    setPref,
     applyPrefs,
   };
 }

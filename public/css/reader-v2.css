@@ -1,0 +1,596 @@
+/* ==========================================================================
+   LUMEN READER V2 — scoped exclusively under #view-reader / .lumen-reader
+   Does not affect homepage, detail, search, or global chrome.
+   ========================================================================== */
+
+#view-reader.lumen-reader {
+  --lr-bg: #080a12;
+  --lr-bg-2: #0d1020;
+  --lr-accent: #8b5cf6;
+  --lr-accent-2: #7c3aed;
+  --lr-accent-soft: #a78bfa;
+  --lr-glass: rgba(12, 14, 25, 0.78);
+  --lr-glass-strong: rgba(12, 14, 25, 0.94);
+  --lr-border: rgba(255, 255, 255, 0.08);
+  --lr-text: #f4f4f8;
+  --lr-muted: rgba(244, 244, 248, 0.62);
+  --lr-radius: 18px;
+  --lr-header-h: 58px;
+  --lr-nav-h: 64px;
+  --lr-safe-top: env(safe-area-inset-top, 0px);
+  --lr-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  position: relative;
+  min-height: 100dvh;
+  background: linear-gradient(180deg, var(--lr-bg) 0%, var(--lr-bg-2) 100%);
+  color: var(--lr-text);
+  overflow-x: hidden;
+  padding-bottom: calc(var(--lr-nav-h) + var(--lr-safe-bottom) + 12px);
+}
+
+/* Hide default site chrome noise while reading */
+body.mode-reader #view-reader.lumen-reader ~ * { }
+body.mode-reader:has(#view-reader:not(.is-hidden)) .tabs,
+body.mode-reader:has(#view-reader:not(.is-hidden)) .app-header,
+body.mode-reader:has(#view-reader:not(.is-hidden)) .search-bar {
+  /* leave global alone — only reader paints over */
+}
+
+/* ---------- Progress ---------- */
+#view-reader.lumen-reader .lumen-reader-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(6px + var(--lr-safe-top)) 14px 0;
+  pointer-events: none;
+}
+
+#view-reader.lumen-reader .lumen-reader-progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+#view-reader.lumen-reader .lumen-reader-progress-bar,
+#view-reader.lumen-reader #reader-progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lr-accent-2), var(--lr-accent-soft));
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.45);
+  transition: width 0.12s linear;
+}
+
+#view-reader.lumen-reader .lumen-reader-progress-pct {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--lr-muted);
+  min-width: 2.4em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#view-reader.lumen-reader.lumen-reader--hide-progress .lumen-reader-progress {
+  display: none;
+}
+
+/* ---------- Floating header ---------- */
+#view-reader.lumen-reader .lumen-reader-header,
+#view-reader.lumen-reader #reader-top {
+  position: fixed;
+  top: calc(14px + var(--lr-safe-top));
+  left: 12px;
+  right: 12px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--lr-header-h);
+  padding: 10px 12px;
+  background: var(--lr-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--lr-border);
+  border-radius: var(--lr-radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+#view-reader.lumen-reader #reader-top.is-away {
+  transform: translateY(calc(-120% - var(--lr-safe-top)));
+  opacity: 0;
+  pointer-events: none;
+}
+
+#view-reader.lumen-reader .lumen-reader-header-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#view-reader.lumen-reader .lumen-reader-header-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--lr-text);
+}
+
+#view-reader.lumen-reader .lumen-reader-header-sub,
+#view-reader.lumen-reader #reader-title {
+  font-size: 12px;
+  color: var(--lr-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#view-reader.lumen-reader .lumen-reader-icon-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lr-text);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#view-reader.lumen-reader .lumen-reader-icon-btn:hover {
+  background: rgba(139, 92, 246, 0.18);
+  color: var(--lr-accent-soft);
+}
+#view-reader.lumen-reader .lumen-reader-icon-btn:active {
+  transform: scale(0.96);
+}
+
+/* ---------- Content / pages ---------- */
+#view-reader.lumen-reader .lumen-reader-content,
+#view-reader.lumen-reader #reader-stage {
+  position: relative;
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: calc(var(--lr-header-h) + var(--lr-safe-top) + 28px);
+  background: transparent;
+}
+
+#view-reader.lumen-reader .lumen-reader-pages,
+#view-reader.lumen-reader #reader-pages {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+#view-reader.lumen-reader .lumen-reader-pages img,
+#view-reader.lumen-reader #reader-pages img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+  opacity: 0;
+  animation: lumenReaderImgIn 0.2s ease forwards;
+}
+
+@keyframes lumenReaderImgIn {
+  to { opacity: 1; }
+}
+
+#view-reader.lumen-reader .page-slot {
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+}
+
+#view-reader.lumen-reader .img-error,
+#view-reader.lumen-reader .lumen-reader-img-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 220px;
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--lr-muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Fit modes (scoped) */
+body[data-reader-fit="width"] #view-reader.lumen-reader #reader-pages img {
+  max-width: 100%;
+}
+body[data-reader-fit="comfortable"] #view-reader.lumen-reader #reader-pages img {
+  max-width: min(720px, 100%);
+}
+body[data-reader-fit="small"] #view-reader.lumen-reader #reader-pages img {
+  max-width: min(520px, 92%);
+}
+
+/* Theme surfaces */
+body[data-reader-theme="dark"] #view-reader.lumen-reader {
+  --lr-bg: #05060a;
+  --lr-bg-2: #080a12;
+}
+body[data-reader-theme="light"] #view-reader.lumen-reader {
+  --lr-bg: #1a1410;
+  --lr-bg-2: #241c16;
+  --lr-text: #f5e6d3;
+  --lr-muted: rgba(245, 230, 211, 0.65);
+}
+
+/* Tap zones */
+#view-reader.lumen-reader .tap-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  max-width: 96px;
+  z-index: 5;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+#view-reader.lumen-reader .tap-zone--prev { left: 0; }
+#view-reader.lumen-reader .tap-zone--next { right: 0; }
+#view-reader.lumen-reader.lumen-reader--no-tap .tap-zone {
+  display: none;
+}
+
+/* ---------- Settings backdrop + panel ---------- */
+#view-reader.lumen-reader .lumen-reader-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 1;
+  transition: opacity 0.22s ease;
+}
+#view-reader.lumen-reader .lumen-reader-settings-backdrop.is-hidden {
+  display: none;
+}
+
+#view-reader.lumen-reader .lumen-reader-settings,
+#view-reader.lumen-reader #reader-menu {
+  position: fixed;
+  z-index: 80;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + var(--lr-safe-bottom));
+  max-height: min(78dvh, 640px);
+  overflow: auto;
+  padding: 10px 16px 20px;
+  background: var(--lr-glass-strong);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--lr-border);
+  border-radius: 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  transform: translateY(0);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+#view-reader.lumen-reader #reader-menu.is-hidden {
+  display: none;
+}
+
+#view-reader.lumen-reader .lumen-reader-settings-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  margin: 4px auto 12px;
+}
+
+#view-reader.lumen-reader .lumen-reader-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+#view-reader.lumen-reader .lumen-reader-settings-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--lr-text);
+}
+
+#view-reader.lumen-reader .lumen-reader-setting {
+  margin-bottom: 16px;
+}
+#view-reader.lumen-reader .lumen-reader-setting-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lr-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#view-reader.lumen-reader .lumen-reader-seg {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+#view-reader.lumen-reader .lumen-reader-seg-btn,
+#view-reader.lumen-reader #reader-menu .seg-btn {
+  flex: 1;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lr-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#view-reader.lumen-reader #reader-menu .seg-btn.is-active,
+#view-reader.lumen-reader .lumen-reader-seg-btn.is-active {
+  background: var(--lr-accent);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+}
+
+/* Toggles */
+#view-reader.lumen-reader .lumen-reader-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 14px;
+  color: var(--lr-text);
+  cursor: pointer;
+}
+#view-reader.lumen-reader .lumen-reader-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+#view-reader.lumen-reader .lumen-reader-switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+#view-reader.lumen-reader .lumen-reader-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+#view-reader.lumen-reader .lumen-reader-toggle input:checked + .lumen-reader-switch {
+  background: var(--lr-accent);
+}
+#view-reader.lumen-reader .lumen-reader-toggle input:checked + .lumen-reader-switch::after {
+  transform: translateX(18px);
+}
+
+#view-reader.lumen-reader .lumen-reader-soft-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--lr-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lr-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Desktop floating settings */
+@media (min-width: 768px) {
+  #view-reader.lumen-reader .lumen-reader-settings,
+  #view-reader.lumen-reader #reader-menu {
+    left: auto;
+    right: 24px;
+    bottom: auto;
+    top: calc(80px + var(--lr-safe-top));
+    width: 340px;
+    max-height: min(70dvh, 560px);
+    border-radius: 20px;
+  }
+  #view-reader.lumen-reader .lumen-reader-settings-handle {
+    display: none;
+  }
+  #view-reader.lumen-reader .lumen-reader-header,
+  #view-reader.lumen-reader #reader-top {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(720px, calc(100% - 48px));
+  }
+  #view-reader.lumen-reader #reader-top.is-away {
+    transform: translateX(-50%) translateY(calc(-120% - var(--lr-safe-top)));
+  }
+}
+
+/* ---------- Bottom nav ---------- */
+#view-reader.lumen-reader .lumen-reader-nav {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + var(--lr-safe-bottom));
+  z-index: 50;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 8px;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+body.ui-hidden #view-reader.lumen-reader .lumen-reader-nav {
+  transform: translateY(140%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+#view-reader.lumen-reader .lumen-reader-nav-btn,
+#view-reader.lumen-reader .lumen-reader-nav-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 10px 8px;
+  border-radius: 16px;
+  border: 1px solid var(--lr-border);
+  background: rgba(15, 18, 30, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--lr-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#view-reader.lumen-reader .lumen-reader-nav-center {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: var(--lr-accent-soft);
+}
+#view-reader.lumen-reader .lumen-reader-nav-label {
+  display: none;
+}
+@media (min-width: 400px) {
+  #view-reader.lumen-reader .lumen-reader-nav-label {
+    display: inline;
+  }
+}
+
+/* ---------- End of chapter ---------- */
+#view-reader.lumen-reader .lumen-reader-end,
+#view-reader.lumen-reader #reader-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 20px 32px;
+  text-align: center;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+#view-reader.lumen-reader .lumen-reader-chibi {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  background: radial-gradient(circle at 30% 30%, rgba(167, 139, 250, 0.35), rgba(12, 14, 25, 0.9));
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 32px rgba(124, 58, 237, 0.25);
+  margin-bottom: 8px;
+}
+
+#view-reader.lumen-reader .lumen-reader-end-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--lr-text);
+}
+#view-reader.lumen-reader .lumen-reader-end-sub {
+  margin: 0 0 12px;
+  color: var(--lr-muted);
+  font-size: 14px;
+}
+
+#view-reader.lumen-reader .lumen-reader-btn-primary,
+#view-reader.lumen-reader #reader-end .btn-primary {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px 18px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--lr-accent-2), var(--lr-accent));
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35);
+}
+#view-reader.lumen-reader .lumen-reader-btn-ghost,
+#view-reader.lumen-reader #reader-end .btn:not(.btn-primary) {
+  width: 100%;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--lr-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lr-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------- Loading overlay when in reader (optional polish) ---------- */
+body.mode-reader #loading:not(.is-hidden) {
+  background: rgba(8, 10, 18, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+/* Override legacy reader chrome inside v2 only */
+#view-reader.lumen-reader .reader-progress { display: none; }
+#view-reader.lumen-reader .btn.btn-ghost {
+  /* legacy buttons inside reader header replaced */
+}
+
+/* Small phones */
+@media (max-width: 360px) {
+  #view-reader.lumen-reader .lumen-reader-header,
+  #view-reader.lumen-reader #reader-top {
+    left: 8px;
+    right: 8px;
+    padding: 8px 10px;
+  }
+  #view-reader.lumen-reader .lumen-reader-nav {
+    left: 8px;
+    right: 8px;
+  }
+  #view-reader.lumen-reader .lumen-reader-header-title {
+    font-size: 13px;
+  }
+}
+
+/* Desktop content width */
+@media (min-width: 1024px) {
+  #view-reader.lumen-reader .lumen-reader-content,
+  #view-reader.lumen-reader #reader-stage {
+    max-width: 900px;
+  }
+}

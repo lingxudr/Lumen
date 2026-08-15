@@ -82,6 +82,8 @@ const App = {
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
   setReaderFit: reader.setFit,
+  setReaderMode: reader.setMode,
+  setReaderPref: reader.setPref,
   library(mode) {
     document.querySelectorAll(".tab").forEach((t) => {
       t.classList.toggle("is-active", t.dataset.tab === mode);
@@ -91,7 +93,11 @@ const App = {
   clearHistory: library.onClearHistory,
   toggleReaderMenu() {
     const m = document.getElementById("reader-menu");
-    if (m) m.classList.toggle("is-hidden");
+    const bd = document.getElementById("reader-settings-backdrop");
+    if (!m) return;
+    const open = m.classList.contains("is-hidden");
+    m.classList.toggle("is-hidden", !open);
+    if (bd) bd.classList.toggle("is-hidden", !open);
   },
   refresh(force) {
     home.loadList({ force: !!force });
