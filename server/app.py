@@ -86,7 +86,19 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
-API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://api.voratoon.com").rstrip("/")
+def _resolve_api_base() -> str:
+    """KomikCast API host sudah mati (penerus: VoraToon). Abaikan env lama."""
+    raw = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://api.voratoon.com").strip().rstrip("/")
+    if not raw:
+        return "https://api.voratoon.com"
+    low = raw.lower()
+    # Host legacy yang sering DNS fail di Railway
+    if "komikcast" in low or "be.komikcast" in low:
+        print("[config] API_BASE legacy komikcast diabaikan → api.voratoon.com", flush=True)
+        return "https://api.voratoon.com"
+    return raw
+
+API_BASE = _resolve_api_base()
 HOST = os.environ.get("HOST") or os.environ.get("KC_HOST") or "0.0.0.0"
 PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "8080")
 UA = (
@@ -1002,6 +1014,20 @@ class Handler(BaseHTTPRequestHandler):
                             )
 
                 # Upstream proxy (Voratoon-first)
+                # Voratoon-first: series/genres/chapters lewat provider (hindari DNS host mati)
+                sub0 = (sub or "").split("?")[0].strip("/")
+                if sub0 == "series" or sub0 == "genres" or sub0.startswith("series/"):
+                    sanka_body = _sanka_fallback_for_sub(sub, qs)
+                    if sanka_body:
+                        cache_set(cache_key, sanka_body, ttl, sub_path=sub)
+                        extra["X-Lumen-Cache"] = "VORATOON"
+                        extra["X-Lumen-DB"] = "MISS"
+                        extra["X-Lumen-Cache-TTL"] = str(ttl)
+                        extra["Cache-Control"] = "public, max-age=%d" % min(120, ttl)
+                        return self.send_bytes(
+                            200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
+                        )
+
                 url = API_BASE + "/" + sub
                 if parsed.query:
                     url += "?" + parsed.query
