@@ -16,14 +16,15 @@ from urllib.parse import urlparse
 # Hosts yang boleh di-fetch (suffix match: "cdn.example.com" matches example.com only if listed)
 ALLOWED_API_HOSTS = frozenset(
     {
-        "be.komikcast.cc",
-        "v1.voratoon.com",
-        "komikcast.fit",
-        "komikcast.com",
-        "komikcast.to",
         "api.voratoon.com",
         "v1.voratoon.com",
         "voratoon.com",
+        "www.voratoon.com",
+        # legacy (DNS sering mati — tetap di list agar tidak break env lama)
+        "be.komikcast.cc",
+        "komikcast.fit",
+        "komikcast.com",
+        "komikcast.to",
     }
 )
 

@@ -1,68 +1,120 @@
 # Lumen
 
-Reader komik lokal / deployable.
+Reader komik modern (frontend SPA + Python API). Sumber data utama: **VoraToon** (penerus KomikCast).
+
+- Frontend: `https://lumen-delta-lyart.vercel.app`
+- Backend: Railway (`server/app.py`)
+- API sumber: `https://api.voratoon.com` + RSC `https://v1.voratoon.com`
+
+## Fitur
+
+- Katalog Terbaru / Series Baru / Selesai / Browse / Populer
+- Detail manga + daftar chapter (float index aman)
+- Reader V2 (glass header, progress, lazy load, WebP proxy)
+- Cache bertingkat (soft/hard TTL ~5 menit untuk list)
+- Rate limit per IP
+- Image proxy anti-SSRF + allowlist host
+- Favorit & riwayat (localStorage)
 
 ## Struktur
 
 ```
 lumen/
-├── public/                 # Frontend (static)
+├── public/                 # Frontend static
 │   ├── index.html
-│   ├── css/main.css
+│   ├── css/                # main.css, reader-v2.css
 │   └── js/
-│       ├── app.js          # entry
-│       ├── config.js       # pengaturan
-│       ├── api.js          # HTTP client
-│       ├── ui.js           # toast, loading, gambar
-│       ├── utils.js
-│       └── views/          # home, series, reader
-├── server/app.py           # Dev server (Python)
-├── api/                    # Vercel serverless proxy
+│       ├── app.js
+│       ├── config.js
+│       ├── api.js
+│       └── views/          # home, series, reader, library
+├── server/
+│   ├── app.py              # HTTP API + static
+│   ├── security.py         # SSRF / host allowlist
+│   ├── cache_policy.py
+│   ├── cache_warmer.py
+│   ├── providers/          # voratoon, …
+│   └── services/
+├── api/                    # Vercel edge proxy → Railway
 ├── docs/
 ├── vercel.json
-└── package.json
+├── railway.toml
+└── requirements.txt
 ```
 
 ## Pengembangan lokal
 
 ```bash
-cd lumen
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 python3 -u server/app.py
 ```
 
-Buka http://127.0.0.1:5050
+Buka `http://127.0.0.1:8080` (atau `PORT` di env).
 
-## Deploy Vercel
+## Deploy
 
-1. Push repo ini ke GitHub (root = folder `lumen`)
-2. Import di Vercel
-3. Deploy
+| Layer | Platform | Catatan |
+|-------|----------|---------|
+| Frontend + `/api/*` proxy | Vercel | rewrite ke Railway |
+| Python backend | Railway | `server/app.py` |
+| DB opsional | MongoDB Atlas | catalog cache |
 
-Atau: `npx vercel` dari folder `lumen`.
+### Env penting (Railway)
 
-## Kembangkan fitur baru
+| Variable | Default | Fungsi |
+|----------|---------|--------|
+| `PORT` | `8080` | bind port |
+| `API_BASE` | `https://api.voratoon.com` | upstream REST (jangan `be.komikcast.cc`) |
+| `RATE_LIMIT_API` | `20` | req/menit/IP untuk API |
+| `RATE_LIMIT_IMG` | `60` | req/menit/IP untuk gambar |
+| `MONGODB_URI` | — | opsional catalog |
+| `WEBP_QUALITY` | auto | 0 = adaptif |
 
-| Yang diubah | File |
-|-------------|------|
-| Endpoint / base URL | `public/js/config.js` |
-| Request API | `public/js/api.js` |
-| List & search | `public/js/views/home.js` |
-| Detail judul | `public/js/views/series.js` |
-| Halaman baca | `public/js/views/reader.js` |
-| Tampilan / tema | `public/css/main.css` |
-| Markup | `public/index.html` |
+### Env Vercel
 
-Data selalu **live** dari API — refresh halaman = data terbaru.
+| Variable | Fungsi |
+|----------|--------|
+| `LUMEN_UPSTREAM` / `LUMEN_UPSTREAM_HOST` | URL host Railway backend |
 
+## Keamanan
 
-## Hybrid Providers (Komikcast + Komiku)
+Ringkasan — detail di [`docs/SECURITY.md`](docs/SECURITY.md).
 
-Scraper/API multi-provider untuk metadata, chapter, dan gambar baca.
+- **Anti-SSRF** pada `/img` dan proxy: hanya host allowlist, blok IP privat/metadata
+- **Rate limit** sliding window per IP
+- **Header**: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
+- **Path proxy relatif** saja (tolak URL absolut di edge)
+- Tidak menyimpan kredensial pengguna (favorit = localStorage)
 
-- Dokumentasi: [`docs/HYBRID_PROVIDERS.md`](docs/HYBRID_PROVIDERS.md)
-- Kode: `server/hybrid_providers/`
+## API Lumen (backend)
 
-```bash
-pip install -r requirements.txt
-python3 -m server.hybrid_providers.demo
+```text
+GET /api/series?take=30&page=1&mode=newest
+GET /api/series/{slug}
+GET /api/series/{slug}/chapters
+GET /api/series/{slug}/chapters/{index}
+GET /api/genres
+GET /api/health
+GET /img?u=<encoded_url>&fmt=webp&w=480
 ```
+
+Upstream VoraToon (referensi):
+
+```text
+GET https://api.voratoon.com/series
+GET https://api.voratoon.com/series/{slug}/chapters/{index}
+GET https://api.voratoon.com/genres
+GET https://api.voratoon.com/popular
+```
+
+## Lisensi & etika
+
+Proyek personal/edukasi. Hormati ToS sumber konten; jangan spam scrape.
+Gunakan cache + rate limit yang sudah disetel.
+
+## Dokumen lain
+
+- [`docs/SECURITY.md`](docs/SECURITY.md) — keamanan
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arsitektur
+- [`docs/RAILWAY.md`](docs/RAILWAY.md) — deploy Railway

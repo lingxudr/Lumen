@@ -695,6 +695,14 @@ class Handler(BaseHTTPRequestHandler):
             body = str(body).encode("utf-8")
         try:
             extra_headers = dict(extra_headers or {})
+            # Security headers (baseline)
+            extra_headers.setdefault("X-Content-Type-Options", "nosniff")
+            extra_headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+            extra_headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+            extra_headers.setdefault(
+                "Permissions-Policy",
+                "camera=(), microphone=(), geolocation=()",
+            )
             if "Cache-Control" not in extra_headers:
                 extra_headers["Cache-Control"] = "no-store"
 
