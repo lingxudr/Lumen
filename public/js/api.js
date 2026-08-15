@@ -178,25 +178,57 @@ export function clearApiCache() {
 function supportsWebP() {
   if (typeof supportsWebP._v === "boolean") return supportsWebP._v;
   try {
-    supportsWebP._v =
-      typeof document !== "undefined" &&
-      document.createElement("canvas").toDataURL("image/webp").indexOf("data:image/webp") === 0;
+    // Prefer feature detect; fall back to UA sniff only if canvas blocked
+    if (typeof document !== "undefined") {
+      const ok =
+        document.createElement("canvas").toDataURL("image/webp").indexOf("data:image/webp") === 0;
+      supportsWebP._v = ok;
+      return ok;
+    }
   } catch {
-    supportsWebP._v = false;
+    /* ignore */
+  }
+  try {
+    const ua = navigator.userAgent || "";
+    supportsWebP._v = !/Trident|MSIE/.test(ua); // modern browsers OK
+  } catch {
+    supportsWebP._v = true;
   }
   return supportsWebP._v;
 }
 
+function isAlreadyWebp(url) {
+  try {
+    const u = String(url).split("?")[0].toLowerCase();
+    return u.endsWith(".webp");
+  } catch {
+    return false;
+  }
+}
+
 /**
+ * Build image proxy URL with optional WebP + width.
  * @param {string} url
  * @param {{ webp?: boolean, w?: number }} [opts]
  */
 export function proxyImageUrl(url, opts = {}) {
+  if (!url) return "";
   const qs = new URLSearchParams();
   qs.set("u", url);
-  const useWebp = opts.webp !== false && supportsWebP();
-  if (useWebp) qs.set("fmt", "webp");
-  if (opts.w) qs.set("w", String(opts.w));
+  const wantWebp = opts.webp !== false && supportsWebP();
+  // Always request fmt=webp when supported — server skips re-encode if already WebP
+  if (wantWebp) qs.set("fmt", "webp");
+  let w = opts.w;
+  if (w == null && typeof window !== "undefined") {
+    // Auto width for mobile reader: save data on narrow screens
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const vw = window.innerWidth || 400;
+    if (vw > 0 && vw <= 480) w = Math.round(vw * dpr);
+    else if (vw <= 900) w = Math.round(Math.min(900, vw) * dpr);
+  }
+  if (w) qs.set("w", String(Math.max(240, Math.min(1600, Number(w) || 0))));
+  // cache-bust key helper for already-webp sources (still go through proxy for hotlink)
+  if (isAlreadyWebp(url)) qs.set("src", "webp");
   return `${Config.imgProxy}?${qs}`;
 }
 

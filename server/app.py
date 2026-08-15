@@ -232,35 +232,69 @@ def client_ip(handler):
 
 
 def convert_to_webp(body, max_width=None, quality=None):
-    """Re-encode image bytes to WebP. Returns (bytes, content_type) or None."""
+    """Re-encode image bytes to WebP. Returns (bytes, content_type) or None.
+
+    Optimizations:
+    - Skip tiny payloads
+    - Adaptive quality by source size
+    - Prefer smaller output (fallback to original if larger)
+    - Optional downscale via max_width
+    """
     try:
         from io import BytesIO
         from PIL import Image
     except Exception:
         return None
+    if not body or len(body) < 200:
+        return None
     if quality is None:
         try:
-            quality = int(os.environ.get("WEBP_QUALITY") or "78")
+            quality = int(os.environ.get("WEBP_QUALITY") or "0")
         except Exception:
-            quality = 78
+            quality = 0
+    if not quality:
+        # Adaptive: larger originals → slightly lower quality
+        n = len(body)
+        if n > 1_500_000:
+            quality = 70
+        elif n > 700_000:
+            quality = 75
+        else:
+            quality = 80
     try:
         im = Image.open(BytesIO(body))
         im.load()
+        # Already WebP and no resize needed → keep original
+        fmt0 = (getattr(im, "format", None) or "").upper()
         if max_width:
             try:
                 max_width = int(max_width)
             except Exception:
                 max_width = None
-        if max_width and im.width > max_width:
-            h = int(im.height * (max_width / float(im.width)))
+        need_resize = bool(max_width and im.width > max_width)
+        if fmt0 == "WEBP" and not need_resize:
+            return body, "image/webp"
+        if need_resize:
+            h = max(1, int(im.height * (max_width / float(im.width))))
             im = im.resize((max_width, h), Image.Resampling.LANCZOS)
-        if im.mode not in ("RGB", "RGBA"):
+        # Flatten palette / weird modes
+        if im.mode in ("P", "LA"):
+            im = im.convert("RGBA")
+        elif im.mode == "CMYK":
+            im = im.convert("RGB")
+        elif im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGBA" if "A" in im.getbands() else "RGB")
         buf = BytesIO()
-        im.save(buf, format="WEBP", quality=quality, method=4)
+        # method=4 = good compression vs speed balance; optimize for size
+        save_kw = {"format": "WEBP", "quality": quality, "method": 4}
+        if im.mode == "RGB":
+            save_kw["exact"] = False
+        im.save(buf, **save_kw)
         data = buf.getvalue()
-        # only use if smaller or roughly similar
-        if len(data) > len(body) * 1.05 and not max_width:
+        # Keep original if WebP is not beneficial (unless we resized)
+        if not need_resize and len(data) > len(body) * 0.98:
+            if fmt0 == "WEBP":
+                return body, "image/webp"
             return None
         return data, "image/webp"
     except Exception as e:
@@ -1137,26 +1171,29 @@ class Handler(BaseHTTPRequestHandler):
                         _MAX_IMG = 12 * 1024 * 1024
                     if len(body) > _MAX_IMG:
                         return self.send_json(502, {"error": "image_too_large", "bytes": len(body)})
-                    # already webp from CDN
-                    if want_webp and "webp" not in (ct or "").lower():
+                    # Prefer WebP when requested (convert JPEG/PNG; resize if w=)
+                    is_webp = "webp" in (ct or "").lower() or src.lower().endswith(".webp")
+                    if want_webp or max_w:
                         converted = convert_to_webp(body, max_width=max_w)
                         if converted:
                             body, ct = converted
+                            is_webp = True
                             extra["X-Lumen-Image"] = "webp"
-                        elif max_w:
-                            converted = convert_to_webp(body, max_width=max_w, quality=85)
+                        elif want_webp and not is_webp:
+                            # second try slightly higher quality (rare)
+                            converted = convert_to_webp(body, max_width=max_w, quality=82)
                             if converted:
                                 body, ct = converted
+                                is_webp = True
                                 extra["X-Lumen-Image"] = "webp"
-                    elif max_w and want_webp:
-                        converted = convert_to_webp(body, max_width=max_w)
-                        if converted:
-                            body, ct = converted
-                            extra["X-Lumen-Image"] = "webp"
+                    if is_webp:
+                        extra["X-Lumen-Image"] = extra.get("X-Lumen-Image") or "webp"
 
                     img_cache_set(cache_key, body, ct)
                     extra["X-Lumen-Cache"] = "MISS"
-                    extra["Cache-Control"] = "public, max-age=86400"
+                    # WebP/static pages cache longer; browser may revalidate weekly
+                    extra["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
+                    extra["Vary"] = "Accept"
                 else:
                     extra["X-Lumen-Cache"] = "BYPASS"
                 return self.send_bytes(code, body, ct, extra_headers=extra)
