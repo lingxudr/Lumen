@@ -27,11 +27,6 @@ export function createReaderView(ctx) {
     }
     document.body.dataset.readerTheme = prefs.theme || "dark";
     document.body.dataset.readerFit = prefs.fit || "width";
-    const root = document.getElementById("view-reader");
-    if (root) {
-      root.classList.toggle("lumen-reader--hide-progress", prefs.showProgress === false);
-      root.classList.toggle("lumen-reader--no-tap", prefs.tapNav === false);
-    }
     // segment active states
     document.querySelectorAll("#reader-menu [data-theme]").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.theme === (prefs.theme || "dark"));
