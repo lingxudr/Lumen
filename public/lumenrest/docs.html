@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Lumen REST API — Docs</title>
   <meta name="description" content="Dokumentasi & playground REST API Lumen Reader" />
   <style>
@@ -19,75 +19,116 @@
       --code: #0c0e14;
     }
     * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     body {
-      margin: 0;
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
+      min-height: 100dvh;
     }
-    a { color: var(--accent2); }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
     header {
-      position: sticky; top: 0; z-index: 10;
+      position: sticky; top: 0; z-index: 20;
       backdrop-filter: blur(12px);
-      background: rgba(15,17,23,.88);
+      background: rgba(15,17,23,.92);
       border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-      justify-content: space-between;
+      padding: 12px 14px;
     }
-    .brand { display: flex; gap: 10px; align-items: center; font-weight: 800; }
+    .header-row {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; flex-wrap: wrap; gap: 10px;
+      align-items: center; justify-content: space-between;
+    }
+    .brand { display: flex; gap: 10px; align-items: center; font-weight: 800; min-width: 0; }
     .brand span {
-      width: 32px; height: 32px; border-radius: 8px;
+      flex: 0 0 auto;
+      width: 34px; height: 34px; border-radius: 9px;
       background: linear-gradient(135deg, #7c3aed, #c084fc);
       display: grid; place-items: center; font-size: 14px;
     }
+    .brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
     .wm {
-      font-size: 12px; color: var(--muted);
-      border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+      font-size: 11px; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 5px 10px; max-width: 100%;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    main {
-      max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px;
-      display: grid; gap: 20px;
+
+    .layout {
+      max-width: 1100px; margin: 0 auto;
+      padding: 16px 12px 48px;
+      display: grid; gap: 14px;
     }
     @media (min-width: 900px) {
-      main { grid-template-columns: 280px 1fr; align-items: start; }
+      .layout { grid-template-columns: 260px minmax(0,1fr); align-items: start; padding: 24px 16px 64px; gap: 18px; }
     }
+
     aside {
-      position: sticky; top: 72px;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 14px;
+      padding: 12px;
     }
-    aside h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-    aside button {
-      display: block; width: 100%; text-align: left;
-      background: transparent; border: 0; color: var(--text);
-      padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    @media (min-width: 900px) {
+      aside { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow: auto; }
     }
-    aside button:hover, aside button.active { background: #222836; color: var(--accent2); }
+    aside h2 {
+      margin: 0 8px 8px;
+      font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em;
+    }
+    .ep-nav {
+      display: flex; gap: 6px; overflow-x: auto;
+      padding-bottom: 4px; -webkit-overflow-scrolling: touch;
+    }
+    @media (min-width: 900px) {
+      .ep-nav { display: block; overflow: visible; }
+    }
+    .ep-nav button {
+      flex: 0 0 auto;
+      display: block; width: auto;
+      text-align: left;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 10px; border-radius: 10px;
+      cursor: pointer; font-size: 12px; white-space: nowrap;
+    }
+    @media (min-width: 900px) {
+      .ep-nav button {
+        width: 100%; border: 0; margin-bottom: 2px; white-space: normal;
+      }
+    }
+    .ep-nav button:hover, .ep-nav button.active {
+      background: #222836; color: var(--accent2); border-color: #3b455c;
+    }
+    .aside-note { font-size: 12px; color: var(--muted); margin: 12px 6px 0; }
+
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 18px;
+      padding: 14px;
+      min-width: 0;
     }
-    h1 { margin: 0 0 6px; font-size: 1.6rem; }
-    .sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+    @media (min-width: 640px) { .card { padding: 18px; } }
+    h1 { margin: 0 0 6px; font-size: clamp(1.15rem, 4vw, 1.55rem); }
+    .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
     .ep {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 13px;
+      font-size: 12px;
       background: var(--code);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px 12px;
-      margin: 10px 0 14px;
+      margin: 0 0 12px;
       word-break: break-all;
     }
     .ep b { color: var(--ok); margin-right: 8px; }
-    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
-    input, select, textarea {
+    label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+    input, select {
       width: 100%;
       background: var(--code);
       border: 1px solid var(--border);
@@ -95,18 +136,19 @@
       border-radius: 10px;
       padding: 10px 12px;
       font: inherit;
+      font-size: 14px;
     }
     .row { display: grid; gap: 10px; }
-    @media (min-width: 640px) { .row.cols-2 { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 560px) { .row.cols-2 { grid-template-columns: 1fr 1fr; } }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
     .btn {
-      border: 0; border-radius: 10px; padding: 10px 14px;
-      font-weight: 700; cursor: pointer;
+      border: 0; border-radius: 10px; padding: 11px 14px;
+      font-weight: 700; cursor: pointer; font-size: 14px;
       background: linear-gradient(135deg, #7c3aed, #6d28d9);
       color: #fff;
     }
     .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .status { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    .status { font-size: 12px; color: var(--muted); margin-top: 10px; word-break: break-word; }
     .status.ok { color: var(--ok); }
     .status.err { color: var(--err); }
     pre {
@@ -114,68 +156,53 @@
       background: var(--code);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 14px;
+      padding: 12px;
       overflow: auto;
-      max-height: 520px;
-      font-size: 12px;
+      max-height: min(55vh, 520px);
+      font-size: 11.5px;
       line-height: 1.45;
-    }
-    .badge {
-      display: inline-block;
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      margin-left: 6px;
+      -webkit-overflow-scrolling: touch;
     }
     footer {
       text-align: center;
       color: var(--muted);
       font-size: 12px;
-      padding: 24px 16px 40px;
+      padding: 8px 16px 36px;
+      max-width: 1100px; margin: 0 auto;
     }
     footer .mark { color: var(--accent2); font-weight: 700; }
   </style>
 </head>
 <body>
   <header>
-    <div class="brand">
-      <span>L</span>
-      <div>
-        Lumen REST
-        <div style="font-size:12px;color:var(--muted);font-weight:500">API Docs & Playground</div>
+    <div class="header-row">
+      <div class="brand">
+        <span>L</span>
+        <div>
+          Lumen REST
+          <small>API Docs & Playground</small>
+        </div>
       </div>
+      <div class="wm">Powered by Lumen · lumen-delta-lyart.vercel.app</div>
     </div>
-    <div class="wm">Watermark: Powered by Lumen · lumen-delta-lyart.vercel.app</div>
   </header>
 
-  <main>
+  <div class="layout">
     <aside>
       <h2>Endpoints</h2>
-      <button type="button" class="active" data-id="series">GET /api/series</button>
-      <button type="button" data-id="series-slug">GET /api/series/{slug}</button>
-      <button type="button" data-id="chapters">GET /api/series/{slug}/chapters</button>
-      <button type="button" data-id="pages">GET /api/series/{slug}/chapters/{n}</button>
-      <button type="button" data-id="genres">GET /api/genres</button>
-      <button type="button" data-id="health">GET /api/health</button>
-      <button type="button" data-id="img">GET /img</button>
-      <p style="font-size:12px;color:var(--muted);margin:14px 4px 0">
-        Semua JSON sukses memuat field watermark Lumen
-        (<code>creator</code>, <code>website</code>, <code>watermark</code>).
+      <div class="ep-nav" id="nav"></div>
+      <p class="aside-note">
+        JSON sukses selalu memuat
+        <code>creator</code>, <code>website</code>, <code>watermark</code>, <code>docs</code>.
       </p>
-      <p style="font-size:12px;margin:10px 4px 0">
-        <a href="/">← Kembali ke Lumen</a>
-      </p>
+      <p class="aside-note"><a href="/">← Kembali ke Lumen</a></p>
     </aside>
 
     <section class="card">
       <h1 id="title">Daftar series</h1>
-      <p class="sub" id="desc">Katalog manga (Terbaru / filter).</p>
-      <div class="ep"><b>GET</b><span id="path-view">/api/series?take=5&amp;page=1&amp;mode=newest</span></div>
-
+      <p class="sub" id="desc">Katalog manga.</p>
+      <div class="ep"><b>GET</b><span id="path-view">/api/series</span></div>
       <div id="fields" class="row cols-2"></div>
-
       <div class="actions">
         <button type="button" class="btn" id="btn-run">Jalankan</button>
         <button type="button" class="btn ghost" id="btn-copy">Salin URL</button>
@@ -183,12 +210,11 @@
       <div class="status" id="status">Siap.</div>
       <pre id="out">// respons JSON muncul di sini</pre>
     </section>
-  </main>
+  </div>
 
   <footer>
     <span class="mark">Lumen Reader</span> REST API ·
-    Data dinormalisasi untuk website Anda ·
-    Watermark wajib: <span class="mark">Powered by Lumen</span>
+    Watermark: <span class="mark">Powered by Lumen</span>
   </footer>
 
   <script>
@@ -196,68 +222,118 @@
     const ENDPOINTS = {
       series: {
         title: "Daftar series",
-        desc: "Katalog manga. Mode newest / filter status & format.",
+        desc: "Katalog manga (newest / search / filter).",
         path: "/api/series",
         fields: [
-          { name: "take", label: "take", value: "5" },
-          { name: "page", label: "page", value: "1" },
-          { name: "mode", label: "mode", value: "newest" },
-          { name: "title", label: "title (search)", value: "" },
-          { name: "takeChapter", label: "takeChapter", value: "2" },
+          { name: "take", value: "5" },
+          { name: "page", value: "1" },
+          { name: "mode", value: "newest" },
+          { name: "title", value: "", label: "title (search)" },
+          { name: "status", value: "" },
+          { name: "format", value: "" },
+          { name: "takeChapter", value: "2" },
+          { name: "includeMeta", value: "true" },
         ],
       },
       "series-slug": {
         title: "Detail series",
-        desc: "Metadata satu judul berdasarkan slug.",
+        desc: "Metadata satu judul.",
         path: "/api/series/{slug}",
-        fields: [{ name: "slug", label: "slug", value: "magic-emperor" }],
+        fields: [{ name: "slug", value: "magic-emperor" }],
       },
       chapters: {
         title: "Daftar chapter",
-        desc: "Semua chapter untuk satu series.",
+        desc: "Semua chapter satu series.",
         path: "/api/series/{slug}/chapters",
-        fields: [{ name: "slug", label: "slug", value: "magic-emperor" }],
+        fields: [{ name: "slug", value: "magic-emperor" }],
       },
       pages: {
-        title: "Halaman chapter (images)",
-        desc: "URL gambar untuk chapter index tertentu.",
+        title: "Pages chapter",
+        desc: "URL gambar chapter (index).",
         path: "/api/series/{slug}/chapters/{n}",
         fields: [
-          { name: "slug", label: "slug", value: "magic-emperor" },
-          { name: "n", label: "chapter index", value: "896" },
+          { name: "slug", value: "magic-emperor" },
+          { name: "n", value: "896", label: "chapter index" },
         ],
       },
       genres: {
         title: "Genre",
-        desc: "Daftar genre tersedia.",
+        desc: "Daftar genre.",
         path: "/api/genres",
         fields: [],
       },
+      popular: {
+        title: "Popular (upstream)",
+        desc: "Proxy ke ranking populer bila tersedia.",
+        path: "/api/popular",
+        fields: [
+          { name: "take", value: "10" },
+          { name: "page", value: "1" },
+        ],
+      },
       health: {
         title: "Health",
-        desc: "Status service, rate limit, api_base.",
+        desc: "Status service & rate limit.",
         path: "/api/health",
+        fields: [],
+      },
+      providers: {
+        title: "Providers",
+        desc: "Status provider / health.",
+        path: "/api/providers",
+        fields: [],
+      },
+      metrics: {
+        title: "Metrics",
+        desc: "Metrik internal singkat.",
+        path: "/api/metrics",
+        fields: [],
+      },
+      search: {
+        title: "Search (title=)",
+        desc: "Pencarian lewat query title pada /api/series.",
+        path: "/api/series",
+        fields: [
+          { name: "title", value: "solo" },
+          { name: "take", value: "10" },
+        ],
+      },
+      local_stats: {
+        title: "Local DB stats",
+        desc: "Statistik cache SQLite lokal.",
+        path: "/api/local/stats",
         fields: [],
       },
       img: {
         title: "Image proxy",
-        desc: "Proxy gambar (WebP opsional). Hanya host allowlist.",
+        desc: "Proxy gambar (allowlist host). Non-JSON.",
         path: "/img",
         fields: [
-          { name: "u", label: "u (image URL encoded)", value: "" },
-          { name: "fmt", label: "fmt", value: "webp" },
-          { name: "w", label: "w (max width)", value: "480" },
+          { name: "u", value: "", label: "u (image URL)" },
+          { name: "fmt", value: "webp" },
+          { name: "w", value: "480" },
         ],
       },
     };
 
     let current = "series";
+    const nav = document.getElementById("nav");
     const fieldsEl = document.getElementById("fields");
     const titleEl = document.getElementById("title");
     const descEl = document.getElementById("desc");
     const pathView = document.getElementById("path-view");
     const statusEl = document.getElementById("status");
     const outEl = document.getElementById("out");
+
+    Object.keys(ENDPOINTS).forEach((id) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.id = id;
+      b.textContent = ENDPOINTS[id].path.replace("/api/", "").replace("/img", "img") || id;
+      b.title = ENDPOINTS[id].title;
+      b.addEventListener("click", () => { current = id; render(); });
+      nav.appendChild(b);
+    });
 
     function buildUrl() {
       const ep = ENDPOINTS[current];
@@ -267,8 +343,8 @@
         const el = document.getElementById("f-" + f.name);
         const v = (el && el.value || "").trim();
         if (path.includes("{" + f.name + "}")) {
-          path = path.replace("{" + f.name + "}", encodeURIComponent(v || f.value || ""));
-        } else if (v) {
+          path = path.replace("{" + f.name + "}", encodeURIComponent(v || f.value || "x"));
+        } else if (v !== "") {
           q.set(f.name, v);
         }
       }
@@ -280,14 +356,13 @@
       const ep = ENDPOINTS[current];
       titleEl.textContent = ep.title;
       descEl.textContent = ep.desc;
-      fieldsEl.innerHTML = ep.fields.map((f) =>
-        `<div><label for="f-${f.name}">${f.label}</label>` +
-        `<input id="f-${f.name}" value="${String(f.value).replace(/"/g, "&quot;")}" /></div>`
-      ).join("");
+      fieldsEl.innerHTML = ep.fields.map((f) => {
+        const label = f.label || f.name;
+        const val = String(f.value ?? "").replace(/"/g, "&quot;");
+        return `<div><label for="f-${f.name}">${label}</label><input id="f-${f.name}" value="${val}" autocomplete="off" /></div>`;
+      }).join("");
       pathView.textContent = buildUrl();
-      document.querySelectorAll("aside button[data-id]").forEach((b) => {
-        b.classList.toggle("active", b.dataset.id === current);
-      });
+      nav.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.id === current));
       fieldsEl.querySelectorAll("input").forEach((inp) => {
         inp.addEventListener("input", () => { pathView.textContent = buildUrl(); });
       });
@@ -304,17 +379,17 @@
         const t0 = performance.now();
         const res = await fetch(url, { headers: { Accept: "application/json" } });
         const ct = res.headers.get("content-type") || "";
-        let body;
         if (ct.includes("application/json")) {
-          body = await res.json();
+          const body = await res.json();
           outEl.textContent = JSON.stringify(body, null, 2);
-          const wm = body && (body.watermark || body.creator || body.website);
+          const hasWm = !!(body && (body.watermark || body.creator || body.website));
           statusEl.className = res.ok ? "status ok" : "status err";
-          statusEl.textContent = `${res.status} · ${Math.round(performance.now() - t0)}ms` +
-            (wm ? ` · watermark: ${body.watermark || body.creator || ""}` : " · (cek field watermark)");
+          statusEl.textContent =
+            `${res.status} · ${Math.round(performance.now() - t0)}ms · ` +
+            (hasWm ? `watermark ✓ ${body.watermark || body.creator}` : "watermark ✗ belum ada — redeploy backend");
         } else {
           const buf = await res.arrayBuffer();
-          outEl.textContent = `Binary/non-JSON · ${res.status} · ${buf.byteLength} bytes · ${ct}`;
+          outEl.textContent = `Non-JSON · ${res.status} · ${buf.byteLength} bytes · ${ct}`;
           statusEl.className = res.ok ? "status ok" : "status err";
           statusEl.textContent = `${res.status} · ${Math.round(performance.now() - t0)}ms`;
         }
@@ -325,9 +400,6 @@
       }
     }
 
-    document.querySelectorAll("aside button[data-id]").forEach((b) => {
-      b.addEventListener("click", () => { current = b.dataset.id; render(); });
-    });
     document.getElementById("btn-run").onclick = run;
     document.getElementById("btn-copy").onclick = async () => {
       const u = BASE + buildUrl();

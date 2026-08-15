@@ -106,6 +106,48 @@ UA = (
     "(KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
 )
 SSL_CTX = ssl.create_default_context()
+
+# Branding / watermark on public API JSON
+LUMEN_WATERMARK = {
+    "creator": "Lumen",
+    "website": "https://lumen-delta-lyart.vercel.app",
+    "watermark": "Powered by Lumen Reader · lumen-delta-lyart.vercel.app",
+    "docs": "https://lumen-delta-lyart.vercel.app/lumenrest/docs",
+}
+
+
+def stamp_lumen_payload(obj):
+    """Inject Lumen watermark fields into dict JSON responses."""
+    if not isinstance(obj, dict):
+        return obj
+    out = dict(obj)
+    for k, v in LUMEN_WATERMARK.items():
+        if k == "watermark":
+            out[k] = v
+        elif k not in out or out.get(k) in (None, "", []):
+            out[k] = v
+    return out
+
+
+def stamp_lumen_json_bytes(body: bytes) -> bytes:
+    try:
+        text = body.decode("utf-8")
+        data = json.loads(text)
+    except Exception:
+        return body
+    if isinstance(data, dict):
+        data = stamp_lumen_payload(data)
+    elif isinstance(data, list):
+        data = {
+            **LUMEN_WATERMARK,
+            "status": 200,
+            "data": data,
+        }
+    else:
+        return body
+    return json.dumps(data, ensure_ascii=False).encode("utf-8")
+
+
 _health_hits = 0
 
 import threading
@@ -714,17 +756,15 @@ class Handler(BaseHTTPRequestHandler):
             body = str(body).encode("utf-8")
         try:
             extra_headers = dict(extra_headers or {})
-            # Watermark public JSON API payloads
+            # Watermark public JSON API payloads (always for application/json)
             try:
-                if (
-                    body
-                    and isinstance(body, (bytes, bytearray))
-                    and "json" in (content_type or "").lower()
-                    and body[:1] in (b"{", b"[")
-                ):
-                    body = stamp_lumen_json_bytes(bytes(body))
-            except Exception:
-                pass
+                ct_l = (content_type or "").lower()
+                if body and isinstance(body, (bytes, bytearray)) and "json" in ct_l:
+                    raw = bytes(body).lstrip()
+                    if raw[:1] in (b"{", b"["):
+                        body = stamp_lumen_json_bytes(raw)
+            except Exception as _wm_err:
+                print("watermark stamp skip:", _wm_err, flush=True)
             # Security headers (baseline)
             extra_headers.setdefault("X-Content-Type-Options", "nosniff")
             extra_headers.setdefault("X-Frame-Options", "SAMEORIGIN")
