@@ -5,7 +5,7 @@ const MEM = new Map(); // key -> { exp, data, staleExp }
 const INFLIGHT = new Map(); // key -> Promise
 
 const DEFAULT_TTL = 90_000; // 90s fresh
-const DEFAULT_STALE = 10 * 60_000; // stale up to 10m while revalidating
+const DEFAULT_STALE = 5 * 60_000; // stale max ~5m (selaras server hard TTL list)
 const FETCH_TIMEOUT = 18_000;
 const MAX_RETRIES = 2;
 

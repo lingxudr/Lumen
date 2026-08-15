@@ -6,12 +6,12 @@ Layers:
   2. Client localStorage (api.js) — version-aware
   3. Image cache (long TTL; URL may expire → page_cache needs_refetch)
 
-Policy (TTL):
-  list/latest     soft 2m / hard 10m
-  series detail   soft 10m / hard 12h
-  chapter list    soft 5m  / hard 30m
-  chapter pages   soft 1h  / hard 3d
-  genres/tax      soft 1h  / hard 24h
+Policy (TTL) — target freshness ~5 menit untuk data katalog:
+  list/latest     soft 90s / hard 5m
+  series detail   soft 5m  / hard 1h
+  chapter list    soft 2m  / hard 5m
+  chapter pages   soft 30m / hard 1d   (gambar jarang berubah)
+  genres/tax      soft 30m / hard 12h
 
 Invalidation:
   - tag-based: invalidate("list"), invalidate("series:slug")
@@ -42,12 +42,14 @@ _MAX = 400
 
 # soft, hard seconds
 TTL_TABLE = {
-    "list": (120, 600),
-    "series": (600, 12 * 3600),
-    "chapters": (300, 1800),
-    "pages": (3600, 3 * 24 * 3600),
-    "meta": (3600, 24 * 3600),
-    "default": (180, 900),
+    # soft = anggap segar; hard = max age (stale-while-revalidate)
+    # hard list/chapters dibatasi ~5 menit agar update tidak terlalu lama
+    "list": (90, 300),           # Terbaru / browse
+    "series": (300, 3600),       # detail manga
+    "chapters": (120, 300),      # daftar chapter
+    "pages": (1800, 24 * 3600),  # gambar chapter
+    "meta": (1800, 12 * 3600),   # genres
+    "default": (90, 300),
 }
 
 
