@@ -1478,3 +1478,16 @@ body[data-reader-theme="dark"] .img-pending {
     height: 136px;
   }
 }
+
+.filter-group--genres {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-group--genres .chip {
+  flex: 0 0 auto;
+}

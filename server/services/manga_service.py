@@ -317,10 +317,20 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         print("voratoon import failed:", e, flush=True)
         vt = None
 
+    # GENRES
+    if sub0 == "genres" or (len(parts) == 1 and parts[0] == "genres"):
+        if vt is not None:
+            try:
+                payload = vt.get_genres()
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon genres error:", e, flush=True)
+        return json.dumps({"status": 200, "data": [], "meta": {"source": "empty"}}, ensure_ascii=False).encode("utf-8")
+
     # LIST
     if sub0 == "series" or (len(parts) == 1 and parts[0] == "series"):
         sort = (qs.get("sort") or ["updatedAt"])[0]
-        qsearch = (qs.get("q") or qs.get("search") or [""])[0].strip()
+        qsearch = (qs.get("title") or qs.get("q") or qs.get("search") or [""])[0].strip()
         take = _take()
         page = _page()
         status = (qs.get("status") or [""])[0]
@@ -349,6 +359,12 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
                     mode = "project"
                 if qsearch:
                     mode = "search"
+                if mode_q == "browse" or (qs.get("browse") or [""])[0] in ("1", "true"):
+                    mode = "browse"
+                # filter aktif tanpa tab khusus → browse katalog
+                if mode in ("newest", "") and (status or fmt) and not qsearch:
+                    mode = "browse"
+                genre = (qs.get("genre") or [""])[0]
                 payload = vt.get_series_list(
                     take=take,
                     page=page,
@@ -359,6 +375,7 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
                     take_chapter=take_ch,
                     mode=mode,
                     type_=type_q,
+                    genre=genre,
                 )
                 if payload and payload.get("data"):
                     return json.dumps(payload, ensure_ascii=False).encode("utf-8")

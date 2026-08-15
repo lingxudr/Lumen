@@ -11,6 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+import re
 
 BASE = (os.environ.get("VORATOON_API") or "https://api.voratoon.com").rstrip("/")
 UA = os.environ.get(
@@ -270,6 +271,142 @@ def _home_feed_payload(mode: str, take: int, page: int) -> dict[str, Any] | None
 
 
 
+
+def fetch_browse_html(
+    *,
+    page: int = 1,
+    status: str = "",
+    format_: str = "",
+    type_: str = "",
+    q: str = "",
+    genre: str = "",
+) -> dict[str, Any]:
+    """Scrape /browse RSC — katalog + filter + pagination resmi situs."""
+    import urllib.parse
+
+    page = max(1, int(page or 1))
+    qs = {}
+    if page > 1:
+        qs["page"] = str(page)
+    if status:
+        qs["status"] = status
+    if format_:
+        qs["format"] = format_
+    if type_:
+        qs["type"] = type_
+    if q:
+        qs["search"] = q  # browse page uses search query string
+        qs["q"] = q
+    if genre:
+        qs["genre"] = genre
+    query = urllib.parse.urlencode(qs)
+    url = f"{SITE_BASE}/browse" + (f"?{query}" if query else "")
+    html = _get_html(url)
+    data, meta = _extract_rsc_initial_data(html)
+    if not isinstance(data, dict):
+        raise RuntimeError("browse initialData not object")
+    series_raw = data.get("series")
+    # Filter query sering membuat series="$undefined" (data client-side) → fallback API
+    if not isinstance(series_raw, list):
+        params = {
+            "take": 30,
+            "page": page,
+            "sort": "updatedAt",
+            "sortOrder": "desc",
+            "takeChapter": 2,
+            "includeMeta": 1,
+        }
+        if status:
+            params["status"] = status
+        if format_:
+            params["format"] = format_
+        if type_:
+            params["type"] = type_
+        if q:
+            params["title"] = q
+        if genre:
+            params["genre"] = genre
+        api = _get("/series", params)
+        items = _normalize_feed_items(api.get("data") or [], strip_images=True)
+        am = api.get("meta") or {}
+        sm = {
+            "page": am.get("page") or page,
+            "lastPage": am.get("lastPage") or 1,
+            "total": am.get("total") or len(items),
+        }
+        data = {
+            "statusQuery": status,
+            "formatQuery": format_,
+            "typeQuery": type_,
+            "searchQuery": q,
+            "genres": data.get("genres") or [],
+        }
+    else:
+        items = _normalize_feed_items(series_raw, strip_images=True)
+        sm = data.get("seriesMeta") or {}
+        if not isinstance(sm, dict) or sm.get("page") is None:
+            sm = {"page": page, "lastPage": page, "total": len(items)}
+    # genres from browse payload
+    genres_raw = data.get("genres") or []
+    genres = []
+    for g in genres_raw:
+        if not isinstance(g, dict):
+            continue
+        gd = g.get("data") if isinstance(g.get("data"), dict) else g
+        name = (gd.get("name") or g.get("name") or "").strip()
+        if name:
+            genres.append({"id": g.get("id") or gd.get("id"), "name": name, "slug": (gd.get("slug") or name.lower().replace(" ", "-"))})
+    return {
+        "status": 200,
+        "message": "Voratoon browse (site RSC)",
+        "data": items,
+        "genres": genres,
+        "meta": {
+            "source": "voratoon_browse_html",
+            "page": int(sm.get("page") or page),
+            "lastPage": int(sm.get("lastPage") or page),
+            "total": int(sm.get("total") or len(items)),
+            "take": 30,
+            "mode": "browse",
+            "filters": {
+                "status": data.get("statusQuery") or status or "",
+                "format": data.get("formatQuery") or format_ or "",
+                "type": data.get("typeQuery") or type_ or "",
+                "q": data.get("searchQuery") or q or "",
+                "genre": genre or "",
+            },
+            "upstream": SITE_BASE,
+        },
+    }
+
+
+def get_genres() -> dict[str, Any]:
+    """GET /genres REST — 48 genre."""
+    data = _get("/genres")
+    rows = data.get("data") or []
+    out = []
+    for g in rows:
+        if not isinstance(g, dict):
+            continue
+        gd = g.get("data") if isinstance(g.get("data"), dict) else g
+        name = (gd.get("name") or "").strip()
+        if not name:
+            continue
+        out.append({
+            "id": g.get("id"),
+            "name": name,
+            "slug": (gd.get("slug") or name.lower().replace(" ", "-")),
+            "description": gd.get("description"),
+        })
+    out.sort(key=lambda x: x["name"].lower())
+    return {
+        "status": 200,
+        "message": "genres",
+        "data": out,
+        "meta": {"source": "voratoon_api", "total": len(out)},
+    }
+
+
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
     q = urllib.parse.urlencode(
         {k: v for k, v in (params or {}).items() if v is not None and v != ""}
@@ -295,25 +432,61 @@ def _get(path: str, params: dict | None = None) -> dict[str, Any]:
         raise RuntimeError(f"Voratoon error: {e}") from e
 
 
+def parse_chapter_number(value) -> int | float | None:
+    """Parse 12, 12.5, 'Chapter 12', 'Ch.12-1', '12 Part 2' → number sortable."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        v = float(value)
+        return int(v) if v == int(v) else v
+    s = str(value).strip()
+    if not s:
+        return None
+    # direct float
+    try:
+        v = float(s)
+        return int(v) if v == int(v) else v
+    except ValueError:
+        pass
+    # Chapter 12.5 / Ch. 12 / Ep 12 / 12화
+    m = re.search(r"(?:chapter|ch\.?|ep\.?|episode)\s*(\d+(?:\.\d+)?)", s, re.I)
+    if m:
+        v = float(m.group(1))
+        return int(v) if v == int(v) else v
+    # 12-1 → 12.1
+    m = re.search(r"\b(\d+)\s*[-–]\s*(\d+)\b", s)
+    if m:
+        v = float(m.group(1)) + float(m.group(2)) / 10.0
+        return int(v) if v == int(v) else v
+    # 12 Part 2
+    m = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:part|pt\.?)\s*(\d+)", s, re.I)
+    if m:
+        v = float(m.group(1)) + float(m.group(2)) / 100.0
+        return v
+    # first number in string
+    m = re.search(r"(\d+(?:\.\d+)?)", s)
+    if m:
+        v = float(m.group(1))
+        return int(v) if v == int(v) else v
+    return None
+
+
 def _chapter_index(ch: dict) -> int | float | None:
     if not isinstance(ch, dict):
         return None
-    for key in ("chapterIndex", "index", "number"):
-        if ch.get(key) is not None:
-            try:
-                v = float(ch[key])
-                return int(v) if v == int(v) else v
-            except (TypeError, ValueError):
-                pass
+    for key in ("chapterIndex", "index", "number", "chapter_number"):
+        n = parse_chapter_number(ch.get(key))
+        if n is not None:
+            return n
     d = ch.get("data") if isinstance(ch.get("data"), dict) else {}
-    for key in ("index", "chapterIndex", "number"):
-        if d.get(key) is not None:
-            try:
-                v = float(d[key])
-                return int(v) if v == int(v) else v
-            except (TypeError, ValueError):
-                pass
-    return None
+    for key in ("index", "chapterIndex", "number", "chapter_number", "title"):
+        n = parse_chapter_number(d.get(key))
+        if n is not None:
+            return n
+    n = parse_chapter_number(ch.get("title") or ch.get("name"))
+    return n
 
 
 def _normalize_chapter(ch: dict, *, strip_images: bool = False) -> dict:
@@ -413,6 +586,7 @@ def get_series_list(
     take_chapter: int = 3,
     mode: str = "newest",
     type_: str = "",
+    genre: str = "",
 ) -> dict[str, Any]:
     """
     mode:
@@ -433,17 +607,32 @@ def get_series_list(
         mode = "search"
 
     # Feed resmi dari situs (RSC) — prioritas tertinggi
+    if mode == "browse" or (mode == "search" and (status or format_ or type_)):
+        try:
+            payload = fetch_browse_html(
+                page=page,
+                status=status,
+                format_=format_,
+                type_=type_,
+                q=q,
+                genre=genre,
+            )
+            items = payload.get("data") or []
+            if take and take < len(items):
+                payload["data"] = items[:take]
+            return payload
+        except Exception as e:
+            print("voratoon browse RSC fail:", e, flush=True)
+
     if not q and mode in ("newest", "new_series", "completed", "hot"):
         try:
             if mode == "newest":
-                # Pagination penuh lewat /updates
                 payload = fetch_updates_html(page=page)
                 items = payload.get("data") or []
                 if take and take < len(items):
                     items = items[:take]
                     payload["data"] = items
                 return payload
-            # new_series / completed / hot → home RSC (page 1 curated)
             payload = _home_feed_payload(mode, take=take, page=page)
             if payload and payload.get("data"):
                 return payload
@@ -478,10 +667,12 @@ def get_series_list(
         params["status"] = status
     if format_:
         params["format"] = format_
+    if genre:
+        params["genre"] = genre
     if type_ and mode != "project":
         params["type"] = type_
     if q:
-        params["search"] = q
+        # Voratoon: hanya `title=` yang relevan; search/q diabaikan API
         params["title"] = q
         params["take"] = take
         params["page"] = page
@@ -782,4 +973,4 @@ def get_pages(slug: str, chapter: str | int) -> dict[str, Any]:
 
 
 def search(q: str, limit: int = 20) -> dict[str, Any]:
-    return get_series_list(take=limit, page=1, q=q)
+    return get_series_list(take=limit, page=1, q=q, mode="search")

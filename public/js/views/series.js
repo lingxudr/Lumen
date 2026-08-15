@@ -222,8 +222,8 @@ export function createSeriesView(ctx) {
     const order = getPrefs().chapterOrder || "desc";
     const list = [...(ctx.state.chapters || [])];
     list.sort((a, b) => {
-      const ia = Number(chapterIndex(a)) || 0;
-      const ib = Number(chapterIndex(b)) || 0;
+      const ia = chapterIndex(a) ?? 0;
+      const ib = chapterIndex(b) ?? 0;
       return order === "asc" ? ia - ib : ib - ia;
     });
     return list;

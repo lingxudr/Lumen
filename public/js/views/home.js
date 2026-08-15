@@ -5,6 +5,43 @@ import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { getLastRead } from "../storage.js";
 
 export function createHomeView(ctx) {
+  let genresLoaded = false;
+
+  async function loadGenres() {
+    if (genresLoaded) return;
+    const bar = document.getElementById("genre-bar");
+    if (!bar) return;
+    try {
+      const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
+      const list = res?.data || [];
+      if (!list.length) return;
+      genresLoaded = true;
+      const frag = document.createDocumentFragment();
+      const all = document.createElement("button");
+      all.type = "button";
+      all.className = "chip is-active";
+      all.dataset.filterGenre = "";
+      all.textContent = "Semua genre";
+      all.onclick = () => ctx.setFilter?.("genre", "") || setFilter("genre", "");
+      // wire via returned setFilter after init — use App
+      all.setAttribute("onclick", "App.setFilter('genre','')");
+      bar.appendChild(all);
+      list.slice(0, 24).forEach((g) => {
+        const name = g.name || g.data?.name;
+        if (!name) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip";
+        btn.dataset.filterGenre = name;
+        btn.textContent = name;
+        btn.setAttribute("onclick", `App.setFilter('genre','${name.replace(/'/g, "\\'")}')`);
+        bar.appendChild(btn);
+      });
+    } catch (e) {
+      console.warn("genres", e);
+    }
+  }
+
   function showSkeleton(n = 8) {
     const box = $("#series-list");
     if (!box) return;
@@ -40,10 +77,12 @@ export function createHomeView(ctx) {
       includeMeta: "true",
     };
     if (ctx.state.query) {
-      params.title = ctx.state.query;
-      params.q = ctx.state.query;
+      params.title = ctx.state.query; // Voratoon hanya honor title=
       params.mode = "search";
       params.takeChapter = 2;
+    } else if (ctx.state.tab === "browse") {
+      params.mode = "browse";
+      params.browse = "1";
     } else if (ctx.state.tab === "newest") {
       params.mode = "newest";
       params.sort = "updatedAt";
@@ -67,6 +106,14 @@ export function createHomeView(ctx) {
     }
     if (ctx.state.status && ctx.state.tab !== "completed") params.status = ctx.state.status;
     if (ctx.state.format) params.format = ctx.state.format;
+    if (ctx.state.genre) {
+      params.genre = ctx.state.genre;
+      params.mode = params.mode === "newest" ? "browse" : params.mode || "browse";
+    }
+    if ((ctx.state.status || ctx.state.format || ctx.state.genre) && ctx.state.tab === "browse") {
+      params.mode = "browse";
+      params.browse = "1";
+    }
     return params;
   }
 
@@ -86,6 +133,7 @@ export function createHomeView(ctx) {
   }
 
   async function loadList(opts = {}) {
+    loadGenres();
     const force = !!opts.force;
     const params = buildListParams();
     const box = $("#series-list");
@@ -224,6 +272,7 @@ export function createHomeView(ctx) {
       newest: "Terbaru",
       new_series: "Series Baru",
       completed: "Selesai",
+      browse: "Browse",
       project: "Project",
       hot: "Populer",
     };
@@ -284,19 +333,24 @@ export function createHomeView(ctx) {
   }
 
 
-  function setFilter(kind, value) {
+    function setFilter(kind, value) {
     if (kind === "status") ctx.state.status = value || "";
     if (kind === "format") ctx.state.format = value || "";
+    if (kind === "genre") ctx.state.genre = value || "";
+    // Filter katalog → mode browse (bukan feed terbaru RSC)
+    if ((ctx.state.status || ctx.state.format || ctx.state.genre) && ctx.state.tab === "newest") {
+      ctx.state.tab = "browse";
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === "browse"));
+      const titleEl = $("#list-title");
+      if (titleEl) titleEl.textContent = "Browse";
+    }
+    document.querySelectorAll(`[data-filter-${kind}]`).forEach((el) => {
+      el.classList.toggle("is-active", (el.getAttribute(`data-filter-${kind}`) || "") === (value || ""));
+    });
     ctx.state.page = 1;
-    // highlight
-    document.querySelectorAll("[data-filter-status]").forEach((b) => {
-      b.classList.toggle("is-active", (b.dataset.filterStatus || "") === (ctx.state.status || ""));
-    });
-    document.querySelectorAll("[data-filter-format]").forEach((b) => {
-      b.classList.toggle("is-active", (b.dataset.filterFormat || "") === (ctx.state.format || ""));
-    });
-    loadList();
+    loadList({ force: true });
   }
+
 
   function setupPullToRefresh() {
     const scroller = document.getElementById("view-home") || document;

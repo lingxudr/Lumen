@@ -40,12 +40,41 @@ export function isNew(iso, hours = 24) {
   return Date.now() - new Date(iso).getTime() <= hours * 3600 * 1000;
 }
 
+export function parseChapterNumber(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? value : value;
+  }
+  const s = String(value).trim();
+  if (!s) return null;
+  const direct = Number(s);
+  if (Number.isFinite(direct) && s === String(direct)) return direct;
+  let m = s.match(/(?:chapter|ch\.?|ep\.?|episode)\s*(\d+(?:\.\d+)?)/i);
+  if (m) return Number(m[1]);
+  m = s.match(/\b(\d+)\s*[-–]\s*(\d+)\b/);
+  if (m) return Number(m[1]) + Number(m[2]) / 10;
+  m = s.match(/\b(\d+(?:\.\d+)?)\s*(?:part|pt\.?)\s*(\d+)/i);
+  if (m) return Number(m[1]) + Number(m[2]) / 100;
+  m = s.match(/(\d+(?:\.\d+)?)/);
+  if (m) return Number(m[1]);
+  return null;
+}
+
 export function chapterIndex(ch) {
   if (!ch) return null;
-  if (ch.chapterIndex != null) return ch.chapterIndex;
-  if (ch.data && ch.data.index != null) return ch.data.index;
-  if (ch.index != null) return ch.index;
-  if (ch.chapter_number != null) return ch.chapter_number;
-  if (ch.data && ch.data.chapter_number != null) return ch.data.chapter_number;
+  const candidates = [
+    ch.chapterIndex,
+    ch.data && ch.data.index,
+    ch.index,
+    ch.chapter_number,
+    ch.data && ch.data.chapter_number,
+    ch.data && ch.data.title,
+    ch.title,
+    ch.name,
+  ];
+  for (const c of candidates) {
+    const n = parseChapterNumber(c);
+    if (n != null) return n;
+  }
   return null;
 }
