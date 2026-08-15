@@ -4,6 +4,10 @@ import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { saveLastRead, getPrefs, savePrefs, saveReadingProgress } from "../storage.js";
 
 export function createReaderView(ctx) {
+  /** @type {IntersectionObserver | null} */
+  let _pageObserver = null;
+  let _loadToken = 0;
+
   let scrollBound = false;
   let lastScrollY = 0;
 
@@ -183,6 +187,11 @@ export function createReaderView(ctx) {
       return;
     }
     ctx.state.chapterIndex = index;
+    _loadToken++;
+    if (_pageObserver) {
+      try { _pageObserver.disconnect(); } catch (_) {}
+      _pageObserver = null;
+    }
     loading(true);
     const panel = $("#hotlink-panel");
     if (panel) panel.classList.add("is-hidden");
@@ -273,9 +282,63 @@ export function createReaderView(ctx) {
       return;
     }
 
-    // Lazy + preload 2–3 halaman ke depan
-    const PRELOAD = 3;
+    // --- Optimized lazy loading ---
+    // Adaptive buffer: slow network = smaller window
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const slow = conn && (conn.saveData || /2g|slow-2g|3g/i.test(conn.effectiveType || ""));
+    const PRELOAD = slow ? 2 : 4;
+    const EAGER_COUNT = slow ? 1 : 2;
+    const ROOT_MARGIN = slow ? "400px 0px" : "900px 0px";
+    const MAX_CONCURRENT = slow ? 2 : 4;
+
     const resolved = images.map((url) => (useProxy ? proxyImageUrl(url, { webp: true }) : url));
+    const token = ++_loadToken;
+
+    // Tear down previous observer (chapter change / re-render)
+    if (_pageObserver) {
+      try { _pageObserver.disconnect(); } catch (_) {}
+      _pageObserver = null;
+    }
+
+    let inFlight = 0;
+    /** @type {number[]} */
+    const waitQueue = [];
+
+    function pumpQueue() {
+      if (token !== _loadToken) return;
+      while (inFlight < MAX_CONCURRENT && waitQueue.length) {
+        const page = waitQueue.shift();
+        const el = box.querySelector(`.page-slot[data-page="${page}"] img`);
+        if (!el || !el.dataset.src) continue;
+        inFlight++;
+        const src = el.dataset.src;
+        el.removeAttribute("data-src");
+        el.classList.remove("img-pending");
+        const done = () => {
+          inFlight = Math.max(0, inFlight - 1);
+          pumpQueue();
+        };
+        el.addEventListener("load", done, { once: true });
+        el.addEventListener("error", done, { once: true });
+        el.src = src;
+      }
+    }
+
+    function scheduleLoad(page) {
+      if (page < 0 || page >= resolved.length) return;
+      const el = box.querySelector(`.page-slot[data-page="${page}"] img`);
+      if (!el || !el.dataset.src) return;
+      if (waitQueue.includes(page)) return;
+      waitQueue.push(page);
+      pumpQueue();
+    }
+
+    function scheduleWindow(center) {
+      // current + forward buffer (+ 1 behind for scroll-up)
+      for (let j = Math.max(0, center - 1); j <= center + PRELOAD && j < resolved.length; j++) {
+        scheduleLoad(j);
+      }
+    }
 
     resolved.forEach((src, i) => {
       const wrap = document.createElement("div");
@@ -286,22 +349,15 @@ export function createReaderView(ctx) {
       img.alt = `Halaman ${i + 1}`;
       img.decoding = "async";
       img.referrerPolicy = "no-referrer";
+      // Reserve space to reduce layout jump before decode
+      img.width = 800;
+      img.height = 1200;
+      img.style.width = "100%";
+      img.style.height = "auto";
       img.onload = () => {
         img.classList.add("is-loaded");
         img.classList.remove("img-pending");
       };
-
-      if (i < PRELOAD) {
-        // halaman awal + preload buffer
-        img.src = src;
-        img.loading = i === 0 ? "eager" : "lazy";
-      } else {
-        img.dataset.src = src;
-        img.loading = "lazy";
-        // placeholder tinggi biar scroll stabil
-        img.classList.add("img-pending");
-      }
-
       img.onerror = () => {
         if (!useProxy && !img.dataset.proxied) {
           img.dataset.proxied = "1";
@@ -324,39 +380,45 @@ export function createReaderView(ctx) {
         wrap.replaceChild(div, img);
       };
 
+      if (i < EAGER_COUNT) {
+        if (i === 0) img.fetchPriority = "high";
+        img.loading = i === 0 ? "eager" : "lazy";
+        img.src = src;
+      } else {
+        img.dataset.src = src;
+        img.loading = "lazy";
+        img.classList.add("img-pending");
+      }
+
       wrap.appendChild(img);
       box.appendChild(wrap);
     });
 
-    // IntersectionObserver: saat mendekati viewport, load + preload berikutnya
     if ("IntersectionObserver" in window) {
-      const slots = box.querySelectorAll(".page-slot img[data-src]");
-      const io = new IntersectionObserver(
+      _pageObserver = new IntersectionObserver(
         (entries) => {
+          if (token !== _loadToken) return;
           entries.forEach((entry) => {
             if (!entry.isIntersecting) return;
             const img = entry.target;
             const page = Number(img.parentElement?.dataset.page || 0);
-            // load current + next PRELOAD
-            for (let j = page; j <= page + PRELOAD && j < resolved.length; j++) {
-              const el = box.querySelector(`.page-slot[data-page="${j}"] img`);
-              if (el && el.dataset.src) {
-                el.src = el.dataset.src;
-                el.removeAttribute("data-src");
-                el.classList.remove("img-pending");
-              }
-            }
-            io.unobserve(img);
+            scheduleWindow(page);
+            try { _pageObserver.unobserve(img); } catch (_) {}
           });
         },
-        { rootMargin: "600px 0px", threshold: 0.01 }
+        { root: null, rootMargin: ROOT_MARGIN, threshold: 0.01 }
       );
-      slots.forEach((img) => io.observe(img));
+      box.querySelectorAll(".page-slot img[data-src]").forEach((img) => _pageObserver.observe(img));
+      // Kick first window immediately
+      scheduleWindow(0);
     } else {
-      // fallback: load all with native lazy
-      box.querySelectorAll("img[data-src]").forEach((img) => {
-        img.src = img.dataset.src;
-        img.removeAttribute("data-src");
+      // Fallback: staged native lazy (still not all-at-once)
+      box.querySelectorAll("img[data-src]").forEach((img, i) => {
+        img.loading = "lazy";
+        if (i < PRELOAD) {
+          img.src = img.dataset.src;
+          img.removeAttribute("data-src");
+        }
       });
     }
 
