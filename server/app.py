@@ -212,6 +212,25 @@ def img_cache_set(key, body, content_type):
 
 
 # ── Rate limit per IP (sliding window 60s) ────────────────────────────
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob: https://cdn.voratoon.com https://cvr.voratoon.id "
+    "https://*.voratoon.com https://*.voratoon.id https://*.my.id https://*.shngm.id; "
+    "font-src 'self' data:; "
+    "connect-src 'self' https://api.voratoon.com https://v1.voratoon.com "
+    "https://*.up.railway.app https://*.vercel.app; "
+    "media-src 'self' blob:; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'self'; "
+    "worker-src 'self'; "
+    "manifest-src 'self'; "
+    "upgrade-insecure-requests"
+)
+
 RATE_LIMIT_WINDOW = 60
 RATE_LIMIT_API = int(os.environ.get("RATE_LIMIT_API", "20"))   # metadata API / menit
 RATE_LIMIT_IMG = int(os.environ.get("RATE_LIMIT_IMG", "60"))  # gambar: lebih longgar agar reader tidak 429
@@ -703,6 +722,7 @@ class Handler(BaseHTTPRequestHandler):
                 "Permissions-Policy",
                 "camera=(), microphone=(), geolocation=()",
             )
+            extra_headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
             if "Cache-Control" not in extra_headers:
                 extra_headers["Cache-Control"] = "no-store"
 

@@ -83,7 +83,7 @@ Ringkasan — detail di [`docs/SECURITY.md`](docs/SECURITY.md).
 
 - **Anti-SSRF** pada `/img` dan proxy: hanya host allowlist, blok IP privat/metadata
 - **Rate limit** sliding window per IP
-- **Header**: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
+- **Header**: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
 - **Path proxy relatif** saja (tolak URL absolut di edge)
 - Tidak menyimpan kredensial pengguna (favorit = localStorage)
 
