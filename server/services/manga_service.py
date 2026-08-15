@@ -280,8 +280,9 @@ def _komiku_chapters_payload(slug: str) -> dict | None:
 
 def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     """
-    Nama historis (dipakai app.py). Isi: Komiku direct saja.
-    Sanka dihapus karena IP Railway banned.
+    Nama historis (dipakai app.py).
+    Rantai: Voratoon API → Komiku (jika ada) → seed file.
+    Sanka dihapus (IP banned). Komiku sering 403 di Railway.
     """
     qs = qs or {}
     sub0 = (sub or "").split("?")[0].strip("/")
@@ -300,18 +301,45 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
             return 1
 
     def _is_uuid(s: str) -> bool:
-        import re
-        return bool(re.fullmatch(
+        import re as _re
+        return bool(_re.fullmatch(
             r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
             (s or "").strip(),
         ))
 
-    # --- list ---
+    # --- Voratoon client ---
+    try:
+        try:
+            from server.providers import voratoon as vt
+        except Exception:
+            from providers import voratoon as vt  # type: ignore
+    except Exception as e:
+        print("voratoon import failed:", e, flush=True)
+        vt = None
+
+    # LIST
     if sub0 == "series" or (len(parts) == 1 and parts[0] == "series"):
         sort = (qs.get("sort") or ["updatedAt"])[0]
         qsearch = (qs.get("q") or qs.get("search") or [""])[0].strip()
         take = _take()
         page = _page()
+        status = (qs.get("status") or [""])[0]
+        fmt = (qs.get("format") or [""])[0]
+        if vt is not None:
+            try:
+                payload = vt.get_series_list(
+                    take=take,
+                    page=page,
+                    sort=sort,
+                    q=qsearch,
+                    status=status,
+                    format_=fmt,
+                )
+                if payload and payload.get("data"):
+                    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon list error:", e, flush=True)
+        # Komiku fallback
         popular = sort in ("popular", "popularity", "hot", "views")
         payload = _komiku_list_payload(take=take, page=page, q=qsearch, popular=popular)
         if payload and payload.get("data"):
@@ -321,29 +349,51 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     kind, slug, chapter = _parse_series_sub(sub)
     if not slug:
         return None
-
-    # UUID Shinigami lama — tidak ada di Komiku; jangan search sampah
     if _is_uuid(slug):
-        print("komiku_fallback: skip UUID slug (legacy Sanka id)", slug, flush=True)
+        print("fallback: skip UUID slug", slug, flush=True)
         return None
 
+    # DETAIL
     if kind == "detail" or (len(parts) == 2 and parts[0] == "series"):
+        if vt is not None:
+            try:
+                payload = vt.get_series_detail(slug)
+                if payload:
+                    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon detail error:", e, flush=True)
         payload = _komiku_detail_payload(slug)
         if payload:
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
         return None
 
+    # CHAPTERS
     if kind == "chapters" or (len(parts) >= 3 and parts[-1] == "chapters"):
+        if vt is not None:
+            try:
+                payload = vt.get_chapters(slug)
+                if payload and payload.get("data") is not None:
+                    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon chapters error:", e, flush=True)
         payload = _komiku_chapters_payload(slug)
         if payload:
             return json.dumps(payload, ensure_ascii=False).encode("utf-8")
         return None
 
+    # PAGES
     if kind == "pages" and chapter is not None:
+        if vt is not None:
+            try:
+                payload = vt.get_pages(slug, chapter)
+                if payload:
+                    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon pages error:", e, flush=True)
+        # komiku pages last
         try:
             try:
                 from server.hybrid_providers.providers.komiku import KomikuProvider
-                from server.hybrid_providers.models import ChapterInfo
             except Exception:
                 from hybrid_providers.providers.komiku import KomikuProvider  # type: ignore
             p = KomikuProvider()
@@ -400,6 +450,7 @@ def provider_status() -> dict[str, Any]:
         "sqlite": lumen_db is not None,
         "sanka": False,
         "sanka_removed": True,
+        "voratoon": True,
         "sanka_banned": True,
         "sanka_ban_reason": "removed: IP permanently banned",
         "sanka_ok": False,
@@ -407,7 +458,7 @@ def provider_status() -> dict[str, Any]:
         "cache": "sqlite_read_through",
         "mongo": "optional_catalog_primary_when_present",
         "architecture": "ProviderManager is single authority",
-        "fallback_chain": ["komikcast", "komiku_direct"],
+        "fallback_chain": ["komikcast", "voratoon", "komiku_direct", "seed"],
     }
     try:
         try:

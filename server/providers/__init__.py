@@ -8,3 +8,5 @@ Gunakan services.manga_service / ProviderChain.
 from __future__ import annotations
 
 __all__ = ["sanka"]
+
+from . import voratoon  # noqa

@@ -21,6 +21,9 @@ ALLOWED_API_HOSTS = frozenset(
         "komikcast.fit",
         "komikcast.com",
         "komikcast.to",
+        "api.voratoon.com",
+        "v1.voratoon.com",
+        "voratoon.com",
     }
 )
 
@@ -28,7 +31,7 @@ ALLOWED_IMAGE_HOST_SUFFIXES = (
     "imgkc1.my.id",
     "komikcast.fit",
     "komikcast.com",
-    "komiku.org",
+    "komiku.org", "cvr.voratoon.id", "cdn.voratoon.com", "minio.imgkc1.my.id",
     "thumbnail.komiku.org",
     "img.komiku.org",
     "sankavollerei.web.id",
