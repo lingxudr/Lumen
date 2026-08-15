@@ -421,49 +421,77 @@ img {
    ========================================================= */
 
 .series-hero {
-  display: grid;
-  grid-template-columns: 205px minmax(0, 1fr);
-  gap: 24px;
-  padding: 20px;
+  padding: 0;
   margin-bottom: 24px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Actual layout wrapper from series.js */
+.series-hero-inner {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  padding: 18px;
   background: var(--paper);
   border: var(--border) solid var(--ink);
   border-radius: var(--radius);
   box-shadow: 7px 7px 0 var(--ink);
 }
 
-.series-hero img {
-  width: 205px;
+.series-hero .series-cover,
+.series-hero-inner > img.series-cover {
+  width: 200px;
+  max-width: 100%;
   aspect-ratio: 2 / 3;
+  height: auto;
   object-fit: cover;
   background: #ddd8ca;
   border: var(--border) solid var(--ink);
   border-radius: var(--radius);
   box-shadow: 5px 5px 0 var(--blue);
+  display: block;
 }
 
-.series-hero h1 {
-  margin: 0 0 9px;
-  font-size: clamp(23px, 4vw, 38px);
-  line-height: 1.02;
+.series-hero-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.series-hero h1,
+.series-hero .series-title {
+  margin: 0;
+  font-size: clamp(22px, 3.6vw, 34px);
+  line-height: 1.12;
   font-weight: 950;
-  letter-spacing: -.055em;
+  letter-spacing: -.04em;
+  word-break: break-word;
 }
 
 .series-meta {
-  margin-bottom: 12px;
+  margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
+  line-height: 1.4;
+}
+
+.series-hero-body .btn {
+  align-self: flex-start;
 }
 
 .series-synopsis {
-  max-height: 160px;
+  max-height: 220px;
   overflow: auto;
   color: #383631;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.65;
   font-weight: 550;
+  padding-right: 4px;
 }
 
 .section-label {
@@ -788,12 +816,13 @@ img {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .series-hero {
-    grid-template-columns: 160px minmax(0, 1fr);
+  .series-hero-inner {
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 16px;
   }
 
-  .series-hero img {
-    width: 160px;
+  .series-hero .series-cover {
+    width: 150px;
   }
 }
 
@@ -896,29 +925,31 @@ img {
     font-size: 8px;
   }
 
-  .series-hero {
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 13px;
-    padding: 12px;
+  .series-hero-inner {
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
     box-shadow: 4px 4px 0 var(--ink);
   }
 
-  .series-hero img {
-    width: 96px;
+  .series-hero .series-cover {
+    width: 128px;
     box-shadow: 3px 3px 0 var(--blue);
   }
 
-  .series-hero h1 {
-    font-size: 18px;
+  .series-hero h1,
+  .series-hero .series-title {
+    font-size: 20px;
+    line-height: 1.15;
   }
 
   .series-meta {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .series-synopsis {
-    max-height: 130px;
-    font-size: 11px;
+    max-height: 180px;
+    font-size: 13px;
   }
 
   .section-label {
@@ -992,16 +1023,19 @@ img {
     width: 76px;
   }
 
-  .series-hero {
-    grid-template-columns: 82px minmax(0, 1fr);
+  .series-hero-inner {
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
   }
 
-  .series-hero img {
-    width: 82px;
+  .series-hero .series-cover {
+    width: 110px;
   }
 
-  .series-hero h1 {
-    font-size: 16px;
+  .series-hero h1,
+  .series-hero .series-title {
+    font-size: 18px;
   }
 
   .btn {
@@ -1469,17 +1503,17 @@ body[data-reader-theme="dark"] .img-pending {
   padding: 12px 0;
 }
 .sk-cover-lg {
-  width: 120px;
-  height: 170px;
+  width: 140px;
+  height: 200px;
   border-radius: 8px;
 }
 @media (max-width: 640px) {
   .series-skeleton {
-    grid-template-columns: 96px 1fr;
+    grid-template-columns: 128px 1fr;
   }
   .sk-cover-lg {
-    width: 96px;
-    height: 136px;
+    width: 128px;
+    height: 180px;
   }
 }
 

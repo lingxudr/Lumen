@@ -240,11 +240,12 @@ export function createSeriesView(ctx) {
     const chCount = d.totalChapters ?? ctx.state.chapters?.length ?? 0;
 
     if (detail) {
+      const title = d.title || s.title || slug;
       detail.innerHTML = `
         <div class="series-hero-inner">
-          <img class="series-cover" alt="" />
+          <img class="series-cover" alt="${escAttr(title)}" width="200" height="300" />
           <div class="series-hero-body">
-            <h1 class="series-title">${esc(d.title || s.title || slug)}</h1>
+            <h1 class="series-title">${esc(title)}</h1>
             <div class="series-meta">
               ${esc([d.author, d.status, d.format || d.type, `${chCount} chapter`].filter(Boolean).join(" · "))}
             </div>
