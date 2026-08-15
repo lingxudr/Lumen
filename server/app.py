@@ -830,6 +830,33 @@ class Handler(BaseHTTPRequestHandler):
                         {"ok": True, "pong": True, "api_base": API_BASE},
                     )
 
+                if sub.split("?")[0].rstrip("/") in ("health", "status"):
+                    providers = None
+                    try:
+                        try:
+                            from services.manga_service import provider_status
+                        except Exception:
+                            from server.services.manga_service import provider_status
+                        providers = provider_status()
+                    except Exception as e:
+                        providers = {"error": str(e)}
+                    return self.send_json(
+                        200,
+                        {
+                            "ok": True,
+                            "api_base": API_BASE,
+                            "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                            "cache_warmer": _warmer_status(),
+                            "db": _db_stats_safe(),
+                            "providers": providers,
+                            "rate_limit": {
+                                "api": RATE_LIMIT_API,
+                                "img": RATE_LIMIT_IMG,
+                                "window": RATE_LIMIT_WINDOW,
+                            },
+                        },
+                    )
+
                 # Local SQLite search (tidak ke upstream)
                 if sub.split("?")[0] in ("local/search", "local/search/"):
                     ip = client_ip(self)
