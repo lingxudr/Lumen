@@ -9,6 +9,18 @@ export function createReaderView(ctx) {
 
   function applyPrefs() {
     const prefs = getPrefs();
+    const root = document.getElementById("view-reader");
+    if (root) {
+      let theme = prefs.theme || "dark";
+      if (theme === "light") theme = "sepia";
+      root.setAttribute("data-lr-theme", theme);
+      root.setAttribute("data-lr-fit", prefs.fit || "width");
+      if (prefs.imgWidth) {
+        root.style.setProperty("--lr-img-width", `${prefs.imgWidth}%`);
+      }
+      root.classList.toggle("lumen-reader--hide-progress", prefs.showProgress === false);
+      root.classList.toggle("lumen-reader--no-tap", prefs.tapNav === false);
+    }
     document.body.dataset.readerTheme = prefs.theme || "dark";
     document.body.dataset.readerFit = prefs.fit || "width";
     const root = document.getElementById("view-reader");
@@ -26,6 +38,13 @@ export function createReaderView(ctx) {
     document.querySelectorAll("#reader-menu [data-mode]").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.mode === (prefs.mode || "webtoon"));
     });
+    let th = prefs.theme || "dark";
+    if (th === "light") th = "sepia";
+    document.querySelectorAll("#reader-menu [data-theme]").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.theme === th);
+    });
+    const range = document.getElementById("reader-width-range");
+    if (range && prefs.imgWidth) range.value = String(prefs.imgWidth);
     const map = {
       "pref-auto-next": prefs.autoNext !== false,
       "pref-show-progress": prefs.showProgress !== false,
@@ -51,6 +70,19 @@ export function createReaderView(ctx) {
 
   function setFit(fit) {
     savePrefs({ fit });
+    applyPrefs();
+  }
+
+  function setWidth(pct) {
+    const n = Math.max(60, Math.min(100, Number(pct) || 100));
+    savePrefs({ imgWidth: n });
+    applyPrefs();
+  }
+
+  function setPref(key, value) {
+    const patch = {};
+    patch[key] = value;
+    savePrefs(patch);
     applyPrefs();
   }
 
@@ -175,14 +207,24 @@ export function createReaderView(ctx) {
       updateProgress();
     } catch (err) {
       console.error(err);
-      const msg = String(err.message || err);
-      toast(msg);
+      toast("Chapter gagal dimuat");
       showView("reader");
       const box = document.querySelector("#reader-pages");
       if (box) {
+        box.innerHTML = `<div class="lumen-reader-img-error img-error">
+          <div class="lumen-reader-chibi" aria-hidden="true">💭</div>
+          <strong>Gagal memuat chapter</strong>
+          <span>Terjadi masalah saat membuka chapter. Silakan coba lagi.</span>
+          <button type="button" class="lumen-reader-btn-primary" id="lr-retry-ch">Coba Lagi</button>
+        </div>`;
+        const btn = box.querySelector("#lr-retry-ch");
+        if (btn) btn.onclick = () => openChapter(index);
+        return;
+      }
+      if (false) {
         renderState(box, {
           title: "Gagal memuat chapter",
-          detail: msg,
+          detail: "Silakan coba lagi",
           retryLabel: "Coba lagi",
           onRetry: () => openChapter(index),
         });
@@ -204,6 +246,17 @@ export function createReaderView(ctx) {
     if (navCh) navCh.textContent = `Chapter ${idx}`;
     const endLab = document.getElementById("reader-end-chapter-label");
     if (endLab) endLab.textContent = `Chapter ${idx}`;
+    const cover = document.getElementById("reader-cover");
+    if (cover) {
+      const src = d.coverImage || d.cover || "";
+      if (src) {
+        cover.src = src;
+        cover.classList.add("is-on");
+      } else {
+        cover.removeAttribute("src");
+        cover.classList.remove("is-on");
+      }
+    }
 
     const images = ch?.data?.images || ch?.images || [];
     const useProxy = $("#use-proxy")?.checked;
@@ -233,6 +286,10 @@ export function createReaderView(ctx) {
       img.alt = `Halaman ${i + 1}`;
       img.decoding = "async";
       img.referrerPolicy = "no-referrer";
+      img.onload = () => {
+        img.classList.add("is-loaded");
+        img.classList.remove("img-pending");
+      };
 
       if (i < PRELOAD) {
         // halaman awal + preload buffer
@@ -254,7 +311,16 @@ export function createReaderView(ctx) {
         }
         const div = document.createElement("div");
         div.className = "img-error";
-        div.textContent = `Gagal memuat halaman ${i + 1}`;
+        div.innerHTML = `<strong>Gambar gagal dimuat</strong><span>Terjadi masalah saat memuat gambar.</span>`;
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Coba Lagi";
+        retry.onclick = () => {
+          img.classList.remove("is-loaded");
+          wrap.replaceChild(img, div);
+          img.src = resolved[i];
+        };
+        div.appendChild(retry);
         wrap.replaceChild(div, img);
       };
 
@@ -395,6 +461,8 @@ export function createReaderView(ctx) {
   }
 
   return {
+    setWidth,
+    setPref,
     openChapter,
     render,
     navChapter,

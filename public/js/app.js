@@ -81,9 +81,10 @@ const App = {
   reloadChapter: reader.reload,
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
+  setReaderWidth: (v) => reader.setWidth?.(v),
+  setReaderPref: (k, v) => reader.setPref?.(k, v),
   setReaderFit: reader.setFit,
   setReaderMode: reader.setMode,
-  setReaderPref: reader.setPref,
   library(mode) {
     document.querySelectorAll(".tab").forEach((t) => {
       t.classList.toggle("is-active", t.dataset.tab === mode);

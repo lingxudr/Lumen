@@ -119,6 +119,7 @@
           <button type="button" class="lumen-reader-icon-btn" onclick="App.backToSeries()" aria-label="Kembali">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
+          <img class="lumen-reader-header-cover" id="reader-cover" alt="" width="36" height="48" />
           <div class="lumen-reader-header-meta">
             <div class="lumen-reader-header-title" id="reader-manga-title">—</div>
             <div class="lumen-reader-header-sub" id="reader-title">Chapter —</div>
@@ -150,7 +151,12 @@
 
             <div class="lumen-reader-setting">
               <span class="lumen-reader-setting-label">Image Width</span>
-              <div class="lumen-reader-seg seg">
+              <div class="lumen-reader-width-row">
+                <span class="lumen-reader-width-ico" aria-hidden="true">▭</span>
+                <input type="range" id="reader-width-range" class="lumen-reader-width-range" min="60" max="100" value="100" step="5" oninput="App.setReaderWidth && App.setReaderWidth(this.value)" />
+                <span class="lumen-reader-width-ico" aria-hidden="true">▇</span>
+              </div>
+              <div class="lumen-reader-seg seg" style="margin-top:8px">
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-fit="width" onclick="App.setReaderFit('width')">Full</button>
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-fit="comfortable" onclick="App.setReaderFit('comfortable')">Sedang</button>
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-fit="small" onclick="App.setReaderFit('small')">Kecil</button>
@@ -160,9 +166,9 @@
             <div class="lumen-reader-setting">
               <span class="lumen-reader-setting-label">Theme</span>
               <div class="lumen-reader-seg seg">
-                <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="dark" onclick="App.setReaderTheme('dark')">AMOLED</button>
-                <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="dark" onclick="App.setReaderTheme('dark')">Dark</button>
-                <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="light" onclick="App.setReaderTheme('light')">Sepia</button>
+                <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="amoled" onclick="App.setReaderTheme('amoled')">AMOLED</button>
+                <button type="button" class="lumen-reader-seg-btn seg-btn is-active" data-theme="dark" onclick="App.setReaderTheme('dark')">Dark</button>
+                <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="sepia" onclick="App.setReaderTheme('sepia')">Sepia</button>
               </div>
             </div>
 
@@ -206,13 +212,15 @@
 
         <div class="lumen-reader-end reader-end" id="reader-end">
           <div class="lumen-reader-end-art" aria-hidden="true">
-            <div class="lumen-reader-chibi lumen-reader-chibi--done">✓</div>
+            <div class="lumen-reader-chibi lumen-reader-chibi--done">
+              <span class="lumen-reader-chibi-face">✓</span>
+              <span class="lumen-reader-chibi-spark">✦</span>
+            </div>
           </div>
           <p class="lumen-reader-end-title">Chapter Selesai!</p>
           <p class="lumen-reader-end-sub" id="reader-end-chapter-label">Chapter —</p>
-          <button type="button" class="lumen-reader-btn-primary btn btn-primary" id="btn-next-ch" onclick="App.navChapter(1)">Baca Chapter berikutnya →</button>
-          <button type="button" class="lumen-reader-btn-ghost btn" id="btn-prev-ch" onclick="App.navChapter(-1)">← Chapter sebelumnya</button>
-          <button type="button" class="lumen-reader-btn-ghost btn" onclick="App.backToSeries()">← Kembali ke Manga</button>
+          <button type="button" class="lumen-reader-btn-primary" id="btn-next-ch" onclick="App.navChapter(1)">Baca Chapter berikutnya →</button>
+          <button type="button" class="lumen-reader-btn-ghost" onclick="App.backToSeries()">← Kembali ke Manga</button>
         </div>
 
         <!-- Bottom nav -->

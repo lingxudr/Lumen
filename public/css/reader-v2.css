@@ -594,3 +594,278 @@ body.mode-reader #loading:not(.is-hidden) {
     max-width: 900px;
   }
 }
+
+/* ===== Reader V2 polish (mockup parity) ===== */
+
+#view-reader.lumen-reader .lumen-reader-header-cover {
+  width: 36px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: none;
+}
+#view-reader.lumen-reader .lumen-reader-header-cover.is-on {
+  display: block;
+}
+
+/* Themes scoped to reader only */
+#view-reader.lumen-reader[data-lr-theme="amoled"] {
+  --lr-bg: #000000;
+  --lr-bg-2: #050508;
+  --lr-text: #f5f5f5;
+}
+#view-reader.lumen-reader[data-lr-theme="dark"] {
+  --lr-bg: #080a12;
+  --lr-bg-2: #0d1020;
+}
+#view-reader.lumen-reader[data-lr-theme="sepia"] {
+  --lr-bg: #1a1410;
+  --lr-bg-2: #241c14;
+  --lr-text: #f0e6d2;
+  --lr-muted: rgba(240, 230, 210, 0.65);
+}
+
+/* Width slider */
+#view-reader.lumen-reader .lumen-reader-width-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#view-reader.lumen-reader .lumen-reader-width-ico {
+  color: var(--lr-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+#view-reader.lumen-reader .lumen-reader-width-range {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  outline: none;
+}
+#view-reader.lumen-reader .lumen-reader-width-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--lr-accent);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.25);
+  cursor: pointer;
+}
+
+/* Page images — immersive, no cards */
+#view-reader.lumen-reader .page-slot {
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+  background: transparent;
+}
+#view-reader.lumen-reader .page-slot img,
+#view-reader.lumen-reader .lumen-reader-pages img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #0a0c14;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+#view-reader.lumen-reader .page-slot img.is-loaded,
+#view-reader.lumen-reader .lumen-reader-pages img.is-loaded {
+  opacity: 1;
+}
+#view-reader.lumen-reader .page-slot img.img-pending {
+  min-height: 120px;
+  opacity: 0.15;
+}
+
+/* Fit modes via CSS variables on content */
+#view-reader.lumen-reader .lumen-reader-content {
+  --lr-img-width: 100%;
+}
+#view-reader.lumen-reader .lumen-reader-pages {
+  width: var(--lr-img-width);
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+#view-reader.lumen-reader[data-lr-fit="comfortable"] .lumen-reader-pages {
+  width: min(100%, 720px);
+}
+#view-reader.lumen-reader[data-lr-fit="small"] .lumen-reader-pages {
+  width: min(100%, 560px);
+}
+
+/* Friendly image error */
+#view-reader.lumen-reader .img-error,
+#view-reader.lumen-reader .lumen-reader-img-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 220px;
+  margin: 16px;
+  padding: 24px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--lr-border);
+  background: rgba(12, 14, 25, 0.65);
+  color: var(--lr-muted);
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.45;
+}
+#view-reader.lumen-reader .img-error strong {
+  color: var(--lr-text);
+  font-size: 16px;
+}
+#view-reader.lumen-reader .img-error button {
+  margin-top: 6px;
+  padding: 12px 22px;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--lr-accent-2), var(--lr-accent));
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35);
+}
+
+/* End of chapter */
+#view-reader.lumen-reader .lumen-reader-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 20px 32px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+#view-reader.lumen-reader .lumen-reader-chibi {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 40% 35%, rgba(167, 139, 250, 0.35), rgba(12, 14, 25, 0.9));
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.25);
+  position: relative;
+  font-size: 36px;
+}
+#view-reader.lumen-reader .lumen-reader-chibi-spark {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 14px;
+  color: var(--lr-accent-soft);
+}
+#view-reader.lumen-reader .lumen-reader-end-title {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--lr-text);
+}
+#view-reader.lumen-reader .lumen-reader-end-sub {
+  margin: 0 0 12px;
+  color: var(--lr-muted);
+  font-size: 14px;
+}
+#view-reader.lumen-reader .lumen-reader-btn-primary {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px 18px;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--lr-accent-2), var(--lr-accent));
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(124, 58, 237, 0.4);
+}
+#view-reader.lumen-reader .lumen-reader-btn-ghost {
+  width: 100%;
+  max-width: 320px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--lr-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lr-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Bottom nav glass */
+#view-reader.lumen-reader .lumen-reader-nav {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(15, 18, 30, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--lr-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  transition: transform 0.28s ease, opacity 0.22s ease;
+}
+body.ui-hidden #view-reader.lumen-reader .lumen-reader-nav {
+  transform: translateY(calc(120% + var(--lr-safe-bottom)));
+  opacity: 0;
+  pointer-events: none;
+}
+#view-reader.lumen-reader .lumen-reader-nav-btn,
+#view-reader.lumen-reader .lumen-reader-nav-center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 8px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lr-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#view-reader.lumen-reader .lumen-reader-nav-center {
+  background: rgba(139, 92, 246, 0.16);
+  color: var(--lr-accent-soft);
+}
+
+/* Loading overlay when body.mode-reader */
+body.mode-reader #loading:not(.is-hidden) {
+  background: rgba(8, 10, 18, 0.88);
+  backdrop-filter: blur(8px);
+}
+body.mode-reader #loading .spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(139, 92, 246, 0.2);
+  border-top-color: var(--lr-accent, #8b5cf6);
+  border-radius: 50%;
+  animation: lr-spin 0.8s linear infinite;
+}
+@keyframes lr-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 768px) {
+  #view-reader.lumen-reader .lumen-reader-content {
+    max-width: 900px;
+  }
+}
