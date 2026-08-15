@@ -17,7 +17,111 @@ UA = os.environ.get(
     "SCRAPER_USER_AGENT",
     "LumenReader/2.0 (metadata; respectful caching)",
 )
+
 TIMEOUT = float(os.environ.get("VORATOON_TIMEOUT", "16"))
+SITE_BASE = (os.environ.get("VORATOON_SITE") or "https://v1.voratoon.com").rstrip("/")
+
+
+def _get_html(url: str) -> str:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": UA,
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+        },
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def _extract_rsc_initial_data(html: str) -> tuple[list, dict]:
+    """Parse Next.js RSC payload: initialData array from /updates page."""
+    import re
+
+    big = None
+    for m in re.finditer(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)', html):
+        if len(m.group(1)) > 50000:
+            big = m.group(1)
+            break
+    if not big:
+        return [], {"error": "no_rsc_payload"}
+    s = json.loads(big)
+    key = '"initialData":'
+    idx = s.find(key)
+    if idx < 0:
+        return [], {"error": "no_initialData"}
+    arr_start = s.find("[", idx)
+    depth = 0
+    in_str = False
+    esc = False
+    end = None
+    for i in range(arr_start, len(s)):
+        c = s[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        return [], {"error": "unbalanced_array"}
+    data = json.loads(s[arr_start:end])
+    meta: dict = {}
+    m = re.search(r'"lastPage"\s*:\s*(\d+)', s)
+    if m:
+        meta["lastPage"] = int(m.group(1))
+    m = re.search(r'"page"\s*:\s*(\d+)', s)
+    if m:
+        meta["page"] = int(m.group(1))
+    return data if isinstance(data, list) else [], meta
+
+
+def fetch_updates_html(page: int = 1) -> dict[str, Any]:
+    """
+    Scrape https://v1.voratoon.com/updates — urutan resmi situs (bukan API sort).
+    30 item / halaman, ~345 halaman.
+    """
+    page = max(1, int(page or 1))
+    url = f"{SITE_BASE}/updates" if page == 1 else f"{SITE_BASE}/updates?page={page}"
+    html = _get_html(url)
+    items, meta = _extract_rsc_initial_data(html)
+    out = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        # Strip heavy images from preview chapters
+        norm = _normalize_series_item(it, strip_chapter_images=True)
+        out.append(norm)
+    last = meta.get("lastPage") or 345
+    return {
+        "status": 200,
+        "message": "Voratoon updates (site)",
+        "data": out,
+        "meta": {
+            "source": "voratoon_updates_html",
+            "page": page,
+            "lastPage": last,
+            "total": last * 30,  # approximate; site shows ~30/page
+            "take": 30,
+            "mode": "newest",
+            "upstream": SITE_BASE,
+            "per_page": len(out),
+        },
+    }
+
 
 
 def _get(path: str, params: dict | None = None) -> dict[str, Any]:
@@ -181,6 +285,20 @@ def get_series_list(
         mode = "hot"
     if q:
         mode = "search"
+
+    # TERBARU: pakai urutan resmi situs /updates (HTML RSC), bukan API sort
+    if mode == "newest" and not q:
+        try:
+            payload = fetch_updates_html(page=page)
+            # optional slice if take < 30
+            items = payload.get("data") or []
+            if take and take < len(items):
+                items = items[:take]
+                payload["data"] = items
+            return payload
+        except Exception as e:
+            # fallback ke API ranking di bawah
+            print("voratoon updates html fail:", e, flush=True)
 
     # Upstream query
     api_sort = "popularity" if mode == "hot" else "updatedAt"
