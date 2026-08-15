@@ -1014,12 +1014,20 @@ class Handler(BaseHTTPRequestHandler):
                             )
 
                 # Upstream proxy (Voratoon-first)
-                # Voratoon-first: series/genres/chapters lewat provider (hindari DNS host mati)
+                url = API_BASE + "/" + sub
+                if parsed.query:
+                    url += "?" + parsed.query
+
+                cache_key = "GET " + url
+                ttl = _ttl_for(sub)
+
+                # series/genres/chapters lewat provider dulu (hindari host mati / DNS noise)
                 sub0 = (sub or "").split("?")[0].strip("/")
                 if sub0 == "series" or sub0 == "genres" or sub0.startswith("series/"):
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body:
                         cache_set(cache_key, sanka_body, ttl, sub_path=sub)
+                        extra = dict(rate_headers)
                         extra["X-Lumen-Cache"] = "VORATOON"
                         extra["X-Lumen-DB"] = "MISS"
                         extra["X-Lumen-Cache-TTL"] = str(ttl)
@@ -1028,12 +1036,6 @@ class Handler(BaseHTTPRequestHandler):
                             200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
                         )
 
-                url = API_BASE + "/" + sub
-                if parsed.query:
-                    url += "?" + parsed.query
-
-                cache_key = "GET " + url
-                ttl = _ttl_for(sub)
                 hit = cache_get(cache_key, allow_stale=True)
                 if hit is not None:
                     body, age_left, used_ttl, meta = hit
