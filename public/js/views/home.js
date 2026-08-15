@@ -33,21 +33,27 @@ export function createHomeView(ctx) {
   }
 
   function buildListParams() {
-    const params = { take: Config.pageSize, page: ctx.state.page };
+    const params = {
+      take: Config.pageSize,
+      page: ctx.state.page,
+      takeChapter: Config.previewChapters || 3,
+      includeMeta: "true",
+    };
     if (ctx.state.query) {
       params.title = ctx.state.query;
+      params.q = ctx.state.query;
       params.takeChapter = 2;
     } else if (ctx.state.tab === "newest") {
+      params.sort = "updatedAt";
+      params.sortOrder = "desc";
       params.preset = "rilisan_terbaru";
-      params.takeChapter = Config.previewChapters;
     } else if (ctx.state.tab === "project") {
-      params.preset = "rilisan_terbaru";
+      params.sort = "updatedAt";
       params.type = "project";
-      params.takeChapter = Config.previewChapters;
     } else if (ctx.state.tab === "hot") {
+      params.sort = "popularity";
+      params.sortOrder = "desc";
       params.isHot = "true";
-      params.takeChapter = 2;
-      params.includeMeta = "true";
     }
     if (ctx.state.status) params.status = ctx.state.status;
     if (ctx.state.format) params.format = ctx.state.format;
@@ -168,22 +174,29 @@ export function createHomeView(ctx) {
       if (d.format) badges.push(`<span class="badge">${esc(d.format)}</span>`);
       if (d.status) badges.push(`<span class="badge">${esc(d.status)}</span>`);
 
-      const chHtml = chapters
+      let chHtml = chapters
         .slice(0, Config.previewChapters)
         .map((ch) => {
           const idx = chapterIndex(ch) ?? "?";
-          const t = relTime(ch.createdAt);
-          const neu = isNew(ch.createdAt);
+          const t = relTime(ch.createdAt || ch.updatedAt);
+          const neu = isNew(ch.createdAt || ch.updatedAt);
           return `<div>Ch. ${esc(String(idx))}${neu ? ' <span class="new">BARU</span>' : ""}${t ? " · " + esc(t) : ""}</div>`;
         })
         .join("");
+      if (!chHtml) {
+        const label = d.latestChapterLabel || (d.totalChapters != null ? `Ch. ${d.totalChapters}` : "");
+        const t = relTime(d.updatedLabel || item.updatedAt);
+        chHtml = label
+          ? `<div>${esc(label)}${t ? " · " + esc(t) : ""}</div>`
+          : `<div>Total ch. ${esc(String(d.totalChapters ?? "—"))}</div>`;
+      }
 
       card.innerHTML = `
         <img class="card-cover" alt="" loading="lazy" />
         <div class="card-body">
           <div class="card-title">${esc(d.title || "—")}</div>
           <div class="badges">${badges.join("")}</div>
-          <div class="card-chapters">${chHtml || `<div>Total ch. ${esc(String(d.totalChapters ?? "—"))}</div>`}</div>
+          <div class="card-chapters">${chHtml}</div>
         </div>`;
       setImg(card.querySelector("img"), d.coverImage || "");
       box.appendChild(card);

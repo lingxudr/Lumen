@@ -327,6 +327,18 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         fmt = (qs.get("format") or [""])[0]
         if vt is not None:
             try:
+                preset = (qs.get("preset") or [""])[0]
+                is_hot = (qs.get("isHot") or qs.get("hot") or [""])[0]
+                take_ch = 3
+                try:
+                    take_ch = int((qs.get("takeChapter") or ["3"])[0])
+                except Exception:
+                    take_ch = 3
+                mode = "newest"
+                if sort in ("popular", "popularity", "hot", "views") or str(is_hot).lower() in ("1", "true", "yes"):
+                    mode = "hot"
+                if qsearch:
+                    mode = "search"
                 payload = vt.get_series_list(
                     take=take,
                     page=page,
@@ -334,6 +346,8 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
                     q=qsearch,
                     status=status,
                     format_=fmt,
+                    take_chapter=take_ch,
+                    mode=mode,
                 )
                 if payload and payload.get("data"):
                     return json.dumps(payload, ensure_ascii=False).encode("utf-8")

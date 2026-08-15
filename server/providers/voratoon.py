@@ -122,6 +122,18 @@ def _normalize_series_item(item: dict, *, strip_chapter_images: bool = True) -> 
     return out
 
 
+
+def _parse_iso(s: str | None) -> float:
+    if not s:
+        return 0.0
+    try:
+        from datetime import datetime
+        s2 = str(s).replace("Z", "+00:00")
+        return datetime.fromisoformat(s2).timestamp()
+    except Exception:
+        return 0.0
+
+
 def get_series_list(
     *,
     take: int = 30,
@@ -132,24 +144,42 @@ def get_series_list(
     status: str = "",
     format_: str = "",
     take_chapter: int = 3,
+    mode: str = "newest",
 ) -> dict[str, Any]:
+    """
+    mode:
+      newest  — rank by latest *chapter* time (bukan metadata series)
+      hot     — popularity
+      search  — text search
+    """
+    api_sort = "popularity" if mode == "hot" else "updatedAt"
+    if sort in ("popular", "hot", "views", "popularity"):
+        api_sort = "popularity"
+        mode = "hot"
+
+    # Ambil lebih banyak lalu re-rank untuk "newest" agar tidak tertimbun katalog lama
+    fetch_take = take if mode == "hot" or q else min(max(take * 3, 30), 60)
+    fetch_page = page if mode == "hot" or q else 1
+
     params: dict[str, Any] = {
-        "take": take,
-        "page": page,
-        "sort": sort,
-        "sortOrder": sort_order,
-        "takeChapter": max(0, min(take_chapter, 5)),
+        "take": fetch_take,
+        "page": fetch_page if mode == "hot" or q else page,
+        "sort": api_sort,
+        "sortOrder": sort_order or "desc",
+        "takeChapter": max(1, min(take_chapter or 3, 5)),
         "includeMeta": 1,
     }
-    if sort in ("popular", "hot", "views", "popularity"):
+    if mode == "hot":
         params["sort"] = "popularity"
     if q:
         params["search"] = q
         params["title"] = q
+        params["sort"] = "updatedAt"
     if status:
         params["status"] = status
     if format_:
         params["format"] = format_
+
     data = _get("/series", params)
     meta = data.get("meta") or {}
     items = [
@@ -157,9 +187,70 @@ def get_series_list(
         for it in (data.get("data") or [])
         if isinstance(it, dict)
     ]
+
+    def latest_chapter_ts(it: dict) -> float:
+        best = 0.0
+        for ch in it.get("chapters") or []:
+            if not isinstance(ch, dict):
+                continue
+            best = max(best, _parse_iso(ch.get("createdAt") or ch.get("updatedAt")))
+        # series updatedAt as weak signal
+        best = max(best, _parse_iso(it.get("updatedAt")))
+        return best
+
+    if mode == "newest" and not q:
+        # Buang / turunkan yang chapter terbarunya > 120 hari (katalog import)
+        now = __import__("time").time()
+        max_age = 120 * 86400
+        fresh = []
+        stale = []
+        for it in items:
+            ts = latest_chapter_ts(it)
+            age = now - ts if ts else 10**12
+            if ts and age <= max_age:
+                fresh.append((ts, it))
+            else:
+                stale.append((ts, it))
+        fresh.sort(key=lambda x: x[0], reverse=True)
+        stale.sort(key=lambda x: x[0], reverse=True)
+        ranked = [it for _, it in fresh] + [it for _, it in stale]
+        # client page slice when we fetched page-1 pool
+        if page > 1 and fetch_page == 1:
+            # fallback: use upstream page directly without re-pool
+            data2 = _get("/series", {
+                **params,
+                "take": take,
+                "page": page,
+            })
+            ranked = [
+                _normalize_series_item(it, strip_chapter_images=True)
+                for it in (data2.get("data") or [])
+                if isinstance(it, dict)
+            ]
+            ranked.sort(key=latest_chapter_ts, reverse=True)
+        else:
+            start = (page - 1) * take
+            ranked = ranked[start : start + take]
+        items = ranked
+    elif mode == "hot":
+        pass  # keep API order
+    else:
+        items = items[:take]
+
+    # Enrich display fields for frontend
+    for it in items:
+        d = it.get("data") if isinstance(it.get("data"), dict) else {}
+        chs = it.get("chapters") or []
+        if chs and isinstance(chs[0], dict):
+            idx = _chapter_index(chs[0])
+            if idx is not None:
+                d["latestChapterLabel"] = f"Chapter {idx}"
+            d["updatedLabel"] = chs[0].get("createdAt") or it.get("updatedAt")
+        it["data"] = d
+
     return {
         "status": 200,
-        "message": data.get("message") or "Voratoon series",
+        "message": "Voratoon series",
         "data": items,
         "meta": {
             "source": "voratoon",
@@ -167,9 +258,11 @@ def get_series_list(
             "lastPage": meta.get("lastPage") or meta.get("totalPages") or 1,
             "total": meta.get("total") or len(items),
             "take": take,
+            "mode": mode,
             "upstream": BASE,
         },
     }
+
 
 
 def get_series_detail(slug: str) -> dict[str, Any] | None:
