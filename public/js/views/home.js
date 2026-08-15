@@ -118,8 +118,14 @@ export function createHomeView(ctx) {
   }
 
   function applyListData(data) {
-    const items = data.data || [];
-    const meta = data.meta || {};
+    if (!data || typeof data !== "object") data = { data: [], meta: {} };
+    let items = data.data;
+    if (!Array.isArray(items)) {
+      // some proxies wrap twice
+      items = (items && items.data) || data.results || data.items || [];
+    }
+    if (!Array.isArray(items)) items = [];
+    const meta = data.meta || data.pagination || {};
     ctx.state.lastPage = meta.lastPage || 1;
     ctx.state.page = meta.page || ctx.state.page;
     $("#page-info").textContent = `${ctx.state.page} / ${ctx.state.lastPage}`;

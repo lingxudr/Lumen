@@ -2,8 +2,8 @@
  * Edge proxy → be.komikcast.cc ONLY.
  * Anti-SSRF: path relative saja, tidak boleh URL absolut / host asing.
  */
-const API_BASE = "https://be.komikcast.cc";
-const ALLOWED_HOST = "be.komikcast.cc";
+const API_BASE = process.env.LUMEN_UPSTREAM || "https://web-production-7769e.up.railway.app";
+const ALLOWED_HOST = process.env.LUMEN_UPSTREAM_HOST || "web-production-7769e.up.railway.app";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36";
 
@@ -146,7 +146,9 @@ module.exports = async function handler(req, res) {
 
     const qs = collectQuery(req.query, req.url || "/");
     const q = qs.toString();
-    const target = `${API_BASE}/${subPath}${q ? `?${q}` : ""}`;
+    // Lumen Railway exposes API under /api/*
+    let apiPath = subPath.replace(/^api\//, "");
+    const target = `${API_BASE}/api/${apiPath}${q ? `?${q}` : ""}`;
     if (!assertTargetSafe(target)) {
       return res.status(403).json({ error: "host_not_allowed" });
     }

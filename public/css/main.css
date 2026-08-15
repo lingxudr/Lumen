@@ -17,7 +17,7 @@
   --green: #39c878;
   --purple: #9b6cff;
 
-  --border: 3px;
+  --border: 2px;
   --shadow: 6px 6px 0 var(--ink);
   --shadow-sm: 4px 4px 0 var(--ink);
 
@@ -168,6 +168,10 @@ img {
 }
 
 .tabs {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+
   margin-left: auto;
   display: flex;
   gap: 7px;
@@ -1062,7 +1066,7 @@ img {
 }
 
 .grid:empty::before {
-  content: "Belum ada judul untuk ditampilkan.";
+  content: "Belum ada judul untuk ditampilkan. Coba Refresh.";
   display: block;
   grid-column: 1 / -1;
   padding: 28px;

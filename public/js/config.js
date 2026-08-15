@@ -1,9 +1,11 @@
 /** App config — lokal vs produksi */
+const DEFAULT_PROXY = "https://web-production-7769e.up.railway.app";
+
 function detectEndpoints() {
   const host = typeof location !== "undefined" ? location.hostname : "";
   const local = host === "localhost" || host === "127.0.0.1" || host === "";
 
-  // Jika dibuka langsung di Railway, API = same origin (paling stabil)
+  // Railway same-origin
   if (host.endsWith(".railway.app")) {
     return { apiBase: "/api", imgProxy: "/img" };
   }
@@ -13,15 +15,16 @@ function detectEndpoints() {
       ? String(window.LUMEN_PROXY).trim()
       : "";
 
-  if (local) {
+  // Hindari placeholder yang belum diganti
+  const cleaned = fromWindow
+    .replace(/lumen-production-xxxx\.up\.railway\.app/gi, "")
+    .trim();
+
+  if (local && !cleaned) {
     return { apiBase: "/api", imgProxy: "/img" };
   }
 
-  if (!fromWindow) {
-    console.warn("[Lumen] window.LUMEN_PROXY belum di-set");
-    return { apiBase: "/api", imgProxy: "/img" };
-  }
-  const origin = fromWindow.replace(/\/$/, "");
+  const origin = (cleaned || DEFAULT_PROXY).replace(/\/$/, "");
   return {
     apiBase: origin + "/api",
     imgProxy: origin + "/img",
@@ -35,5 +38,5 @@ export const Config = {
   imgProxy: endpoints.imgProxy,
   pageSize: 30,
   previewChapters: 3,
-  version: "1.2.0",
+  version: "1.2.1",
 };
