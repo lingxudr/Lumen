@@ -36,28 +36,33 @@ def _get_html(url: str) -> str:
         return resp.read().decode("utf-8", errors="replace")
 
 
-def _extract_rsc_initial_data(html: str) -> tuple[list, dict]:
-    """Parse Next.js RSC payload: initialData array from /updates page."""
+
+def _decode_biggest_rsc_frame(html: str) -> str | None:
+    """Ambil string Flight frame terbesar (sudah di-unescape via json.loads)."""
     import re
 
-    big = None
+    best = None
+    best_len = 0
     for m in re.finditer(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)', html):
-        if len(m.group(1)) > 50000:
-            big = m.group(1)
-            break
-    if not big:
-        return [], {"error": "no_rsc_payload"}
-    s = json.loads(big)
-    key = '"initialData":'
-    idx = s.find(key)
-    if idx < 0:
-        return [], {"error": "no_initialData"}
-    arr_start = s.find("[", idx)
+        q = m.group(1)
+        if len(q) > best_len:
+            best_len = len(q)
+            best = q
+    if not best:
+        return None
+    return json.loads(best)
+
+
+def _balanced_json(s: str, start: int):
+    """Parse JSON value starting at start (object or array)."""
+    if start < 0 or start >= len(s) or s[start] not in "{[":
+        return None
+    opener = s[start]
+    closer = "}" if opener == "{" else "]"
     depth = 0
     in_str = False
     esc = False
-    end = None
-    for i in range(arr_start, len(s)):
+    for i in range(start, len(s)):
         c = s[i]
         if in_str:
             if esc:
@@ -69,56 +74,197 @@ def _extract_rsc_initial_data(html: str) -> tuple[list, dict]:
             continue
         if c == '"':
             in_str = True
-        elif c == "[":
+        elif c == opener:
             depth += 1
-        elif c == "]":
+        elif c == closer:
             depth -= 1
             if depth == 0:
-                end = i + 1
-                break
-    if end is None:
-        return [], {"error": "unbalanced_array"}
-    data = json.loads(s[arr_start:end])
+                try:
+                    return json.loads(s[start : i + 1])
+                except Exception:
+                    return None
+    return None
+
+
+def _extract_rsc_initial_data(html: str):
+    """
+    Return initialData from RSC HTML.
+    - /updates → list[SeriesItem]
+    - / → dict with banner, updates, newSeries, completed, popular, ...
+    """
+    s = _decode_biggest_rsc_frame(html)
+    if not s:
+        return None, {"error": "no_rsc_payload"}
+    key = '"initialData":'
+    idx = s.find(key)
+    if idx < 0:
+        return None, {"error": "no_initialData"}
+    # value starts at first { or [ after key
+    pos = idx + len(key)
+    while pos < len(s) and s[pos] in " \t\n\r":
+        pos += 1
+    data = _balanced_json(s, pos)
     meta: dict = {}
+    import re
+
     m = re.search(r'"lastPage"\s*:\s*(\d+)', s)
     if m:
         meta["lastPage"] = int(m.group(1))
     m = re.search(r'"page"\s*:\s*(\d+)', s)
     if m:
         meta["page"] = int(m.group(1))
-    return data if isinstance(data, list) else [], meta
+    return data, meta
+
+
+def _orm_to_series_item(raw: dict) -> dict | None:
+    """Normalisasi item popular (bentuk Lucid/Adonis ORM) → SeriesItem standar."""
+    if not isinstance(raw, dict):
+        return None
+    if isinstance(raw.get("data"), dict) and raw.get("data", {}).get("slug"):
+        return raw
+    attrs = raw.get("$attributes") or raw.get("attributes")
+    if not isinstance(attrs, dict):
+        return None
+    data_keys = (
+        "title",
+        "nativeTitle",
+        "slug",
+        "coverImage",
+        "backgroundImage",
+        "synopsis",
+        "isHot",
+        "author",
+        "rating",
+        "totalChapters",
+        "releaseDate",
+        "status",
+        "format",
+        "type",
+        "genreIds",
+        "genres",
+        "isRecommended",
+        "folderCdn",
+        "animeAdaptation",
+        "animeStatus",
+    )
+    data = {k: attrs[k] for k in data_keys if k in attrs}
+    if not data.get("slug"):
+        return None
+    item = {
+        "id": attrs.get("id") or raw.get("id"),
+        "createdAt": attrs.get("createdAt"),
+        "updatedAt": attrs.get("updatedAt"),
+        "isDraft": attrs.get("isDraft", False),
+        "data": data,
+        "chapters": [],
+        "metadata": {
+            "views": {
+                "total": attrs.get("totalViews") or attrs.get("totalViewsComputed") or 0,
+            },
+            "bookmarkCount": attrs.get("bookmarkCount") or 0,
+            "ranking": attrs.get("ranking"),
+        },
+        "provider": "voratoon",
+        "_source": "voratoon_home_orm",
+    }
+    return item
+
+
+def _normalize_feed_items(items: list, *, strip_images: bool = True) -> list:
+    out = []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        if "$attributes" in it or "modelOptions" in it:
+            it = _orm_to_series_item(it)
+            if not it:
+                continue
+        out.append(_normalize_series_item(it, strip_chapter_images=strip_images))
+    return out
 
 
 def fetch_updates_html(page: int = 1) -> dict[str, Any]:
     """
-    Scrape https://v1.voratoon.com/updates — urutan resmi situs (bukan API sort).
+    Scrape https://v1.voratoon.com/updates — urutan resmi situs.
     30 item / halaman, ~345 halaman.
     """
     page = max(1, int(page or 1))
     url = f"{SITE_BASE}/updates" if page == 1 else f"{SITE_BASE}/updates?page={page}"
     html = _get_html(url)
-    items, meta = _extract_rsc_initial_data(html)
-    out = []
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        # Strip heavy images from preview chapters
-        norm = _normalize_series_item(it, strip_chapter_images=True)
-        out.append(norm)
+    data, meta = _extract_rsc_initial_data(html)
+    items = data if isinstance(data, list) else []
+    out = _normalize_feed_items(items, strip_images=True)
     last = meta.get("lastPage") or 345
     return {
         "status": 200,
-        "message": "Voratoon updates (site)",
+        "message": "Voratoon updates (site RSC)",
         "data": out,
         "meta": {
             "source": "voratoon_updates_html",
             "page": page,
             "lastPage": last,
-            "total": last * 30,  # approximate; site shows ~30/page
+            "total": last * 30,
             "take": 30,
             "mode": "newest",
             "upstream": SITE_BASE,
             "per_page": len(out),
+        },
+    }
+
+
+def fetch_home_rsc() -> dict[str, Any]:
+    """
+    Scrape https://v1.voratoon.com/ home initialData:
+      banner, popular, updates, newSeries, completed, ...
+    """
+    html = _get_html(f"{SITE_BASE}/")
+    data, meta = _extract_rsc_initial_data(html)
+    if not isinstance(data, dict):
+        raise RuntimeError(f"home initialData not object: {type(data)}")
+    return {
+        "banner": _normalize_feed_items(data.get("banner") or []),
+        "updates": _normalize_feed_items(data.get("updates") or []),
+        "newSeries": _normalize_feed_items(data.get("newSeries") or []),
+        "completed": _normalize_feed_items(data.get("completed") or []),
+        "popular": _normalize_feed_items(data.get("popular") or []),
+        "meta": {"source": "voratoon_home_rsc", "upstream": SITE_BASE, **meta},
+    }
+
+
+def _home_feed_payload(mode: str, take: int, page: int) -> dict[str, Any] | None:
+    """
+    Ambil feed dari home RSC untuk tab yang tidak butuh pagination dalam.
+    page>1 → None (caller fallback API).
+    """
+    if page > 1:
+        return None
+    home = fetch_home_rsc()
+    key_map = {
+        "new_series": "newSeries",
+        "completed": "completed",
+        "hot": "popular",
+        "newest": "updates",  # optional short path page1
+    }
+    key = key_map.get(mode)
+    if not key:
+        return None
+    items = home.get(key) or []
+    if take and take < len(items):
+        items = items[:take]
+    return {
+        "status": 200,
+        "message": f"Voratoon home RSC:{key}",
+        "data": items,
+        "meta": {
+            "source": "voratoon_home_rsc",
+            "feed": key,
+            "page": 1,
+            "lastPage": 1 if mode != "newest" else 345,
+            "total": len(items) if mode != "newest" else 10350,
+            "take": take,
+            "mode": mode,
+            "upstream": SITE_BASE,
+            "note": "Home RSC snapshot (tab curated); page>1 uses other source",
         },
     }
 
@@ -286,19 +432,23 @@ def get_series_list(
     if q:
         mode = "search"
 
-    # TERBARU: pakai urutan resmi situs /updates (HTML RSC), bukan API sort
-    if mode == "newest" and not q:
+    # Feed resmi dari situs (RSC) — prioritas tertinggi
+    if not q and mode in ("newest", "new_series", "completed", "hot"):
         try:
-            payload = fetch_updates_html(page=page)
-            # optional slice if take < 30
-            items = payload.get("data") or []
-            if take and take < len(items):
-                items = items[:take]
-                payload["data"] = items
-            return payload
+            if mode == "newest":
+                # Pagination penuh lewat /updates
+                payload = fetch_updates_html(page=page)
+                items = payload.get("data") or []
+                if take and take < len(items):
+                    items = items[:take]
+                    payload["data"] = items
+                return payload
+            # new_series / completed / hot → home RSC (page 1 curated)
+            payload = _home_feed_payload(mode, take=take, page=page)
+            if payload and payload.get("data"):
+                return payload
         except Exception as e:
-            # fallback ke API ranking di bawah
-            print("voratoon updates html fail:", e, flush=True)
+            print(f"voratoon RSC feed fail mode={mode}:", e, flush=True)
 
     # Upstream query
     api_sort = "popularity" if mode == "hot" else "updatedAt"
