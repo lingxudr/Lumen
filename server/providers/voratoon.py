@@ -123,6 +123,7 @@ def _normalize_series_item(item: dict, *, strip_chapter_images: bool = True) -> 
 
 
 
+
 def _parse_iso(s: str | None) -> float:
     if not s:
         return 0.0
@@ -132,6 +133,22 @@ def _parse_iso(s: str | None) -> float:
         return datetime.fromisoformat(s2).timestamp()
     except Exception:
         return 0.0
+
+
+def _as_int(v, default: int = 0) -> int:
+    try:
+        return int(float(v))
+    except Exception:
+        return default
+
+
+def _latest_chapter_ts(it: dict) -> float:
+    best = 0.0
+    for ch in it.get("chapters") or []:
+        if not isinstance(ch, dict):
+            continue
+        best = max(best, _parse_iso(ch.get("createdAt") or ch.get("updatedAt")))
+    return best
 
 
 def get_series_list(
@@ -145,100 +162,98 @@ def get_series_list(
     format_: str = "",
     take_chapter: int = 3,
     mode: str = "newest",
+    type_: str = "",
 ) -> dict[str, Any]:
     """
     mode:
-      newest  — rank by latest *chapter* time (bukan metadata series)
-      hot     — popularity
-      search  — text search
+      newest     — chapter update ≤21 hari (bukan katalog import)
+      new_series — series baru (series.createdAt ≤45 hari)
+      completed  — status=completed
+      hot        — popularity
+      project    — type=project
+      search     — text search
     """
-    api_sort = "popularity" if mode == "hot" else "updatedAt"
+    import time
+
+    now = time.time()
+    mode = (mode or "newest").lower().strip()
     if sort in ("popular", "hot", "views", "popularity"):
-        api_sort = "popularity"
         mode = "hot"
+    if q:
+        mode = "search"
 
-    # Ambil lebih banyak lalu re-rank untuk "newest" agar tidak tertimbun katalog lama
-    fetch_take = take if mode == "hot" or q else min(max(take * 3, 30), 60)
-    fetch_page = page if mode == "hot" or q else 1
-
+    # Upstream query
+    api_sort = "popularity" if mode == "hot" else "updatedAt"
+    if mode == "new_series":
+        api_sort = "createdAt"
     params: dict[str, Any] = {
-        "take": fetch_take,
-        "page": fetch_page if mode == "hot" or q else page,
+        "take": 40 if mode in ("newest", "new_series") else take,
+        "page": page if mode not in ("newest", "new_series") else 1,
         "sort": api_sort,
         "sortOrder": sort_order or "desc",
         "takeChapter": max(1, min(take_chapter or 3, 5)),
         "includeMeta": 1,
     }
-    if mode == "hot":
+    if mode == "completed":
+        params["status"] = "completed"
+        params["take"] = take
+        params["page"] = page
+    elif mode == "hot":
         params["sort"] = "popularity"
-    if q:
-        params["search"] = q
-        params["title"] = q
-        params["sort"] = "updatedAt"
-    if status:
+        params["take"] = take
+        params["page"] = page
+    elif mode == "project":
+        params["type"] = "project"
+        params["take"] = take
+        params["page"] = page
+    elif status:
         params["status"] = status
     if format_:
         params["format"] = format_
+    if type_ and mode != "project":
+        params["type"] = type_
+    if q:
+        params["search"] = q
+        params["title"] = q
+        params["take"] = take
+        params["page"] = page
+        params["sort"] = "updatedAt"
 
-    data = _get("/series", params)
-    meta = data.get("meta") or {}
-    items = [
-        _normalize_series_item(it, strip_chapter_images=True)
-        for it in (data.get("data") or [])
-        if isinstance(it, dict)
-    ]
+    # Pool several pages for newest / new_series quality filter
+    raw_items: list[dict] = []
+    pages_to_fetch = 3 if mode in ("newest", "new_series") else 1
+    for pg in range(1, pages_to_fetch + 1):
+        p = dict(params)
+        if mode in ("newest", "new_series"):
+            p["page"] = pg
+            p["take"] = 40
+        data = _get("/series", p)
+        batch = [
+            _normalize_series_item(it, strip_chapter_images=True)
+            for it in (data.get("data") or [])
+            if isinstance(it, dict)
+        ]
+        raw_items.extend(batch)
+        if mode not in ("newest", "new_series"):
+            meta = data.get("meta") or {}
+            break
+        if len(batch) < 20:
+            break
+    else:
+        data = data if raw_items else {"meta": {}}
+        meta = data.get("meta") or {}
 
-    def latest_chapter_ts(it: dict) -> float:
-        best = 0.0
-        for ch in it.get("chapters") or []:
-            if not isinstance(ch, dict):
-                continue
-            best = max(best, _parse_iso(ch.get("createdAt") or ch.get("updatedAt")))
-        # series updatedAt as weak signal
-        best = max(best, _parse_iso(it.get("updatedAt")))
-        return best
-
-    if mode == "newest" and not q:
-        # Buang / turunkan yang chapter terbarunya > 120 hari (katalog import)
-        now = __import__("time").time()
-        max_age = 120 * 86400
-        fresh = []
-        stale = []
-        for it in items:
-            ts = latest_chapter_ts(it)
-            age = now - ts if ts else 10**12
-            if ts and age <= max_age:
-                fresh.append((ts, it))
-            else:
-                stale.append((ts, it))
-        fresh.sort(key=lambda x: x[0], reverse=True)
-        stale.sort(key=lambda x: x[0], reverse=True)
-        ranked = [it for _, it in fresh] + [it for _, it in stale]
-        # client page slice when we fetched page-1 pool
-        if page > 1 and fetch_page == 1:
-            # fallback: use upstream page directly without re-pool
-            data2 = _get("/series", {
-                **params,
-                "take": take,
-                "page": page,
-            })
-            ranked = [
+    if mode not in ("newest", "new_series"):
+        data = _get("/series", params) if not raw_items else {"data": raw_items, "meta": meta}
+        if not raw_items:
+            raw_items = [
                 _normalize_series_item(it, strip_chapter_images=True)
-                for it in (data2.get("data") or [])
+                for it in (data.get("data") or [])
                 if isinstance(it, dict)
             ]
-            ranked.sort(key=latest_chapter_ts, reverse=True)
-        else:
-            start = (page - 1) * take
-            ranked = ranked[start : start + take]
-        items = ranked
-    elif mode == "hot":
-        pass  # keep API order
-    else:
-        items = items[:take]
+        meta = data.get("meta") or {}
 
-    # Enrich display fields for frontend
-    for it in items:
+    def enrich(it: dict) -> dict:
         d = it.get("data") if isinstance(it.get("data"), dict) else {}
         chs = it.get("chapters") or []
         if chs and isinstance(chs[0], dict):
@@ -247,19 +262,111 @@ def get_series_list(
                 d["latestChapterLabel"] = f"Chapter {idx}"
             d["updatedLabel"] = chs[0].get("createdAt") or it.get("updatedAt")
         it["data"] = d
+        return it
+
+    items = raw_items
+
+    if mode == "newest":
+        # Hanya update chapter ≤ 21 hari; ranking by chapter time
+        max_age = 21 * 86400
+        scored = []
+        for it in items:
+            ch_ts = _latest_chapter_ts(it)
+            if not ch_ts or (now - ch_ts) > max_age:
+                continue
+            d = it.get("data") or {}
+            tc = _as_int(d.get("totalChapters"), 0)
+            # Boost ongoing series with real chapter depth
+            score = ch_ts + min(tc, 50) * 60  # up to +50min equivalent
+            scored.append((score, it))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        # dedupe by slug
+        seen = set()
+        ranked = []
+        for _, it in scored:
+            slug = ((it.get("data") or {}).get("slug") or "").lower()
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            ranked.append(enrich(it))
+        # paginate local
+        start = (max(1, page) - 1) * take
+        items = ranked[start : start + take]
+        meta = {
+            "page": page,
+            "lastPage": max(1, (len(ranked) + take - 1) // take),
+            "total": len(ranked),
+            "mode": "newest",
+            "window_days": 21,
+        }
+    elif mode == "new_series":
+        max_age = 45 * 86400
+        scored = []
+        for it in items:
+            ser_ts = _parse_iso(it.get("createdAt"))
+            if not ser_ts or (now - ser_ts) > max_age:
+                continue
+            d = it.get("data") or {}
+            tc = _as_int(d.get("totalChapters"), 0)
+            # Prefer truly new (few chapters) slightly
+            score = ser_ts - min(tc, 20) * 3600
+            scored.append((score, it))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        seen = set()
+        ranked = []
+        for _, it in scored:
+            slug = ((it.get("data") or {}).get("slug") or "").lower()
+            if not slug or slug in seen:
+                continue
+            seen.add(slug)
+            ranked.append(enrich(it))
+        start = (max(1, page) - 1) * take
+        items = ranked[start : start + take]
+        meta = {
+            "page": page,
+            "lastPage": max(1, (len(ranked) + take - 1) // take),
+            "total": len(ranked),
+            "mode": "new_series",
+            "window_days": 45,
+        }
+    elif mode == "completed":
+        # Prefer longer completed series
+        scored = []
+        for it in items:
+            d = it.get("data") or {}
+            tc = _as_int(d.get("totalChapters"), 0)
+            ts = _latest_chapter_ts(it) or _parse_iso(it.get("updatedAt"))
+            scored.append((tc * 1000 + ts / 1e6, it))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        items = [enrich(it) for _, it in scored]
+        meta = {
+            "page": meta.get("page") or page,
+            "lastPage": meta.get("lastPage") or 1,
+            "total": meta.get("total") or len(items),
+            "mode": "completed",
+        }
+    else:
+        items = [enrich(it) for it in items[:take] if isinstance(it, dict)]
+        meta = {
+            "page": meta.get("page") or page,
+            "lastPage": meta.get("lastPage") or 1,
+            "total": meta.get("total") or len(items),
+            "mode": mode,
+        }
 
     return {
         "status": 200,
-        "message": "Voratoon series",
+        "message": f"Voratoon {mode}",
         "data": items,
         "meta": {
             "source": "voratoon",
             "page": meta.get("page") or page,
-            "lastPage": meta.get("lastPage") or meta.get("totalPages") or 1,
+            "lastPage": meta.get("lastPage") or 1,
             "total": meta.get("total") or len(items),
             "take": take,
             "mode": mode,
             "upstream": BASE,
+            **{k: v for k, v in meta.items() if k in ("window_days",)},
         },
     }
 

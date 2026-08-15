@@ -42,20 +42,30 @@ export function createHomeView(ctx) {
     if (ctx.state.query) {
       params.title = ctx.state.query;
       params.q = ctx.state.query;
+      params.mode = "search";
       params.takeChapter = 2;
     } else if (ctx.state.tab === "newest") {
+      params.mode = "newest";
       params.sort = "updatedAt";
       params.sortOrder = "desc";
-      params.preset = "rilisan_terbaru";
-    } else if (ctx.state.tab === "project") {
+    } else if (ctx.state.tab === "new_series") {
+      params.mode = "new_series";
+      params.sort = "createdAt";
+      params.sortOrder = "desc";
+    } else if (ctx.state.tab === "completed") {
+      params.mode = "completed";
+      params.status = "completed";
       params.sort = "updatedAt";
+    } else if (ctx.state.tab === "project") {
+      params.mode = "project";
       params.type = "project";
     } else if (ctx.state.tab === "hot") {
+      params.mode = "hot";
       params.sort = "popularity";
       params.sortOrder = "desc";
       params.isHot = "true";
     }
-    if (ctx.state.status) params.status = ctx.state.status;
+    if (ctx.state.status && ctx.state.tab !== "completed") params.status = ctx.state.status;
     if (ctx.state.format) params.format = ctx.state.format;
     return params;
   }
@@ -210,7 +220,13 @@ export function createHomeView(ctx) {
     const q = $("#q");
     if (q) q.value = "";
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === name));
-    const titles = { newest: "Terbaru", project: "Project", hot: "Populer" };
+    const titles = {
+      newest: "Terbaru",
+      new_series: "Series Baru",
+      completed: "Selesai",
+      project: "Project",
+      hot: "Populer",
+    };
     $("#list-title").textContent = titles[name] || name;
     showView("home");
     loadList();

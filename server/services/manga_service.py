@@ -327,16 +327,26 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         fmt = (qs.get("format") or [""])[0]
         if vt is not None:
             try:
-                preset = (qs.get("preset") or [""])[0]
+                preset = (qs.get("preset") or [""])[0].lower()
                 is_hot = (qs.get("isHot") or qs.get("hot") or [""])[0]
+                mode_q = (qs.get("mode") or [""])[0].lower()
+                type_q = (qs.get("type") or [""])[0]
                 take_ch = 3
                 try:
                     take_ch = int((qs.get("takeChapter") or ["3"])[0])
                 except Exception:
                     take_ch = 3
-                mode = "newest"
+                mode = mode_q or "newest"
                 if sort in ("popular", "popularity", "hot", "views") or str(is_hot).lower() in ("1", "true", "yes"):
                     mode = "hot"
+                if preset in ("rilisan_terbaru", "newest", "latest"):
+                    mode = mode_q or "newest"
+                if preset in ("new_series", "series_baru", "baru"):
+                    mode = "new_series"
+                if preset in ("completed", "complete", "selesai") or status in ("completed", "complete"):
+                    mode = "completed"
+                if type_q == "project" and mode == "newest":
+                    mode = "project"
                 if qsearch:
                     mode = "search"
                 payload = vt.get_series_list(
@@ -348,6 +358,7 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
                     format_=fmt,
                     take_chapter=take_ch,
                     mode=mode,
+                    type_=type_q,
                 )
                 if payload and payload.get("data"):
                     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
