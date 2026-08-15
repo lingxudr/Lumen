@@ -96,7 +96,7 @@
         <option value="health">/api/health</option>
         <option value="latest" selected>/api/latest</option>
         <option value="search">/api/search?q=</option>
-        <option value="pages">/api/pages (komikcast)</option>
+        <option value="pages">/api/pages (voratoon)</option>
         <option value="feed">/api/feed (format Sanka-like)</option>
       </select>
     </div>
@@ -110,11 +110,11 @@
       <p>Feed terbaru format mirip Shinigami/Sanka (latest array + meta).</p>
     </div>
     <div class="ep">
-      <div><span class="m">GET</span><code>/api/latest?provider=komikcast&amp;limit=20</code></div>
+      <div><span class="m">GET</span><code>/api/latest?provider=voratoon&amp;limit=20</code></div>
       <p>Last updated hybrid / per provider.</p>
     </div>
     <div class="ep">
-      <div><span class="m">GET</span><code>/api/pages?provider=komikcast&amp;slug=dandadan&amp;number=243</code></div>
+      <div><span class="m">GET</span><code>/api/pages?provider=voratoon&amp;slug=dandadan&amp;number=243</code></div>
       <p>Gambar chapter untuk playback.</p>
     </div>
 
@@ -135,9 +135,9 @@
     }
     const paths = {
       health: "/api/health",
-      latest: "/api/latest?limit=5&provider=komikcast",
+      latest: "/api/latest?limit=5&provider=voratoon",
       search: "/api/search?q=solo+leveling&limit=5",
-      pages: "/api/pages?provider=komikcast&slug=dandadan&number=243",
+      pages: "/api/pages?provider=voratoon&slug=dandadan&number=243",
       feed: "/api/feed?limit=5",
     };
     document.getElementById("run").onclick = async () => {

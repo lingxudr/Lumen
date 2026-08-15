@@ -1,5 +1,5 @@
 /**
- * Edge proxy → be.komikcast.cc ONLY.
+ * Edge proxy → Lumen Railway / Voratoon upstream.
  * Anti-SSRF: path relative saja, tidak boleh URL absolut / host asing.
  */
 const API_BASE = process.env.LUMEN_UPSTREAM || "https://web-production-7769e.up.railway.app";
@@ -83,8 +83,8 @@ async function fetchUpstream(target) {
           "User-Agent": UA,
           Accept: "application/json, text/plain, */*",
           "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-          Origin: "https://v3.komikcast.fit",
-          Referer: "https://v3.komikcast.fit/",
+          Origin: "https://v1.voratoon.com",
+          Referer: "https://v1.voratoon.com/",
         },
         redirect: "manual", // prevent redirect-to-internal SSRF
       });

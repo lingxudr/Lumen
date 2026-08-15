@@ -20,7 +20,7 @@ module.exports = async function handler(req, res) {
     const strategies = [
       ["no_referer", null],
       ["empty_referer", ""],
-      ["komikcast_referer", "https://v3.komikcast.fit/"],
+      ["voratoon_referer", "https://v1.voratoon.com/"],
       ["foreign_referer", "https://example.com/"],
     ];
 
@@ -58,8 +58,8 @@ module.exports = async function handler(req, res) {
       }
       const oks = Object.fromEntries(entry.tests.map((t) => [t.strategy, t.ok_image]));
       if (oks.no_referer || oks.empty_referer || oks.foreign_referer) {
-        entry.verdict = oks.komikcast_referer ? "open" : "mixed";
-      } else if (oks.komikcast_referer) {
+        entry.verdict = oks.voratoon_referer ? "open" : "mixed";
+      } else if (oks.voratoon_referer) {
         entry.verdict = "hotlink_protected";
       } else {
         entry.verdict = "blocked";

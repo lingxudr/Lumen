@@ -71,10 +71,10 @@ except Exception as _db_imp_err:
     lumen_db = _DbStub()
 
 
-# Komiku hybrid dimatikan — Lumen kembali pure Komikcast (be.komikcast.cc)
+# Legacy hybrid dimatikan — Lumen Voratoon-first (api.voratoon.com / RSC)
 _HYBRID_OK = False
 KomikuProvider = None  # type: ignore
-KomikcastProvider = None  # type: ignore
+VoratoonLegacyProvider = None  # type: ignore
 
 try:
     from server import sanka_fallback  # type: ignore
@@ -86,7 +86,7 @@ except Exception:
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "public"
-API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://be.komikcast.cc").rstrip("/")
+API_BASE = (os.environ.get("API_BASE") or os.environ.get("KC_API_BASE") or "https://api.voratoon.com").rstrip("/")
 HOST = os.environ.get("HOST") or os.environ.get("KC_HOST") or "0.0.0.0"
 PORT = int(os.environ.get("PORT") or os.environ.get("KC_PORT") or "8080")
 UA = (
@@ -201,8 +201,8 @@ def img_cache_set(key, body, content_type):
 
 # ── Rate limit per IP (sliding window 60s) ────────────────────────────
 RATE_LIMIT_WINDOW = 60
-RATE_LIMIT_API = int(os.environ.get("RATE_LIMIT_API", "120"))
-RATE_LIMIT_IMG = int(os.environ.get("RATE_LIMIT_IMG", "90"))
+RATE_LIMIT_API = int(os.environ.get("RATE_LIMIT_API", "20"))   # metadata API / menit
+RATE_LIMIT_IMG = int(os.environ.get("RATE_LIMIT_IMG", "60"))  # gambar: lebih longgar agar reader tidak 429
 _RATE = defaultdict(deque)
 _RATE_LOCK = threading.Lock()
 
@@ -307,8 +307,8 @@ def fetch(url, extra_headers=None, timeout=12, retries=0):
         "User-Agent": UA,
         "Accept": "*/*",
         "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
-        "Origin": "https://v3.komikcast.fit",
-        "Referer": "https://v3.komikcast.fit/",
+        "Origin": "https://v1.voratoon.com",
+        "Referer": "https://v1.voratoon.com/",
     }
     if extra_headers:
         headers.update(extra_headers)
@@ -427,7 +427,7 @@ def _norm_title_key(t):
 
 
 def _komiku_to_series_item(m):
-    """Map MangaInfo Komiku → bentuk item series Komikcast (frontend)."""
+    """Map MangaInfo legacy → bentuk item series frontend."""
     import re
 
     slug = m.slug or m.source_slug or ""
@@ -487,7 +487,7 @@ def _komiku_to_series_item(m):
 
 
 def _komikcast_from_mongo_catalog(take=20):
-    """Fallback saat be.komikcast.cc 503 — pakai catalog Mongo jika ada."""
+    """Fallback saat api.voratoon.com 503 — pakai catalog Mongo jika ada."""
     out = []
     try:
         from server.hybrid_providers import mongo as mongo_cache
@@ -516,14 +516,14 @@ def _komikcast_from_mongo_catalog(take=20):
                         "coverImage": d.get("cover_url"),
                         "status": (d.get("status") or "").lower() or None,
                         "format": (d.get("type") or "").lower() or None,
-                        "provider": "komikcast",
+                        "provider": "voratoon",
                         "latestChapterLabel": ch_label,
                         "updatedLabel": d.get("updated_label"),
                         "totalChapters": None,
                     },
                     "chapters": [],
-                    "provider": "komikcast",
-                    "_source": "komikcast_mongo",
+                    "provider": "voratoon",
+                    "_source": "voratoon_mongo",
                 }
             )
     except Exception:
@@ -533,7 +533,7 @@ def _komikcast_from_mongo_catalog(take=20):
 
 def build_hybrid_newest(page=1, take=20):
     """
-    Gabungan terbaru Komikcast + Komiku untuk tab Terbaru.
+    Gabungan terbaru (legacy hybrid path; prefer Voratoon RSC di manga_service).
     Round-robin dedup by title. KC down → fallback Mongo / KU saja.
     """
     take = max(1, min(int(take or 20), 50))
@@ -542,7 +542,7 @@ def build_hybrid_newest(page=1, take=20):
     errors = []
     kc_live = False
 
-    # Komikcast upstream (retry lebih agresif)
+    # Upstream API (retry lebih agresif)
     try:
         url = f"{API_BASE}/series?page={page}&take={take}&sort=updatedAt"
         code, hdrs, body = fetch(url, timeout=6, retries=1)
@@ -551,26 +551,26 @@ def build_hybrid_newest(page=1, take=20):
             for it in payload.get("data") or []:
                 if isinstance(it, dict):
                     it = dict(it)
-                    it["_source"] = "komikcast"
-                    it["provider"] = "komikcast"
+                    it["_source"] = "voratoon"
+                    it["provider"] = "voratoon"
                     if isinstance(it.get("data"), dict):
                         it["data"] = dict(it["data"])
-                        it["data"]["provider"] = "komikcast"
+                        it["data"]["provider"] = "voratoon"
                     items.append(it)
             kc_live = bool(payload.get("data"))
         else:
-            errors.append(f"komikcast: HTTP {code}")
+            errors.append(f"voratoon: HTTP {code}")
     except Exception as e:
-        errors.append(f"komikcast: {e}")
+        errors.append(f"voratoon: {e}")
 
     # Fallback Mongo catalog jika KC API mati
     if not kc_live and page <= 1:
         fb = _komikcast_from_mongo_catalog(take=take)
         if fb:
             items.extend(fb)
-            errors.append("komikcast: using mongo fallback")
+            errors.append("voratoon: using mongo fallback")
         else:
-            errors.append("komikcast: unavailable (no mongo fallback)")
+            errors.append("voratoon: unavailable (no mongo fallback)")
 
     # Komiku homepage #Terbaru (paling akurat untuk "baru diupdate")
     if _HYBRID_OK and KomikuProvider is not None and page <= 1:
@@ -586,7 +586,7 @@ def build_hybrid_newest(page=1, take=20):
         it
         for it in items
         if (it.get("provider") or (it.get("data") or {}).get("provider"))
-        == "komikcast"
+        == "voratoon"
     ]
     ku_list = [
         it
@@ -633,20 +633,20 @@ def build_hybrid_newest(page=1, take=20):
 
     return {
         "status": 200,
-        "message": "Hybrid newest (komikcast+komiku)",
+        "message": "Hybrid newest (voratoon)",
         "data": merged,
         "meta": {
             "source": "hybrid",
             "page": page,
             "take": take,
             "total": len(merged),
-            "komikcast": len(
-                [x for x in merged if x.get("provider") == "komikcast"]
+            "voratoon": len(
+                [x for x in merged if x.get("provider") == "voratoon"]
             ),
             "komiku": len([x for x in merged if x.get("provider") == "komiku"]),
-            "komikcast_live": kc_live,
+            "voratoon_live": kc_live,
             "errors": errors,
-            "providers": ["komikcast", "komiku"],
+            "providers": ["voratoon"],
         },
     }
 
@@ -1001,7 +1001,7 @@ class Handler(BaseHTTPRequestHandler):
                                 200, cat, "application/json; charset=utf-8", extra_headers=extra
                             )
 
-                # Pure Komikcast proxy (tanpa merge Komiku)
+                # Upstream proxy (Voratoon-first)
                 url = API_BASE + "/" + sub
                 if parsed.query:
                     url += "?" + parsed.query
@@ -1024,7 +1024,7 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
                 try:
-                    # retry: be.komikcast.cc sering 503 sebentar
+                    # retry: api.voratoon.com sering 503 sebentar
                     code, hdrs, body = fetch(url, timeout=6, retries=1)
                 except Exception as e:
                     print("upstream error:", sub, e, flush=True)
@@ -1094,7 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
                 err = {
                     "status": code,
                     "error": "upstream_unavailable",
-                    "message": "Komikcast & fallback tidak tersedia. Coba lagi nanti.",
+                    "message": "Provider & fallback tidak tersedia. Coba lagi nanti.",
                     "path": sub,
                 }
                 extra["X-Lumen-Cache"] = "BYPASS"
@@ -1155,7 +1155,7 @@ class Handler(BaseHTTPRequestHandler):
                     src,
                     extra_headers={
                         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-                        "Referer": "https://v3.komikcast.fit/",
+                        "Referer": "https://v1.voratoon.com/",
                     },
                     timeout=15,
                     retries=0,
@@ -1224,7 +1224,7 @@ class Handler(BaseHTTPRequestHandler):
             strategies = [
                 ("no_referer", None),
                 ("empty_referer", ""),
-                ("komikcast_referer", "https://v3.komikcast.fit/"),
+                ("voratoon_referer", "https://v1.voratoon.com/"),
                 ("foreign_referer", "https://example.com/"),
             ]
             results = []
@@ -1280,8 +1280,8 @@ class Handler(BaseHTTPRequestHandler):
 
                 oks = {t["strategy"]: t.get("ok_image") for t in entry["tests"]}
                 if oks.get("no_referer") or oks.get("empty_referer") or oks.get("foreign_referer"):
-                    entry["verdict"] = "open" if oks.get("komikcast_referer") else "mixed"
-                elif oks.get("komikcast_referer"):
+                    entry["verdict"] = "open" if oks.get("voratoon_referer") else "mixed"
+                elif oks.get("voratoon_referer"):
                     entry["verdict"] = "hotlink_protected"
                 else:
                     entry["verdict"] = "blocked"

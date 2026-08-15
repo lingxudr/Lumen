@@ -13,7 +13,7 @@ DB path default: `/data/lumen.db` (`DB_PATH`)
 |-----|--------|--------|
 | `PORT` | (otomatis) | Port HTTP |
 | `DB_PATH` | `/data/lumen.db` | Lokasi SQLite |
-| `API_BASE` | `https://be.komikcast.cc` | Host API sumber (tanpa slash akhir) |
+| `API_BASE` | `https://api.voratoon.com` | Host API sumber (tanpa slash akhir) |
 | `RATE_LIMIT_API` | `120` | Limit /api per IP / 60s |
 | `RATE_LIMIT_IMG` | `90` | Limit /img per IP / 60s |
 

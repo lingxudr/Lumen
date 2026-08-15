@@ -35,7 +35,7 @@ function sleep(ms) {
 function friendlyError(raw) {
   const s = String(raw || "");
   if (/upstream_unavailable|no available server|503/i.test(s)) {
-    return "Server Komikcast sedang down (503). Coba lagi beberapa menit.";
+    return "Server sumber sedang down (503). Coba lagi beberapa menit.";
   }
   if (/Application failed to respond|502|upstream/i.test(s)) {
     return "Server sibuk atau sedang restart. Coba lagi sebentar.";

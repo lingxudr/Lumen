@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 ALLOWED_API_HOSTS = frozenset(
     {
         "be.komikcast.cc",
-        "v3.komikcast.fit",
+        "v1.voratoon.com",
         "komikcast.fit",
         "komikcast.com",
         "komikcast.to",
