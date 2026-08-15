@@ -2,6 +2,14 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/lumenrest",
+      "destination": "/lumenrest/docs.html"
+    },
+    {
+      "source": "/lumenrest/docs",
+      "destination": "/lumenrest/docs.html"
+    },
+    {
       "source": "/img",
       "destination": "/api/img"
     },

@@ -87,6 +87,12 @@ Ringkasan — detail di [`docs/SECURITY.md`](docs/SECURITY.md).
 - **Path proxy relatif** saja (tolak URL absolut di edge)
 - Tidak menyimpan kredensial pengguna (favorit = localStorage)
 
+## REST docs
+
+Interactive playground: [`/lumenrest/docs`](https://lumen-delta-lyart.vercel.app/lumenrest/docs)
+
+Setiap respons JSON API menyertakan watermark Lumen (`creator`, `website`, `watermark`, `docs`).
+
 ## API Lumen (backend)
 
 ```text

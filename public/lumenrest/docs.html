@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lumen REST API — Docs</title>
+  <meta name="description" content="Dokumentasi & playground REST API Lumen Reader" />
+  <style>
+    :root {
+      --bg: #0f1117;
+      --panel: #171a22;
+      --border: #2a3140;
+      --text: #e8ecf4;
+      --muted: #9aa3b5;
+      --accent: #8b5cf6;
+      --accent2: #a78bfa;
+      --ok: #34d399;
+      --err: #f87171;
+      --code: #0c0e14;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    a { color: var(--accent2); }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(12px);
+      background: rgba(15,17,23,.88);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      justify-content: space-between;
+    }
+    .brand { display: flex; gap: 10px; align-items: center; font-weight: 800; }
+    .brand span {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, #7c3aed, #c084fc);
+      display: grid; place-items: center; font-size: 14px;
+    }
+    .wm {
+      font-size: 12px; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px;
+    }
+    main {
+      max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px;
+      display: grid; gap: 20px;
+    }
+    @media (min-width: 900px) {
+      main { grid-template-columns: 280px 1fr; align-items: start; }
+    }
+    aside {
+      position: sticky; top: 72px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    aside h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    aside button {
+      display: block; width: 100%; text-align: left;
+      background: transparent; border: 0; color: var(--text);
+      padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    aside button:hover, aside button.active { background: #222836; color: var(--accent2); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    h1 { margin: 0 0 6px; font-size: 1.6rem; }
+    .sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+    .ep {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+      word-break: break-all;
+    }
+    .ep b { color: var(--ok); margin-right: 8px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+    input, select, textarea {
+      width: 100%;
+      background: var(--code);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    .row { display: grid; gap: 10px; }
+    @media (min-width: 640px) { .row.cols-2 { grid-template-columns: 1fr 1fr; } }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .btn {
+      border: 0; border-radius: 10px; padding: 10px 14px;
+      font-weight: 700; cursor: pointer;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: #fff;
+    }
+    .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .status { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    pre {
+      margin: 12px 0 0;
+      background: var(--code);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      overflow: auto;
+      max-height: 520px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 24px 16px 40px;
+    }
+    footer .mark { color: var(--accent2); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>L</span>
+      <div>
+        Lumen REST
+        <div style="font-size:12px;color:var(--muted);font-weight:500">API Docs & Playground</div>
+      </div>
+    </div>
+    <div class="wm">Watermark: Powered by Lumen · lumen-delta-lyart.vercel.app</div>
+  </header>
+
+  <main>
+    <aside>
+      <h2>Endpoints</h2>
+      <button type="button" class="active" data-id="series">GET /api/series</button>
+      <button type="button" data-id="series-slug">GET /api/series/{slug}</button>
+      <button type="button" data-id="chapters">GET /api/series/{slug}/chapters</button>
+      <button type="button" data-id="pages">GET /api/series/{slug}/chapters/{n}</button>
+      <button type="button" data-id="genres">GET /api/genres</button>
+      <button type="button" data-id="health">GET /api/health</button>
+      <button type="button" data-id="img">GET /img</button>
+      <p style="font-size:12px;color:var(--muted);margin:14px 4px 0">
+        Semua JSON sukses memuat field watermark Lumen
+        (<code>creator</code>, <code>website</code>, <code>watermark</code>).
+      </p>
+      <p style="font-size:12px;margin:10px 4px 0">
+        <a href="/">← Kembali ke Lumen</a>
+      </p>
+    </aside>
+
+    <section class="card">
+      <h1 id="title">Daftar series</h1>
+      <p class="sub" id="desc">Katalog manga (Terbaru / filter).</p>
+      <div class="ep"><b>GET</b><span id="path-view">/api/series?take=5&amp;page=1&amp;mode=newest</span></div>
+
+      <div id="fields" class="row cols-2"></div>
+
+      <div class="actions">
+        <button type="button" class="btn" id="btn-run">Jalankan</button>
+        <button type="button" class="btn ghost" id="btn-copy">Salin URL</button>
+      </div>
+      <div class="status" id="status">Siap.</div>
+      <pre id="out">// respons JSON muncul di sini</pre>
+    </section>
+  </main>
+
+  <footer>
+    <span class="mark">Lumen Reader</span> REST API ·
+    Data dinormalisasi untuk website Anda ·
+    Watermark wajib: <span class="mark">Powered by Lumen</span>
+  </footer>
+
+  <script>
+    const BASE = location.origin;
+    const ENDPOINTS = {
+      series: {
+        title: "Daftar series",
+        desc: "Katalog manga. Mode newest / filter status & format.",
+        path: "/api/series",
+        fields: [
+          { name: "take", label: "take", value: "5" },
+          { name: "page", label: "page", value: "1" },
+          { name: "mode", label: "mode", value: "newest" },
+          { name: "title", label: "title (search)", value: "" },
+          { name: "takeChapter", label: "takeChapter", value: "2" },
+        ],
+      },
+      "series-slug": {
+        title: "Detail series",
+        desc: "Metadata satu judul berdasarkan slug.",
+        path: "/api/series/{slug}",
+        fields: [{ name: "slug", label: "slug", value: "magic-emperor" }],
+      },
+      chapters: {
+        title: "Daftar chapter",
+        desc: "Semua chapter untuk satu series.",
+        path: "/api/series/{slug}/chapters",
+        fields: [{ name: "slug", label: "slug", value: "magic-emperor" }],
+      },
+      pages: {
+        title: "Halaman chapter (images)",
+        desc: "URL gambar untuk chapter index tertentu.",
+        path: "/api/series/{slug}/chapters/{n}",
+        fields: [
+          { name: "slug", label: "slug", value: "magic-emperor" },
+          { name: "n", label: "chapter index", value: "896" },
+        ],
+      },
+      genres: {
+        title: "Genre",
+        desc: "Daftar genre tersedia.",
+        path: "/api/genres",
+        fields: [],
+      },
+      health: {
+        title: "Health",
+        desc: "Status service, rate limit, api_base.",
+        path: "/api/health",
+        fields: [],
+      },
+      img: {
+        title: "Image proxy",
+        desc: "Proxy gambar (WebP opsional). Hanya host allowlist.",
+        path: "/img",
+        fields: [
+          { name: "u", label: "u (image URL encoded)", value: "" },
+          { name: "fmt", label: "fmt", value: "webp" },
+          { name: "w", label: "w (max width)", value: "480" },
+        ],
+      },
+    };
+
+    let current = "series";
+    const fieldsEl = document.getElementById("fields");
+    const titleEl = document.getElementById("title");
+    const descEl = document.getElementById("desc");
+    const pathView = document.getElementById("path-view");
+    const statusEl = document.getElementById("status");
+    const outEl = document.getElementById("out");
+
+    function buildUrl() {
+      const ep = ENDPOINTS[current];
+      let path = ep.path;
+      const q = new URLSearchParams();
+      for (const f of ep.fields) {
+        const el = document.getElementById("f-" + f.name);
+        const v = (el && el.value || "").trim();
+        if (path.includes("{" + f.name + "}")) {
+          path = path.replace("{" + f.name + "}", encodeURIComponent(v || f.value || ""));
+        } else if (v) {
+          q.set(f.name, v);
+        }
+      }
+      const qs = q.toString();
+      return path + (qs ? "?" + qs : "");
+    }
+
+    function render() {
+      const ep = ENDPOINTS[current];
+      titleEl.textContent = ep.title;
+      descEl.textContent = ep.desc;
+      fieldsEl.innerHTML = ep.fields.map((f) =>
+        `<div><label for="f-${f.name}">${f.label}</label>` +
+        `<input id="f-${f.name}" value="${String(f.value).replace(/"/g, "&quot;")}" /></div>`
+      ).join("");
+      pathView.textContent = buildUrl();
+      document.querySelectorAll("aside button[data-id]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.id === current);
+      });
+      fieldsEl.querySelectorAll("input").forEach((inp) => {
+        inp.addEventListener("input", () => { pathView.textContent = buildUrl(); });
+      });
+    }
+
+    async function run() {
+      const path = buildUrl();
+      pathView.textContent = path;
+      const url = BASE + path;
+      statusEl.className = "status";
+      statusEl.textContent = "Memuat…";
+      outEl.textContent = "// loading";
+      try {
+        const t0 = performance.now();
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const ct = res.headers.get("content-type") || "";
+        let body;
+        if (ct.includes("application/json")) {
+          body = await res.json();
+          outEl.textContent = JSON.stringify(body, null, 2);
+          const wm = body && (body.watermark || body.creator || body.website);
+          statusEl.className = res.ok ? "status ok" : "status err";
+          statusEl.textContent = `${res.status} · ${Math.round(performance.now() - t0)}ms` +
+            (wm ? ` · watermark: ${body.watermark || body.creator || ""}` : " · (cek field watermark)");
+        } else {
+          const buf = await res.arrayBuffer();
+          outEl.textContent = `Binary/non-JSON · ${res.status} · ${buf.byteLength} bytes · ${ct}`;
+          statusEl.className = res.ok ? "status ok" : "status err";
+          statusEl.textContent = `${res.status} · ${Math.round(performance.now() - t0)}ms`;
+        }
+      } catch (e) {
+        statusEl.className = "status err";
+        statusEl.textContent = String(e.message || e);
+        outEl.textContent = String(e);
+      }
+    }
+
+    document.querySelectorAll("aside button[data-id]").forEach((b) => {
+      b.addEventListener("click", () => { current = b.dataset.id; render(); });
+    });
+    document.getElementById("btn-run").onclick = run;
+    document.getElementById("btn-copy").onclick = async () => {
+      const u = BASE + buildUrl();
+      try {
+        await navigator.clipboard.writeText(u);
+        statusEl.textContent = "URL disalin.";
+      } catch {
+        statusEl.textContent = u;
+      }
+    };
+    render();
+  </script>
+</body>
+</html>

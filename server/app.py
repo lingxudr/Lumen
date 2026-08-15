@@ -714,6 +714,17 @@ class Handler(BaseHTTPRequestHandler):
             body = str(body).encode("utf-8")
         try:
             extra_headers = dict(extra_headers or {})
+            # Watermark public JSON API payloads
+            try:
+                if (
+                    body
+                    and isinstance(body, (bytes, bytearray))
+                    and "json" in (content_type or "").lower()
+                    and body[:1] in (b"{", b"[")
+                ):
+                    body = stamp_lumen_json_bytes(bytes(body))
+            except Exception:
+                pass
             # Security headers (baseline)
             extra_headers.setdefault("X-Content-Type-Options", "nosniff")
             extra_headers.setdefault("X-Frame-Options", "SAMEORIGIN")
@@ -759,7 +770,7 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def send_json(self, code, obj):
-        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(stamp_lumen_payload(obj), ensure_ascii=False).encode("utf-8")
         self.send_bytes(code, body, "application/json; charset=utf-8")
 
     def read_json(self):
@@ -799,6 +810,9 @@ class Handler(BaseHTTPRequestHandler):
 
             if path in ("/api-explorer.html", "/api-explorer"):
                 return self.serve_file(STATIC / "api-explorer.html")
+
+            if path in ("/lumenrest", "/lumenrest/", "/lumenrest/docs", "/lumenrest/docs/", "/lumenrest/docs.html"):
+                return self.serve_file(STATIC / "lumenrest" / "docs.html")
 
             if path in ("/sw.js", "/manifest.webmanifest"):
                 return self.serve_file(STATIC / path.lstrip("/"))
