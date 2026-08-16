@@ -4,6 +4,60 @@ import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { getLastRead } from "../storage.js";
 
+
+function syncNav(active) {
+  document.querySelectorAll("[data-nav]").forEach((el) => {
+    el.classList.toggle("is-active", el.getAttribute("data-nav") === active);
+  });
+  document.querySelectorAll(".tab[data-tab]").forEach((t) => {
+    t.classList.toggle("is-active", t.dataset.tab === active);
+  });
+}
+
+function renderHero(items) {
+  const box = document.getElementById("home-hero");
+  if (!box) return;
+  const item = (items || []).find((it) => {
+    const d = it && (it.data || it);
+    return d && (d.coverImage || d.cover || d.backgroundImage);
+  });
+  if (!item) {
+    box.classList.add("is-hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const d = item.data || item;
+  const slug = d.slug || item.slug || "";
+  const cover = d.backgroundImage || d.coverImage || d.cover || "";
+  const rating = d.rating != null && d.rating !== "" ? `★ ${d.rating}` : "";
+  const meta = [rating, d.status, d.format || d.type].filter(Boolean).join(" · ");
+  const syn = (d.synopsis || "").trim();
+  box.classList.remove("is-hidden");
+  box.innerHTML = `
+    <div class="home-hero-bg"></div>
+    <div class="home-hero-shade"></div>
+    <div class="home-hero-body">
+      <div class="home-hero-kicker">Featured</div>
+      <h2 class="home-hero-title"></h2>
+      <div class="home-hero-meta"></div>
+      <p class="home-hero-syn"></p>
+      <div class="home-hero-actions">
+        <button type="button" class="btn btn-primary" id="hero-open">View Details</button>
+      </div>
+    </div>`;
+  const bg = box.querySelector(".home-hero-bg");
+  if (bg && cover) bg.style.backgroundImage = `url("${cover}")`;
+  box.querySelector(".home-hero-title").textContent = d.title || slug;
+  box.querySelector(".home-hero-meta").textContent = meta;
+  box.querySelector(".home-hero-syn").textContent = syn || "Discover this title and start reading.";
+  const btn = box.querySelector("#hero-open");
+  if (btn) btn.onclick = () => {
+    if (typeof window.App !== "undefined" && App.openSeries) {
+      App.openSeries(slug, { title: d.title, cover: d.coverImage || cover });
+    }
+  };
+}
+
 export function createHomeView(ctx) {
   let genresLoaded = false;
 
@@ -273,7 +327,7 @@ export function createHomeView(ctx) {
     ctx.state.query = "";
     const q = $("#q");
     if (q) q.value = "";
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === name));
+    syncNav(name);
     const titles = {
       newest: "Terbaru",
       new_series: "Series Baru",
@@ -316,14 +370,16 @@ export function createHomeView(ctx) {
       return;
     }
     box.classList.remove("is-hidden");
+    const cover = last.cover || last.coverImage || "";
     box.innerHTML = `
       <button type="button" class="continue-card" id="btn-continue">
+        ${cover ? `<img class="continue-cover" alt="" src="${esc(cover)}" loading="lazy" />` : `<div class="continue-cover"></div>`}
         <div class="continue-text">
-          <div class="continue-label">Lanjut baca</div>
+          <div class="continue-label">Continue Reading</div>
           <div class="continue-title">${esc(last.title || last.slug)}</div>
           <div class="continue-meta">Chapter ${esc(String(last.chapter ?? "—"))}</div>
         </div>
-        <span class="continue-go">Buka →</span>
+        <span class="continue-go">Open →</span>
       </button>`;
     const btn = $("#btn-continue");
     if (btn) {

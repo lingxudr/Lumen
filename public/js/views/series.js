@@ -254,6 +254,17 @@ export function createSeriesView(ctx) {
           </div>
         </div>`;
       setImg(detail.querySelector("img"), d.coverImage || s.coverImage || "");
+      const bd = document.getElementById("series-backdrop");
+      if (bd) {
+        const art = d.backgroundImage || d.coverImage || s.coverImage || "";
+        if (art) {
+          bd.style.backgroundImage = `url("${String(art).replace(/"/g, "%22")}")`;
+          bd.style.display = "";
+        } else {
+          bd.style.backgroundImage = "";
+        }
+      }
+
     }
 
     const bm = $("#btn-bookmark");

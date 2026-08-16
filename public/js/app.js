@@ -61,6 +61,9 @@ const App = {
       document.querySelectorAll(".tab").forEach((t) => {
         t.classList.toggle("is-active", t.dataset.tab === state.tab);
       });
+      document.querySelectorAll("[data-nav]").forEach((el) => {
+        el.classList.toggle("is-active", el.getAttribute("data-nav") === state.tab);
+      });
       showView("home");
       home.loadList();
     }

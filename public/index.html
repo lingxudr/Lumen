@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#070b14" />
+  <meta name="theme-color" content="#07080B" />
   <meta name="description" content="Baca komik online dengan koleksi terbaru setiap hari" />
   <meta property="og:title" content="Lumen — Baca Komik Online" />
   <meta property="og:description" content="Baca komik online dengan koleksi terbaru setiap hari" />
@@ -19,10 +19,29 @@
   <meta name="apple-mobile-web-app-title" content="Lumen" />
 </head>
 <body>
-  <div id="app">
+  <div id="app" class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Navigasi">
+      <button type="button" class="brand sidebar-brand" onclick="App.go('home')" aria-label="Beranda">
+        <span class="brand-mark">L</span>
+        <span class="brand-name">Lumen</span>
+      </button>
+      <nav class="side-nav">
+        <button type="button" class="side-link is-active" data-nav="newest" onclick="App.tab('newest')"><span class="side-ico">⌂</span><span>Home</span></button>
+        <button type="button" class="side-link" data-nav="browse" onclick="App.tab('browse')"><span class="side-ico">◈</span><span>Discover</span></button>
+        <button type="button" class="side-link" data-nav="hot" onclick="App.tab('hot')"><span class="side-ico">▲</span><span>Trending</span></button>
+        <button type="button" class="side-link" data-nav="new_series" onclick="App.tab('new_series')"><span class="side-ico">✦</span><span>New</span></button>
+        <button type="button" class="side-link" data-nav="completed" onclick="App.tab('completed')"><span class="side-ico">✓</span><span>Completed</span></button>
+        <div class="side-sep"></div>
+        <button type="button" class="side-link" data-nav="bookmarks" onclick="App.library('bookmarks')"><span class="side-ico">★</span><span>Library</span></button>
+        <button type="button" class="side-link" data-nav="history" onclick="App.library('history')"><span class="side-ico">◷</span><span>History</span></button>
+      </nav>
+      <a class="side-link side-docs" href="/lumenrest/docs">API Docs</a>
+    </aside>
+
+    <div class="content-shell">
     <header class="header" id="header">
       <div class="header-inner">
-        <button type="button" class="brand" onclick="App.go('home')" aria-label="Beranda">
+        <button type="button" class="brand header-brand" onclick="App.go('home')" aria-label="Beranda">
           <span class="brand-mark">L</span>
           <span class="brand-name">Lumen</span>
         </button>
@@ -31,7 +50,7 @@
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
           </svg>
-          <input id="q" type="search" placeholder="Cari judul komik…" autocomplete="off" enterkeyhint="search" />
+          <input id="q" type="search" placeholder="Search manga, manhwa, manhua…" autocomplete="off" enterkeyhint="search" />
         </form>
 
         <nav class="tabs" aria-label="Navigasi utama">
@@ -49,6 +68,7 @@
     <main class="main" id="main">
       <!-- HOME -->
       <section id="view-home" class="view">
+        <div id="home-hero" class="home-hero is-hidden" aria-live="polite"></div>
         <div class="toolbar">
           <div>
             <h1 class="page-title" id="list-title">Terbaru</h1>
@@ -82,12 +102,14 @@
 
       <!-- SERIES -->
       <section id="view-series" class="view is-hidden">
-        <button type="button" class="btn btn-ghost back-btn" onclick="App.go('home')">← Kembali ke koleksi</button>
-        <div id="series-detail" class="series-hero"></div>
-        <div class="section-label section-label-row" id="chapter-list-label"><span>Daftar Chapter</span></div>
-        <div id="chapter-list" class="chapter-list"></div>
+        <div class="series-stage">
+          <div id="series-backdrop" class="series-backdrop" aria-hidden="true"></div>
+          <button type="button" class="btn btn-ghost back-btn" onclick="App.go('home')">← Back</button>
+          <div id="series-detail" class="series-hero"></div>
+          <div class="section-label section-label-row" id="chapter-list-label"><span>Daftar Chapter</span></div>
+          <div id="chapter-list" class="chapter-list"></div>
+        </div>
       </section>
-
 
       <!-- LIBRARY -->
       <section id="view-library" class="view is-hidden">
@@ -104,6 +126,7 @@
         </div>
         <div id="library-list" class="grid"></div>
       </section>
+
       <!-- READER -->
       <section id="view-reader" class="view is-hidden lumen-reader" data-reader-v2="1">
         <!-- Fixed progress (stays when header hides) -->
@@ -237,6 +260,16 @@
         </nav>
       </section>
     </main>
+
+    </div><!-- content-shell -->
+
+    <nav class="bottom-nav" id="bottom-nav" aria-label="Mobile navigation">
+      <button type="button" class="bottom-link is-active" data-nav="newest" onclick="App.tab('newest')"><span>⌂</span><span>Home</span></button>
+      <button type="button" class="bottom-link" data-nav="browse" onclick="App.tab('browse')"><span>◈</span><span>Discover</span></button>
+      <button type="button" class="bottom-link" data-nav="hot" onclick="App.tab('hot')"><span>▲</span><span>Trending</span></button>
+      <button type="button" class="bottom-link" data-nav="bookmarks" onclick="App.library('bookmarks')"><span>★</span><span>Library</span></button>
+      <button type="button" class="bottom-link" data-nav="history" onclick="App.library('history')"><span>◷</span><span>History</span></button>
+    </nav>
 
     <div id="toast" class="toast is-hidden" role="status"></div>
     <div id="loading" class="overlay is-hidden" aria-hidden="true">
