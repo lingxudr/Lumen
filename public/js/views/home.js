@@ -274,6 +274,7 @@ export function createHomeView(ctx) {
   }
 
   function renderList(items) {
+    try { renderHero(items); } catch (_) {}
     const box = $("#series-list");
     box.innerHTML = "";
     items.forEach((item) => {
