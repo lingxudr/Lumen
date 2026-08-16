@@ -49,7 +49,11 @@ function renderHero(items) {
   if (bg && cover) bg.style.backgroundImage = `url("${cover}")`;
   box.querySelector(".home-hero-title").textContent = d.title || slug;
   box.querySelector(".home-hero-meta").textContent = meta;
-  box.querySelector(".home-hero-syn").textContent = syn || "Discover this title and start reading.";
+  const synEl = box.querySelector(".home-hero-syn");
+  if (synEl) {
+    synEl.textContent = syn || "";
+    synEl.style.display = syn ? "" : "none";
+  }
   const btn = box.querySelector("#hero-open");
   if (btn) btn.onclick = () => {
     if (typeof window.App !== "undefined" && App.openSeries) {
@@ -64,12 +68,25 @@ export function createHomeView(ctx) {
   async function loadGenres() {
     if (genresLoaded) return;
     const bar = document.getElementById("genre-bar");
+    const sheetBar = document.getElementById("sheet-genre-bar");
     if (!bar) return;
     try {
       const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
       const list = res?.data || [];
       if (!list.length) return;
       genresLoaded = true;
+      // mobile sheet genres (same handlers)
+      if (sheetBar) {
+        sheetBar.innerHTML = "";
+        const all2 = document.createElement("button");
+        all2.type = "button";
+        all2.className = "chip is-active";
+        all2.dataset.filterGenre = "";
+        all2.textContent = "Semua";
+        all2.setAttribute("onclick", "App.setFilter('genre','')");
+        sheetBar.appendChild(all2);
+      }
+
       const frag = document.createDocumentFragment();
       const all = document.createElement("button");
       all.type = "button";
@@ -441,6 +458,68 @@ export function createHomeView(ctx) {
     document.addEventListener("touchend", onEnd, { passive: true });
   }
   setupPullToRefresh();
+
+
+  function openFilterSheet() {
+    const sheet = document.getElementById("filter-sheet");
+    const bd = document.getElementById("filter-backdrop");
+    if (!sheet || !bd) return;
+    sheet.hidden = false;
+    bd.hidden = false;
+    sheet.classList.remove("is-hidden");
+    bd.classList.remove("is-hidden");
+    document.body.style.overflow = "hidden";
+    loadGenres();
+  }
+  function closeFilterSheet() {
+    const sheet = document.getElementById("filter-sheet");
+    const bd = document.getElementById("filter-backdrop");
+    if (sheet) {
+      sheet.classList.add("is-hidden");
+      sheet.hidden = true;
+    }
+    if (bd) {
+      bd.classList.add("is-hidden");
+      bd.hidden = true;
+    }
+    document.body.style.overflow = "";
+  }
+  function wireMobileChrome() {
+    const openBtn = document.getElementById("btn-open-filters");
+    const closeBtn = document.getElementById("btn-close-filters");
+    const applyBtn = document.getElementById("btn-apply-filters");
+    const resetBtn = document.getElementById("btn-reset-filters");
+    const bd = document.getElementById("filter-backdrop");
+    if (openBtn) openBtn.onclick = () => openFilterSheet();
+    if (closeBtn) closeBtn.onclick = () => closeFilterSheet();
+    if (applyBtn) applyBtn.onclick = () => closeFilterSheet();
+    if (bd) bd.onclick = () => closeFilterSheet();
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        setFilter("status", "");
+        setFilter("format", "");
+        setFilter("genre", "");
+      };
+    }
+    const header = document.getElementById("header");
+    const st = document.getElementById("search-toggle");
+    const sc = document.getElementById("search-close");
+    const q = document.getElementById("q");
+    if (st && header) {
+      st.onclick = () => {
+        header.classList.add("is-search-open");
+        st.setAttribute("aria-expanded", "true");
+        setTimeout(() => q && q.focus(), 30);
+      };
+    }
+    if (sc && header) {
+      sc.onclick = () => {
+        header.classList.remove("is-search-open");
+        if (st) st.setAttribute("aria-expanded", "false");
+      };
+    }
+  }
+  wireMobileChrome();
 
   return { loadList, setTab, page, search, renderContinue, setFilter };
 
