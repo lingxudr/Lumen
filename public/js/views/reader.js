@@ -1,6 +1,29 @@
 import { api, apiPrefetch, proxyImageUrl, checkImageStatus } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
+
+/** Normalize chapter payload → image URL list */
+function extractChapterImages(ch) {
+  if (!ch || typeof ch !== "object") return [];
+  const candidates = [
+    ch.data && ch.data.images,
+    ch.images,
+    ch.data && ch.data.data && ch.data.data.images,
+    ch.dataImages,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) {
+      return c.filter((u) => typeof u === "string" && /^https?:\/\//i.test(u));
+    }
+    if (c && typeof c === "object" && !Array.isArray(c)) {
+      const keys = Object.keys(c).sort((a, b) => Number(a) - Number(b) || String(a).localeCompare(String(b)));
+      const arr = keys.map((k) => c[k]).filter((u) => typeof u === "string" && /^https?:\/\//i.test(u));
+      if (arr.length) return arr;
+    }
+  }
+  return [];
+}
+
 import { saveLastRead, getPrefs, savePrefs, saveReadingProgress } from "../storage.js";
 
 export function createReaderView(ctx) {
@@ -168,7 +191,7 @@ export function createReaderView(ctx) {
       prefetchNeighborChapters(ctx.state.chapterIndex);
     }
     const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
-    const images = ctx.state.chapterData?.data?.images || ctx.state.chapterData?.images || [];
+    const images = extractChapterImages(ctx.state.chapterData);
     if (slug && images.length) {
       const page = Math.min(images.length - 1, Math.floor(ratio * images.length));
       saveReadingProgress(slug, ctx.state.chapterIndex, page, images.length);
@@ -262,8 +285,9 @@ export function createReaderView(ctx) {
       }
     }
 
-    const images = ch?.data?.images || ch?.images || [];
-    const useProxy = $("#use-proxy")?.checked;
+    const images = extractChapterImages(ch);
+    // Always proxy — CDN blocks hotlink from browser Referer
+    const useProxy = true;
     const box = $("#reader-pages");
     box.innerHTML = "";
 
@@ -286,7 +310,7 @@ export function createReaderView(ctx) {
     const ROOT_MARGIN = slow ? "400px 0px" : "900px 0px";
     const MAX_CONCURRENT = slow ? 2 : 4;
 
-    const resolved = images.map((url) => (useProxy ? proxyImageUrl(url, { webp: true }) : url));
+    const resolved = images.map((url) => proxyImageUrl(url, { webp: true, w: 720 }));
     const token = ++_loadToken;
 
     // Tear down previous observer (chapter change / re-render)
@@ -456,7 +480,7 @@ export function createReaderView(ctx) {
   }
 
   async function checkHotlink() {
-    const images = ctx.state.chapterData?.data?.images || [];
+    const images = extractChapterImages(ctx.state.chapterData);
     if (!images.length) {
       toast("Tidak ada halaman untuk diperiksa");
       return;
