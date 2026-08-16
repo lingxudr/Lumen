@@ -6,8 +6,8 @@ const INFLIGHT = new Map(); // key -> Promise
 
 const DEFAULT_TTL = 90_000; // 90s fresh
 const DEFAULT_STALE = 5 * 60_000; // stale max ~5m (selaras server hard TTL list)
-const FETCH_TIMEOUT = 18_000;
-const MAX_RETRIES = 2;
+const FETCH_TIMEOUT = 28_000;
+const MAX_RETRIES = 3;
 
 function cacheKey(path, params) {
   const qs = new URLSearchParams();
@@ -105,7 +105,7 @@ async function fetchJson(url) {
       const msg = String(e && e.message ? e.message : e);
       // jangan retry error logis (404-ish message, rate limit)
       if (/Terlalu banyak|tidak valid|tidak ditemukan/i.test(msg)) break;
-      if (attempt < MAX_RETRIES) await sleep(400 * (attempt + 1));
+      if (attempt < MAX_RETRIES) await sleep(600 * (attempt + 1) + Math.random() * 200);
     }
   }
   throw lastErr || new Error("Gagal memuat data");

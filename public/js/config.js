@@ -5,8 +5,12 @@ function detectEndpoints() {
   const host = typeof location !== "undefined" ? location.hostname : "";
   const local = host === "localhost" || host === "127.0.0.1" || host === "";
 
-  // Railway same-origin
-  if (host.endsWith(".railway.app")) {
+  // Same-origin: Railway backend atau Vercel (edge proxy → Railway)
+  if (
+    host.endsWith(".railway.app") ||
+    host.endsWith(".vercel.app") ||
+    host.includes("lumen")
+  ) {
     return { apiBase: "/api", imgProxy: "/img" };
   }
 
@@ -15,7 +19,6 @@ function detectEndpoints() {
       ? String(window.LUMEN_PROXY).trim()
       : "";
 
-  // Hindari placeholder yang belum diganti
   const cleaned = fromWindow
     .replace(/lumen-production-xxxx\.up\.railway\.app/gi, "")
     .trim();
@@ -24,7 +27,12 @@ function detectEndpoints() {
     return { apiBase: "/api", imgProxy: "/img" };
   }
 
-  const origin = (cleaned || DEFAULT_PROXY).replace(/\/$/, "");
+  // Custom domain: prefer same-origin; optional absolute proxy via LUMEN_PROXY
+  if (!cleaned) {
+    return { apiBase: "/api", imgProxy: "/img" };
+  }
+
+  const origin = cleaned.replace(/\/$/, "");
   return {
     apiBase: origin + "/api",
     imgProxy: origin + "/img",
@@ -38,5 +46,5 @@ export const Config = {
   imgProxy: endpoints.imgProxy,
   pageSize: 30,
   previewChapters: 3,
-  version: "1.2.1",
+  version: "1.2.2",
 };
