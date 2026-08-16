@@ -19,9 +19,15 @@ export function showView(name) {
   $$(".view").forEach((v) => v.classList.add("is-hidden"));
   const el = $(`#view-${name}`);
   if (el) el.classList.remove("is-hidden");
+  const isReader = name === "reader";
   const header = $("#header");
-  if (header) header.classList.toggle("is-hidden", name === "reader");
-  document.body.classList.toggle("mode-reader", name === "reader");
+  if (header) header.classList.toggle("is-hidden", isReader);
+  const sidebar = $("#sidebar");
+  if (sidebar) sidebar.classList.toggle("is-hidden", isReader);
+  const bottom = $("#bottom-nav");
+  if (bottom) bottom.classList.toggle("is-hidden", isReader);
+  document.body.classList.toggle("mode-reader", isReader);
+  document.documentElement.classList.toggle("mode-reader", isReader);
   window.scrollTo(0, 0);
 }
 

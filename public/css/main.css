@@ -608,6 +608,37 @@ a { color: var(--primary2); text-decoration: none; }
 body:has(#view-reader:not(.is-hidden)) .bottom-nav,
 body:has(#view-reader.is-active) .bottom-nav { display: none; }
 
+/* ---- Reader mode: hide site chrome ---- */
+body.mode-reader .header,
+body.mode-reader #header,
+.header.is-hidden,
+#header.is-hidden {
+  display: none !important;
+}
+body.mode-reader .sidebar,
+body.mode-reader #sidebar {
+  display: none !important;
+}
+body.mode-reader .bottom-nav,
+body.mode-reader #bottom-nav {
+  display: none !important;
+}
+body.mode-reader .content-shell {
+  min-height: 100dvh;
+}
+body.mode-reader .main {
+  padding: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+body.mode-reader .app-shell {
+  grid-template-columns: 1fr !important;
+}
+body.mode-reader {
+  background: #000;
+  overflow-x: hidden;
+}
+
 /* States */
 .state-detail, .empty-state {
   padding: 28px 16px; text-align: center; color: var(--text2);
