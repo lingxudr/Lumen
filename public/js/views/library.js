@@ -57,7 +57,7 @@ export function createLibraryView(ctx) {
           <div class="card-title">${esc(item.title || item.slug)}</div>
           <div class="card-chapters">${meta}</div>
         </div>`;
-      setImg(card.querySelector("img"), item.cover || "");
+      setImg(card.querySelector("img"), item.cover || "", { w: 360 });
       box.appendChild(card);
     });
   }

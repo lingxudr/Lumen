@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { $, esc, escAttr, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
+import { proxyImageUrl } from "../api.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
 
 /** Normalize series detail payload (Sanka / KC / hybrid). */
@@ -253,12 +254,13 @@ export function createSeriesView(ctx) {
             <div class="series-synopsis">${esc(d.synopsis || "Belum ada sinopsis.")}</div>
           </div>
         </div>`;
-      setImg(detail.querySelector("img"), d.coverImage || s.coverImage || "");
+      setImg(detail.querySelector("img"), d.coverImage || s.coverImage || "", { w: 480 });
       const bd = document.getElementById("series-backdrop");
       if (bd) {
         const art = d.backgroundImage || d.coverImage || s.coverImage || "";
         if (art) {
-          bd.style.backgroundImage = `url("${String(art).replace(/"/g, "%22")}")`;
+          const artUrl = proxyImageUrl(art, { webp: true, w: 900 });
+          bd.style.backgroundImage = `url("${String(artUrl).replace(/"/g, "%22")}")`;
           bd.style.display = "";
         } else {
           bd.style.backgroundImage = "";

@@ -2,6 +2,7 @@ import { Config } from "../config.js";
 import { api, apiPeek, clearApiCache } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
+import { proxyImageUrl } from "../api.js";
 import { getLastRead } from "../storage.js";
 
 
@@ -46,7 +47,7 @@ function renderHero(items) {
       </div>
     </div>`;
   const bg = box.querySelector(".home-hero-bg");
-  if (bg && cover) bg.style.backgroundImage = `url("${cover}")`;
+  if (bg && cover) bg.style.backgroundImage = `url("${proxyImageUrl(cover, { webp: true, w: 900 })}")`;
   box.querySelector(".home-hero-title").textContent = d.title || slug;
   box.querySelector(".home-hero-meta").textContent = meta;
   const synEl = box.querySelector(".home-hero-syn");
@@ -334,7 +335,7 @@ export function createHomeView(ctx) {
           <div class="badges">${badges.join("")}</div>
           <div class="card-chapters">${chHtml}</div>
         </div>`;
-      setImg(card.querySelector("img"), d.coverImage || "");
+      setImg(card.querySelector("img"), d.coverImage || d.cover || "", { w: 360 });
       box.appendChild(card);
     });
   }
@@ -389,9 +390,10 @@ export function createHomeView(ctx) {
     }
     box.classList.remove("is-hidden");
     const cover = last.cover || last.coverImage || "";
+    const coverSrc = cover ? proxyImageUrl(cover, { webp: true, w: 360 }) : "";
     box.innerHTML = `
       <button type="button" class="continue-card" id="btn-continue">
-        ${cover ? `<img class="continue-cover" alt="" src="${esc(cover)}" loading="lazy" />` : `<div class="continue-cover"></div>`}
+        ${coverSrc ? `<img class="continue-cover" alt="" src="${esc(coverSrc)}" loading="lazy" decoding="async" />` : `<div class="continue-cover"></div>`}
         <div class="continue-text">
           <div class="continue-label">Continue Reading</div>
           <div class="continue-title">${esc(last.title || last.slug)}</div>

@@ -1,8 +1,8 @@
 /* Lumen service worker — optimized shell + bounded image cache */
-const VERSION = "v4";
+const VERSION = "v5";
 const SHELL_CACHE = `lumen-shell-${VERSION}`;
 const IMG_CACHE = `lumen-img-${VERSION}`;
-const IMG_MAX = 64;
+const IMG_MAX = 72;
 
 const SHELL = [
   "/",
@@ -220,8 +220,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Default: SWR
-  event.respondWith(swr(req, SHELL_CACHE));
+  // Non-static: network only (no cache pollution)
+  event.respondWith(
+    fetch(req).catch(() => caches.match(req).then((c) => c || Response.error()))
+  );
 });
 
 // Optional: allow page to ask SW to clear image cache

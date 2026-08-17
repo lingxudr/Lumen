@@ -71,8 +71,8 @@ export function setImg(el, url, opts = {}) {
   el.referrerPolicy = "no-referrer";
   el.loading = el.loading || "lazy";
   el.decoding = "async";
-  // Cover & UI images: proxy + WebP (lebih kecil)
-  const w = opts.w || 480;
+  // Cover & UI images: proxy + WebP (mobile-first ~360px)
+  const w = opts.w != null ? opts.w : 360;
   el.src = proxyImageUrl(url, { webp: true, w });
   el.onerror = () => {
     if (el.dataset.proxied === "2") {
