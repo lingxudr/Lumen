@@ -272,6 +272,106 @@ def _home_feed_payload(mode: str, take: int, page: int) -> dict[str, Any] | None
 
 
 
+
+def get_popular(take: int = 20, page: int = 1) -> dict[str, Any]:
+    """Public popular list — normalized, no ORM internals."""
+    take = max(1, min(50, int(take or 20)))
+    page = max(1, int(page or 1))
+    items: list = []
+    source = "voratoon_home_rsc"
+    # Prefer home RSC popular (already normalized via _normalize_feed_items)
+    try:
+        if page == 1:
+            home = fetch_home_rsc()
+            items = list(home.get("popular") or [])
+            source = "voratoon_home_rsc"
+    except Exception as e:
+        print("get_popular home RSC:", e, flush=True)
+    # Fallback: API sort popularity
+    if not items:
+        try:
+            payload = get_series_list(take=take, page=page, mode="hot", sort="popularity")
+            items = list((payload or {}).get("data") or [])
+            source = (payload or {}).get("meta", {}).get("source") or "voratoon_api_hot"
+        except Exception as e:
+            print("get_popular api hot:", e, flush=True)
+            items = []
+    # Final sanitize — strip any leftover ORM keys
+    clean = []
+    for it in items[:take]:
+        if not isinstance(it, dict):
+            continue
+        # already SeriesItem shape?
+        if isinstance(it.get("data"), dict) and it["data"].get("slug"):
+            d = it["data"]
+            clean.append({
+                "id": it.get("id"),
+                "createdAt": it.get("createdAt"),
+                "updatedAt": it.get("updatedAt"),
+                "data": {
+                    "title": d.get("title"),
+                    "slug": d.get("slug"),
+                    "coverImage": d.get("coverImage") or d.get("cover"),
+                    "backgroundImage": d.get("backgroundImage"),
+                    "synopsis": d.get("synopsis"),
+                    "status": d.get("status"),
+                    "format": d.get("format") or d.get("type"),
+                    "type": d.get("type"),
+                    "rating": d.get("rating"),
+                    "author": d.get("author"),
+                    "totalChapters": d.get("totalChapters"),
+                    "isHot": d.get("isHot"),
+                    "genres": d.get("genres") or [],
+                },
+                "chapters": it.get("chapters") if isinstance(it.get("chapters"), list) else [],
+                "metadata": {
+                    "views": ((it.get("metadata") or {}).get("views") or {}),
+                    "bookmarkCount": (it.get("metadata") or {}).get("bookmarkCount"),
+                    "ranking": (it.get("metadata") or {}).get("ranking"),
+                },
+                "provider": "voratoon",
+            })
+            continue
+        norm = _orm_to_series_item(it)
+        if norm:
+            d = norm.get("data") or {}
+            clean.append({
+                "id": norm.get("id"),
+                "createdAt": norm.get("createdAt"),
+                "updatedAt": norm.get("updatedAt"),
+                "data": {
+                    "title": d.get("title"),
+                    "slug": d.get("slug"),
+                    "coverImage": d.get("coverImage") or d.get("cover"),
+                    "backgroundImage": d.get("backgroundImage"),
+                    "synopsis": d.get("synopsis"),
+                    "status": d.get("status"),
+                    "format": d.get("format") or d.get("type"),
+                    "type": d.get("type"),
+                    "rating": d.get("rating"),
+                    "author": d.get("author"),
+                    "totalChapters": d.get("totalChapters"),
+                    "isHot": d.get("isHot"),
+                    "genres": d.get("genres") or [],
+                },
+                "chapters": [],
+                "metadata": norm.get("metadata") or {},
+                "provider": "voratoon",
+            })
+    return {
+        "status": 200,
+        "message": "Popular series",
+        "data": clean,
+        "meta": {
+            "source": source,
+            "page": page,
+            "take": take,
+            "total": len(clean),
+            "provider": "voratoon",
+        },
+    }
+
+
 def fetch_browse_html(
     *,
     page: int = 1,

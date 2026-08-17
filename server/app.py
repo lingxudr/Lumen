@@ -1105,7 +1105,7 @@ class Handler(BaseHTTPRequestHandler):
 
                 # series/genres/chapters lewat provider dulu (hindari host mati / DNS noise)
                 sub0 = (sub or "").split("?")[0].strip("/")
-                if sub0 == "series" or sub0 == "genres" or sub0.startswith("series/"):
+                if sub0 in ("series", "genres", "popular") or sub0.startswith("series/"):
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body:
                         cache_set(cache_key, sanka_body, ttl, sub_path=sub)

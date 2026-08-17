@@ -6,7 +6,7 @@ const INFLIGHT = new Map(); // key -> Promise
 
 const DEFAULT_TTL = 90_000; // 90s fresh
 const DEFAULT_STALE = 5 * 60_000; // stale max ~5m (selaras server hard TTL list)
-const FETCH_TIMEOUT = 28_000;
+const FETCH_TIMEOUT = 32_000;
 const MAX_RETRIES = 3;
 
 function cacheKey(path, params) {
@@ -41,7 +41,10 @@ function friendlyError(raw) {
     return "Server sibuk atau sedang restart. Coba lagi sebentar.";
   }
   if (/Failed to fetch|NetworkError|Load failed/i.test(s)) {
-    return "Tidak dapat terhubung ke server. Coba beberapa saat lagi.";
+    return "Server sedang bangun atau jaringan terputus. Tunggu ~10 detik lalu coba lagi.";
+  }
+  if (/Application failed to respond|502 Bad Gateway|504/i.test(s)) {
+    return "Server baru saja aktif kembali. Muat ulang sebentar lagi.";
   }
   if (/rate_limited|Terlalu banyak/i.test(s)) {
     return "Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.";
@@ -105,7 +108,7 @@ async function fetchJson(url) {
       const msg = String(e && e.message ? e.message : e);
       // jangan retry error logis (404-ish message, rate limit)
       if (/Terlalu banyak|tidak valid|tidak ditemukan/i.test(msg)) break;
-      if (attempt < MAX_RETRIES) await sleep(600 * (attempt + 1) + Math.random() * 200);
+      if (attempt < MAX_RETRIES) await sleep(900 * (attempt + 1) + Math.random() * 400);
     }
   }
   throw lastErr || new Error("Gagal memuat data");

@@ -116,6 +116,13 @@ def warm_once(
         if body:
             put("series", body, params)
             stats["list"] = True
+            # popular normalized
+            try:
+                if fetch_json("popular", {"take": "20", "page": "1"}):
+                    stats["popular"] = True
+            except Exception as e:
+                stats.setdefault("errors", []).append(f"popular: {e}")
+
     except Exception as e:
         stats["errors"].append(f"list: {e}")
 
@@ -219,8 +226,8 @@ def start_background_warmer(
         return
 
     fetch = fetch_json or _default_fetch_json
-    delay = _env_int("CACHE_WARM_DELAY", 15)
-    interval = _env_int("CACHE_WARM_INTERVAL", 900)
+    delay = _env_int("CACHE_WARM_DELAY", 8)
+    interval = _env_int("CACHE_WARM_INTERVAL", 300)
 
     def loop() -> None:
         time.sleep(max(0, delay))
@@ -242,3 +249,19 @@ def start_background_warmer(
         f"[cache_warmer] scheduled delay={delay}s interval={interval}s",
         flush=True,
     )
+
+    # Lightweight keepalive: ping series list every ~60s to reduce Railway sleep impact
+    # (only helps while process is already awake; pairs with external uptime ping)
+    def keepalive():
+        import time as _t
+        _t.sleep(max(20, delay))
+        while True:
+            try:
+                fetch("series", {"take": "6", "page": "1", "mode": "newest"})
+            except Exception:
+                pass
+            _t.sleep(60)
+
+    if _env_bool("CACHE_KEEPALIVE", True):
+        threading.Thread(target=keepalive, name="lumen-keepalive", daemon=True).start()
+        print("[cache_warmer] keepalive every 60s", flush=True)

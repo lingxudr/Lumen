@@ -317,6 +317,19 @@ def sanka_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         print("voratoon import failed:", e, flush=True)
         vt = None
 
+    # POPULAR (normalized public fields only)
+    if sub0 == "popular" or (len(parts) == 1 and parts[0] == "popular"):
+        if vt is not None:
+            try:
+                payload = vt.get_popular(take=_take(), page=_page())
+                return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            except Exception as e:
+                print("voratoon popular error:", e, flush=True)
+        payload = _komiku_list_payload(take=_take(), page=_page(), popular=True)
+        if payload and payload.get("data"):
+            return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return None
+
     # GENRES
     if sub0 == "genres" or (len(parts) == 1 and parts[0] == "genres"):
         if vt is not None:
