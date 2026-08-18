@@ -81,10 +81,11 @@ export function setImg(el, url, opts = {}) {
     }
     if (el.dataset.proxied === "1") {
       el.dataset.proxied = "2";
-      el.src = url; // last resort: direct
+      el.src = proxyImageUrl(url, { webp: false, w });
       return;
     }
     el.dataset.proxied = "1";
-    el.src = proxyImageUrl(url, { webp: false }); // raw via proxy
+    const retry = proxyImageUrl(url, { webp: true, w });
+    el.src = retry + (retry.includes("?") ? "&" : "?") + "retry=1";
   };
 }

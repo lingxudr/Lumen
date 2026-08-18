@@ -1279,18 +1279,18 @@ class Handler(BaseHTTPRequestHandler):
                     is_webp = "webp" in (ct or "").lower() or src.lower().endswith(".webp")
                     if want_webp or max_w:
                         converted = convert_to_webp(body, max_width=max_w)
+                        if not converted and want_webp:
+                            # retry with more aggressive compression
+                            converted = convert_to_webp(body, max_width=max_w, quality=72)
                         if converted:
-                            body, ct = converted
+                            body, ct = converted[0], converted[1]
                             is_webp = True
                             extra["X-Lumen-Image"] = "webp"
-                        elif want_webp and not is_webp:
-                            # second try slightly higher quality (rare)
-                            converted = convert_to_webp(body, max_width=max_w, quality=82)
-                            if converted:
-                                body, ct = converted
-                                is_webp = True
-                                extra["X-Lumen-Image"] = "webp"
+                        elif want_webp:
+                            extra["X-Lumen-Image"] = "jpeg-fallback"
+                            print("webp miss, serving original", (ct or "")[:40], len(body), flush=True)
                     if is_webp:
+                        ct = ct if "webp" in (ct or "").lower() else "image/webp"
                         extra["X-Lumen-Image"] = extra.get("X-Lumen-Image") or "webp"
 
                     img_cache_set(cache_key, body, ct)

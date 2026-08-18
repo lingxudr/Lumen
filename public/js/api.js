@@ -179,21 +179,16 @@ export function clearApiCache() {
 }
 
 function supportsWebP() {
-  if (typeof supportsWebP._v === "boolean") return supportsWebP._v;
+  if (supportsWebP._v != null) return supportsWebP._v;
+  // Optimistic: modern mobile browsers all support WebP.
+  // Only disable if canvas probe explicitly fails.
   try {
-    // Prefer feature detect; fall back to UA sniff only if canvas blocked
-    if (typeof document !== "undefined") {
-      const ok =
-        document.createElement("canvas").toDataURL("image/webp").indexOf("data:image/webp") === 0;
-      supportsWebP._v = ok;
-      return ok;
+    if (typeof document === "undefined") {
+      supportsWebP._v = true;
+      return true;
     }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const ua = navigator.userAgent || "";
-    supportsWebP._v = !/Trident|MSIE/.test(ua); // modern browsers OK
+    supportsWebP._v =
+      document.createElement("canvas").toDataURL("image/webp").indexOf("data:image/webp") === 0;
   } catch {
     supportsWebP._v = true;
   }
@@ -218,9 +213,10 @@ export function proxyImageUrl(url, opts = {}) {
   if (!url) return "";
   const qs = new URLSearchParams();
   qs.set("u", url);
-  const wantWebp = opts.webp !== false && supportsWebP();
-  // Always request fmt=webp when supported — server skips re-encode if already WebP
-  if (wantWebp) qs.set("fmt", "webp");
+  const wantWebp = opts.webp !== false;
+  // Request WebP for covers/UI; server falls back to original only if encode fails
+  if (wantWebp && supportsWebP()) qs.set("fmt", "webp");
+  else if (wantWebp) qs.set("fmt", "webp"); // still ask; server may serve webp
   let w = opts.w;
   if (w == null && typeof window !== "undefined") {
     // Auto width for mobile reader: save data on narrow screens
