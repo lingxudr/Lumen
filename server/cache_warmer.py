@@ -226,7 +226,7 @@ def start_background_warmer(
         return
 
     fetch = fetch_json or _default_fetch_json
-    delay = _env_int("CACHE_WARM_DELAY", 2)
+    delay = _env_int("CACHE_WARM_DELAY", 1)
     interval = _env_int("CACHE_WARM_INTERVAL", 300)
 
     def loop() -> None:

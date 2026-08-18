@@ -110,6 +110,20 @@ const App = {
 
 window.App = App;
 
+// Wake Railway backend early (reduces perceived cold start)
+function wakeBackend() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    fetch((window.LUMEN_API_BASE || "/api") + "/ping", {
+      signal: ctrl.signal,
+      cache: "no-store",
+      credentials: "omit",
+    }).catch(() => {}).finally(() => clearTimeout(t));
+  } catch (_) {}
+}
+wakeBackend();
+
 document.addEventListener("DOMContentLoaded", () => {
   setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
   window.addEventListener("offline", () => {

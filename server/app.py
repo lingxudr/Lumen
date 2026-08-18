@@ -761,7 +761,8 @@ class Handler(BaseHTTPRequestHandler):
                 ct_l = (content_type or "").lower()
                 if body and isinstance(body, (bytes, bytearray)) and "json" in ct_l:
                     raw = bytes(body).lstrip()
-                    if raw[:1] in (b"{", b"["):
+                    # skip stamp for tiny health/ping payloads
+                    if raw[:1] in (b"{", b"[") and len(raw) > 80 and b'"pong"' not in raw[:40]:
                         body = stamp_lumen_json_bytes(raw)
             except Exception as _wm_err:
                 print("watermark stamp skip:", _wm_err, flush=True)
@@ -936,11 +937,17 @@ class Handler(BaseHTTPRequestHandler):
                 if sub.startswith("check-hotlink"):
                     return self.send_json(405, {"error": "POST only"})
 
-                # Instant ping (diagnosa Railway)
+                # Instant ping — minimal body for Railway health / cold-start probes
                 if sub.split("?")[0].rstrip("/") == "ping":
-                    return self.send_json(
+                    body = b'{"ok":true,"pong":true}'
+                    return self.send_bytes(
                         200,
-                        {"ok": True, "pong": True, "api_base": API_BASE},
+                        body,
+                        "application/json; charset=utf-8",
+                        extra_headers={
+                            "Cache-Control": "no-store",
+                            "X-Lumen-Ping": "1",
+                        },
                     )
 
                 if sub.split("?")[0].rstrip("/") in ("health", "status"):
@@ -1402,35 +1409,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    try:
-        try:
-            from cache_warmer import start_background_warmer, warm_once
-        except Exception:
-            from server.cache_warmer import start_background_warmer, warm_once  # type: ignore
-
-        def _prewarm_fetch(sub, params):
-            try:
-                return _sanka_fallback_for_sub(sub, {k: [str(v)] for k, v in (params or {}).items()})
-            except Exception:
-                return None
-
-        start_background_warmer(fetch_json=_prewarm_fetch)
-
-        # Fire-and-forget first warm without waiting for interval delay
-        def _boot_warm():
-            import time as _t
-            _t.sleep(0.5)
-            try:
-                print("[boot] immediate warm start", flush=True)
-                st = warm_once(fetch_json=_prewarm_fetch)
-                print("[boot] immediate warm done", st, flush=True)
-            except Exception as e:
-                print("[boot] immediate warm error", e, flush=True)
-
-        import threading as _th
-        _th.Thread(target=_boot_warm, name="lumen-boot-warm", daemon=True).start()
-    except Exception as _warm_err:
-        print("cache_warmer start failed:", _warm_err, flush=True)
+    """Bind HTTP ASAP, then warm cache in background (cold-start friendly)."""
+    import threading as _th
+    import time as _t
 
     global PORT, HOST
     HOST = "0.0.0.0"
@@ -1439,18 +1420,18 @@ def main():
     except Exception:
         PORT = 8080
 
+    # Lightweight DB init (SQLite) — keep off critical path if it ever blocks
     db_path = "(disabled)"
-    try:
-        db_path = lumen_db.init_db()
-    except Exception as e:
-        print("db init failed:", e, flush=True)
 
-    print("=" * 60, flush=True)
-    print("  Lumen Reader READY", flush=True)
-    print("  bind: %s:%s" % (HOST, PORT), flush=True)
-    print("  db: %s" % db_path, flush=True)
-    print("  api: %s" % API_BASE, flush=True)
-    print("=" * 60, flush=True)
+    def _init_db_bg():
+        nonlocal db_path
+        try:
+            db_path = lumen_db.init_db()
+            print("[boot] db ready:", db_path, flush=True)
+        except Exception as e:
+            print("db init failed:", e, flush=True)
+
+    _th.Thread(target=_init_db_bg, name="lumen-db-init", daemon=True).start()
 
     ThreadingHTTPServer.allow_reuse_address = True
     try:
@@ -1460,7 +1441,42 @@ def main():
         PORT = 8080
         server = ThreadingHTTPServer((HOST, PORT), Handler)
 
+    print("=" * 60, flush=True)
+    print("  Lumen Reader READY (cold-start optimized)", flush=True)
+    print("  bind: %s:%s" % (HOST, PORT), flush=True)
+    print("  api: %s" % API_BASE, flush=True)
+    print("=" * 60, flush=True)
     print("listening on %s:%s" % (HOST, PORT), flush=True)
+
+    def _start_warmer():
+        try:
+            try:
+                from cache_warmer import start_background_warmer, warm_once
+            except Exception:
+                from server.cache_warmer import start_background_warmer, warm_once  # type: ignore
+
+            def _prewarm_fetch(sub, params):
+                try:
+                    return _sanka_fallback_for_sub(
+                        sub, {k: [str(v)] for k, v in (params or {}).items()}
+                    )
+                except Exception:
+                    return None
+
+            start_background_warmer(fetch_json=_prewarm_fetch)
+
+            # Immediate warm right after listen (parallel to traffic)
+            try:
+                print("[boot] immediate warm start", flush=True)
+                st = warm_once(fetch_json=_prewarm_fetch)
+                print("[boot] immediate warm done", st, flush=True)
+            except Exception as e:
+                print("[boot] immediate warm error", e, flush=True)
+        except Exception as _warm_err:
+            print("cache_warmer start failed:", _warm_err, flush=True)
+
+    _th.Thread(target=_start_warmer, name="lumen-warm-boot", daemon=True).start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

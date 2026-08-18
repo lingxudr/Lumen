@@ -20,6 +20,7 @@ def main():
     print("=" * 50, flush=True)
     print("Lumen boot", flush=True)
     print("PORT=", os.environ["PORT"], flush=True)
+    print("[boot] cold-start path", flush=True)
     print("HOST=", os.environ["HOST"], flush=True)
     print("DB_PATH=", os.environ.get("DB_PATH"), flush=True)
     print("API_BASE=", os.environ.get("API_BASE"), flush=True)

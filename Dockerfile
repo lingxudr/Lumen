@@ -25,7 +25,7 @@ ENV WEBP_QUALITY=78
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=25s --timeout=4s --start-period=10s --retries=4 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ping', timeout=4)" || exit 1
 
 CMD ["python", "-u", "server/boot.py"]
