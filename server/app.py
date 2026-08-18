@@ -864,38 +864,23 @@ class Handler(BaseHTTPRequestHandler):
                     rel = path[len("/static/"):].replace("..", "")
                 return self.serve_file(STATIC / rel)
 
-            if path == "/health":
+            if path in ("/health", "/healthz", "/ready"):
+                # Instant liveness — no upstream probe (critical for Railway cold start)
                 global _health_hits
                 _health_hits += 1
-                if _health_hits % 50 == 0:
+                if _health_hits % 100 == 0:
                     try:
                         lumen_db.prune()
                     except Exception:
                         pass
-                providers = None
-                try:
-                    from services.manga_service import provider_status
-                    providers = provider_status()
-                except Exception:
-                    try:
-                        from server.services.manga_service import provider_status
-                        providers = provider_status()
-                    except Exception as e:
-                        providers = {"error": str(e)}
                 return self.send_json(
                     200,
                     {
                         "ok": True,
+                        "ready": True,
                         "api_base": API_BASE,
                         "cache": {**cache_stats(), "img": len(IMG_CACHE)},
                         "cache_warmer": _warmer_status(),
-                        "db": _db_stats_safe(),
-                        "providers": providers,
-                        "rate_limit": {
-                            "api": RATE_LIMIT_API,
-                            "img": RATE_LIMIT_IMG,
-                            "window": RATE_LIMIT_WINDOW,
-                        },
                     },
                 )
 
@@ -959,15 +944,17 @@ class Handler(BaseHTTPRequestHandler):
                     )
 
                 if sub.split("?")[0].rstrip("/") in ("health", "status"):
+                    deep = (qs.get("deep") or ["0"])[0] in ("1", "true", "yes")
                     providers = None
-                    try:
+                    if deep:
                         try:
-                            from services.manga_service import provider_status
-                        except Exception:
-                            from server.services.manga_service import provider_status
-                        providers = provider_status()
-                    except Exception as e:
-                        providers = {"error": str(e)}
+                            try:
+                                from services.manga_service import provider_status
+                            except Exception:
+                                from server.services.manga_service import provider_status
+                            providers = provider_status(deep=True)
+                        except Exception as e:
+                            providers = {"error": str(e)}
                     return self.send_json(
                         200,
                         {
@@ -1417,10 +1404,31 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     try:
         try:
-            from cache_warmer import start_background_warmer
+            from cache_warmer import start_background_warmer, warm_once
         except Exception:
-            from server.cache_warmer import start_background_warmer  # type: ignore
-        start_background_warmer()
+            from server.cache_warmer import start_background_warmer, warm_once  # type: ignore
+
+        def _prewarm_fetch(sub, params):
+            try:
+                return _sanka_fallback_for_sub(sub, {k: [str(v)] for k, v in (params or {}).items()})
+            except Exception:
+                return None
+
+        start_background_warmer(fetch_json=_prewarm_fetch)
+
+        # Fire-and-forget first warm without waiting for interval delay
+        def _boot_warm():
+            import time as _t
+            _t.sleep(0.5)
+            try:
+                print("[boot] immediate warm start", flush=True)
+                st = warm_once(fetch_json=_prewarm_fetch)
+                print("[boot] immediate warm done", st, flush=True)
+            except Exception as e:
+                print("[boot] immediate warm error", e, flush=True)
+
+        import threading as _th
+        _th.Thread(target=_boot_warm, name="lumen-boot-warm", daemon=True).start()
     except Exception as _warm_err:
         print("cache_warmer start failed:", _warm_err, flush=True)
 

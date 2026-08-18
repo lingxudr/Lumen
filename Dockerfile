@@ -20,9 +20,12 @@ ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=8080
 ENV DB_PATH=/tmp/lumen.db
-ENV API_BASE=https://be.komikcast.cc
+ENV API_BASE=https://api.voratoon.com
 ENV WEBP_QUALITY=78
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ping', timeout=4)" || exit 1
 
 CMD ["python", "-u", "server/boot.py"]

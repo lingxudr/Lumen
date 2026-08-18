@@ -11,7 +11,7 @@ Env:
   CACHE_WARM_ON_START=1   (default 1)
   CACHE_WARM_INTERVAL=900 (seconds, 0 = once only)
   CACHE_WARM_TOP=12       (series to warm)
-  CACHE_WARM_DELAY=8      (seconds after boot)
+  CACHE_WARM_DELAY=2      (seconds after boot)
 """
 
 from __future__ import annotations
@@ -226,7 +226,7 @@ def start_background_warmer(
         return
 
     fetch = fetch_json or _default_fetch_json
-    delay = _env_int("CACHE_WARM_DELAY", 8)
+    delay = _env_int("CACHE_WARM_DELAY", 2)
     interval = _env_int("CACHE_WARM_INTERVAL", 300)
 
     def loop() -> None:
@@ -260,8 +260,8 @@ def start_background_warmer(
                 fetch("series", {"take": "6", "page": "1", "mode": "newest"})
             except Exception:
                 pass
-            _t.sleep(60)
+            _t.sleep(45)
 
     if _env_bool("CACHE_KEEPALIVE", True):
         threading.Thread(target=keepalive, name="lumen-keepalive", daemon=True).start()
-        print("[cache_warmer] keepalive every 60s", flush=True)
+        print("[cache_warmer] keepalive every 45s", flush=True)

@@ -499,8 +499,12 @@ def resolve_upstream_failure(sub: str, qs: dict | None = None) -> tuple[bytes | 
     return None, "none"
 
 
-def provider_status() -> dict[str, Any]:
-    """Health ringkas untuk /api/health — lewat ProviderManager bila ada."""
+def provider_status(deep: bool = False) -> dict[str, Any]:
+    """Health ringkas untuk /api/health.
+
+    Default: instan (tanpa network probe) agar cold-start / uptime ping cepat.
+    deep=True: boleh probe provider (lambat).
+    """
     out: dict[str, Any] = {
         "sqlite": lumen_db is not None,
         "sanka": False,
@@ -513,7 +517,8 @@ def provider_status() -> dict[str, Any]:
         "cache": "sqlite_read_through",
         "mongo": "optional_catalog_primary_when_present",
         "architecture": "ProviderManager is single authority",
-        "fallback_chain": ["komikcast", "voratoon", "komiku_direct", "seed"],
+        "fallback_chain": ["voratoon"],
+        "deep": bool(deep),
     }
     try:
         try:
@@ -522,18 +527,14 @@ def provider_status() -> dict[str, Any]:
             from hybrid_providers import default_manager  # type: ignore
         mgr = default_manager()
         out["providers"] = mgr.health_snapshot()
-        if all(r.get("successes", 0) + r.get("failures", 0) == 0 for r in out["providers"]):
-            out["probe"] = mgr.probe_all()
-            out["providers"] = mgr.health_snapshot()
+        if deep:
+            try:
+                out["probe"] = mgr.probe_all()
+                out["providers"] = mgr.health_snapshot()
+            except Exception as e:
+                out["probe_error"] = str(e)
     except Exception as e:
         out["manager_error"] = str(e)
-        if sanka_provider is not None:
-            try:
-                sample = sanka_provider.get_terbaru(limit=1, prefer="shinigami", page=1)
-                out["sanka_ok"] = bool(sample.get("data"))
-            except Exception as e2:
-                out["sanka_ok"] = False
-                out["sanka_error"] = str(e2)
     return out
 
 
