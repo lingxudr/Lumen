@@ -364,11 +364,10 @@ def convert_to_webp(body, max_width=None, quality=None):
             save_kw["exact"] = False
         im.save(buf, **save_kw)
         data = buf.getvalue()
-        # Keep original if WebP is not beneficial (unless we resized)
-        if not need_resize and len(data) > len(body) * 0.98:
-            if fmt0 == "WEBP":
-                return body, "image/webp"
-            return None
+        # Prefer original only when source was already WebP and re-encode grew
+        if fmt0 == "WEBP" and not need_resize and len(data) >= len(body):
+            return body, "image/webp"
+        # Always return WebP when encode succeeded (client asked fmt=webp)
         return data, "image/webp"
     except Exception as e:
         print("webp convert fail:", e, flush=True)
