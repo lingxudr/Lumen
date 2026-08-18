@@ -35,7 +35,14 @@ export function createLibraryView(ctx) {
     }
 
     box.innerHTML = "";
-    if (!items.length) return;
+    if (!items.length) {
+      box.innerHTML = `<div class="empty-state">
+        <div style="font-size:28px;margin-bottom:8px">${mode === "history" ? "◷" : "★"}</div>
+        <div style="font-weight:700;color:var(--ink);margin-bottom:6px">${mode === "history" ? "Belum ada riwayat" : "Belum ada favorit"}</div>
+        <div>${mode === "history" ? "Chapter yang kamu baca akan muncul di sini." : "Tandai komik dari halaman detail untuk menyimpan di sini."}</div>
+      </div>`;
+      return;
+    }
 
     items.forEach((item) => {
       const card = document.createElement("article");
