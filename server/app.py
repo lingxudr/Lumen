@@ -97,8 +97,8 @@ SSL_CTX = ssl.create_default_context()
 
 # Branding / watermark on public API JSON
 # Set LUMEN_PUBLIC_URL on Railway/Vercel after project rename or custom domain
-# e.g. https://lumen.vercel.app  or  https://lumen.yourdomain.com
-LUMEN_PUBLIC_URL = (os.environ.get("LUMEN_PUBLIC_URL") or "https://lumen.vercel.app").rstrip("/")
+# e.g. https://v1lumen.vercel.app  or  https://lumen.yourdomain.com
+LUMEN_PUBLIC_URL = (os.environ.get("LUMEN_PUBLIC_URL") or "https://v1lumen.vercel.app").rstrip("/")
 LUMEN_WATERMARK = {
     "creator": "Lumen",
     "website": LUMEN_PUBLIC_URL,
