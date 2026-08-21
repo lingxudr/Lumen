@@ -95,14 +95,27 @@ UA = (
 )
 SSL_CTX = ssl.create_default_context()
 
-# Branding / watermark on public API JSON
-# Set LUMEN_PUBLIC_URL on Railway/Vercel after project rename or custom domain
-# e.g. https://v1lumen.vercel.app  or  https://lumen.yourdomain.com
-LUMEN_PUBLIC_URL = (os.environ.get("LUMEN_PUBLIC_URL") or "https://v1lumen.vercel.app").rstrip("/")
+# Branding / watermark — always https://v1lumen.vercel.app (never http://)
+def _public_url() -> str:
+    raw = (os.environ.get("LUMEN_PUBLIC_URL") or "https://v1lumen.vercel.app").strip().rstrip("/")
+    if raw.startswith("http://"):
+        raw = "https://" + raw[len("http://") :]
+    if not raw.startswith("https://"):
+        raw = "https://" + raw.lstrip("/")
+    # production default host
+    if "vercel.app" in raw and "v1lumen.vercel.app" not in raw and "lumen" in raw.lower():
+        # keep explicit custom domains; only normalize empty/default
+        pass
+    return raw
+
+
+LUMEN_PUBLIC_URL = _public_url()
+LUMEN_HOST = LUMEN_PUBLIC_URL.replace("https://", "").replace("http://", "")
 LUMEN_WATERMARK = {
     "creator": "Lumen",
-    "website": LUMEN_PUBLIC_URL,
-    "watermark": f"Powered by Lumen · {LUMEN_PUBLIC_URL.replace('https://', '').replace('http://', '')}",
+    "website": LUMEN_PUBLIC_URL,  # always https://…
+    "host": LUMEN_HOST,  # v1lumen.vercel.app
+    "watermark": f"Powered by Lumen · {LUMEN_HOST}",
     "docs": f"{LUMEN_PUBLIC_URL}/lumenrest/docs",
 }
 
