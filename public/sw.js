@@ -1,5 +1,5 @@
 /* Lumen service worker — optimized shell + bounded image cache */
-const VERSION = "v5";
+const VERSION = "v6";
 const SHELL_CACHE = `lumen-shell-${VERSION}`;
 const IMG_CACHE = `lumen-img-${VERSION}`;
 const IMG_MAX = 72;

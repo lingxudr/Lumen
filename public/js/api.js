@@ -213,10 +213,8 @@ export function proxyImageUrl(url, opts = {}) {
   if (!url) return "";
   const qs = new URLSearchParams();
   qs.set("u", url);
-  const wantWebp = opts.webp !== false;
-  // Request WebP for covers/UI; server falls back to original only if encode fails
-  if (wantWebp && supportsWebP()) qs.set("fmt", "webp");
-  else if (wantWebp) qs.set("fmt", "webp"); // still ask; server may serve webp
+  // Request WebP for covers/UI (server falls back only if encode fails)
+  if (opts.webp !== false) qs.set("fmt", "webp");
   let w = opts.w;
   if (w == null && typeof window !== "undefined") {
     // Auto width for mobile reader: save data on narrow screens

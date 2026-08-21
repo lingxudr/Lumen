@@ -338,13 +338,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
-      });
-    }
-  </script>
   <script src="/js/app.js" type="module"></script>
 </body>
 </html>

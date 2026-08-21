@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Lumen Reader — pure stdlib HTTP server + API proxy."""
 import gzip
+import hashlib
 import json
 import os
 import ssl
@@ -730,7 +731,7 @@ def build_hybrid_newest(page=1, take=20):
 
 
 def _sanka_fallback_for_sub(sub: str, qs=None) -> bytes | None:
-    """Delegate ke services.manga_service (provider logic keluar dari app.py)."""
+    """Provider resolve (nama historis). Delegasi ke manga_service / Voratoon."""
     try:
         from services.manga_service import sanka_fallback
     except Exception:
@@ -745,6 +746,10 @@ def _sanka_fallback_for_sub(sub: str, qs=None) -> bytes | None:
 
 
 
+
+
+def _etag_bytes(body: bytes) -> str:
+    return '"' + hashlib.sha1(body).hexdigest()[:20] + '"'
 
 def sanitize_series_list_bytes(body: bytes) -> bytes:
     """Strip Lucid/Adonis ORM fields from series list payloads before cache/serve."""
@@ -848,7 +853,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # Gzip JSON/text if client accepts and payload worth it
             ae = (self.headers.get("Accept-Encoding") or "").lower()
-            use_gzip = False and (
+            use_gzip = (
                 "gzip" in ae
                 and len(body) >= 512
                 and (
@@ -1320,7 +1325,14 @@ class Handler(BaseHTTPRequestHandler):
                 if cached is not None:
                     body, ct = cached
                     extra = dict(rate_headers)
+                    et = _etag_bytes(body)
+                    inm = (self.headers.get("If-None-Match") or "").strip()
+                    if inm and inm == et:
+                        extra["ETag"] = et
+                        extra["X-Lumen-Cache"] = "REVALIDATED"
+                        return self.send_bytes(304, b"", ct or "image/jpeg", extra_headers=extra)
                     extra["X-Lumen-Cache"] = "HIT"
+                    extra["ETag"] = et
                     extra["Cache-Control"] = "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
                     extra["CDN-Cache-Control"] = "public, max-age=2592000, stale-while-revalidate=604800"
                     extra["X-Content-Type-Options"] = "nosniff"
@@ -1368,6 +1380,7 @@ class Handler(BaseHTTPRequestHandler):
 
                     img_cache_set(cache_key, body, ct)
                     extra["X-Lumen-Cache"] = "MISS"
+                    extra["ETag"] = _etag_bytes(body)
                     # WebP/static pages cache longer; browser may revalidate weekly
                     extra["Cache-Control"] = "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
                     extra["CDN-Cache-Control"] = "public, max-age=2592000, stale-while-revalidate=604800"
