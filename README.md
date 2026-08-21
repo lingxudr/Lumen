@@ -1,126 +1,162 @@
 # Lumen
 
-Reader komik modern (frontend SPA + Python API). Sumber data utama: **VoraToon** (penerus KomikCast).
+**Lumen** is a modern manga / manhwa / manhua reader.
 
-- Frontend: `https://lumen-delta-lyart.vercel.app`
-- Backend: Railway (`server/app.py`)
-- API sumber: `https://api.voratoon.com` + RSC `https://v1.voratoon.com`
+- **UI:** cinematic dark SPA (mobile-first)
+- **Backend:** Python (`server/app.py`) on Railway
+- **Source:** [VoraToon](https://v1.voratoon.com) REST + RSC (successor to KomikCast)
+- **Edge:** Vercel static hosting + `/api` & `/img` proxy
 
-## Fitur
+**Live:** [lumen-delta-lyart.vercel.app](https://lumen-delta-lyart.vercel.app)
 
-- Katalog Terbaru / Series Baru / Selesai / Browse / Populer
-- Detail manga + daftar chapter (float index aman)
-- Reader V2 (glass header, progress, lazy load, WebP proxy)
-- Cache bertingkat (soft/hard TTL ~5 menit untuk list)
-- Rate limit per IP
-- Image proxy anti-SSRF + allowlist host
-- Favorit & riwayat (localStorage)
+---
 
-## Struktur
+## Features
+
+| Area | Details |
+|------|---------|
+| Catalog | Terbaru, Series Baru, Selesai, Browse, Populer |
+| Search | Title search via Voratoon |
+| Detail | Cover, synopsis, genres, chapter list |
+| Reader | Vertical scroll, progress, WebP proxy, lazy load |
+| Library | Bookmarks & history in `localStorage` |
+| PWA | Installable, service worker shell cache |
+| API docs | [`/lumenrest/docs`](https://lumen-delta-lyart.vercel.app/lumenrest/docs) |
+
+---
+
+## Architecture
 
 ```
-lumen/
-├── public/                 # Frontend static
+Browser (Vercel)
+   │
+   ├─ /          static SPA
+   ├─ /api/*  →  Vercel proxy  →  Railway Python API
+   └─ /img    →  Vercel edge   →  Railway WebP / origin CDN
+                                      │
+                                      ▼
+                               api.voratoon.com
+                               v1.voratoon.com (RSC)
+```
+
+**Single provider:** Voratoon only.  
+Legacy KomikCast / Komiku / Sanka / hybrid stacks were removed.
+
+---
+
+## Project layout
+
+```
+Lumen/
+├── public/                 # Frontend
 │   ├── index.html
 │   ├── css/                # main.css, reader-v2.css
-│   └── js/
-│       ├── app.js
-│       ├── config.js
-│       ├── api.js
-│       └── views/          # home, series, reader, library
+│   ├── js/                 # app, api, views, sw
+│   └── lumenrest/docs.html
 ├── server/
-│   ├── app.py              # HTTP API + static
-│   ├── security.py         # SSRF / host allowlist
+│   ├── app.py              # HTTP API + static + /img
+│   ├── boot.py
+│   ├── security.py         # SSRF allowlist
 │   ├── cache_policy.py
 │   ├── cache_warmer.py
-│   ├── providers/          # voratoon, …
+│   ├── db.py               # SQLite optional cache
+│   ├── providers/
+│   │   └── voratoon.py     # only provider
 │   └── services/
-├── api/                    # Vercel edge proxy → Railway
-├── docs/
+│       └── manga_service.py
+├── api/                    # Vercel serverless (proxy, img)
+├── tests/
 ├── vercel.json
 ├── railway.toml
+├── Dockerfile
 └── requirements.txt
 ```
 
-## Pengembangan lokal
+---
+
+## Local development
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python3 -u server/app.py
+python3 -u server/boot.py
+# → http://127.0.0.1:8080
 ```
 
-Buka `http://127.0.0.1:8080` (atau `PORT` di env).
+```bash
+npm test          # matching + SSRF unit tests
+npm run check     # compileall + tests
+```
+
+---
 
 ## Deploy
 
-| Layer | Platform | Catatan |
-|-------|----------|---------|
-| Frontend + `/api/*` proxy | Vercel | rewrite ke Railway |
-| Python backend | Railway | `server/app.py` |
-| DB opsional | MongoDB Atlas | catalog cache |
+| Layer | Platform | Entry |
+|-------|----------|--------|
+| Frontend + edge proxy | **Vercel** | `public/` + `api/` |
+| Python API | **Railway** | `Dockerfile` / `server/boot.py` |
 
-### Env penting (Railway)
+### Railway env
 
-| Variable | Default | Fungsi |
-|----------|---------|--------|
-| `PORT` | `8080` | bind port |
-| `API_BASE` | `https://api.voratoon.com` | upstream REST (jangan `be.komikcast.cc`) |
-| `RATE_LIMIT_API` | `20` | req/menit/IP untuk API |
-| `RATE_LIMIT_IMG` | `60` | req/menit/IP untuk gambar |
-| `MONGODB_URI` | — | opsional catalog |
-| `WEBP_QUALITY` | auto | 0 = adaptif |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `8080` | Listen port |
+| `API_BASE` | `https://api.voratoon.com` | Upstream REST |
+| `RATE_LIMIT_API` | `20` | API req/min/IP |
+| `RATE_LIMIT_IMG` | `60` | Image req/min/IP |
+| `WEBP_QUALITY` | auto | WebP encode quality |
+| `CACHE_WARM_INTERVAL` | `300` | Warm cycle (seconds) |
+| `CACHE_KEEPALIVE` | `1` | Ping list every ~45s |
 
-### Env Vercel
+### Vercel env
 
-| Variable | Fungsi |
-|----------|--------|
-| `LUMEN_UPSTREAM` / `LUMEN_UPSTREAM_HOST` | URL host Railway backend |
+| Variable | Purpose |
+|----------|---------|
+| `LUMEN_UPSTREAM` | Railway public URL |
+| `LUMEN_UPSTREAM_HOST` | Host allowlist for proxy |
 
-## Keamanan
+---
 
-Ringkasan — detail di [`docs/SECURITY.md`](docs/SECURITY.md).
+## Public API (examples)
 
-- **Anti-SSRF** pada `/img` dan proxy: hanya host allowlist, blok IP privat/metadata
-- **Rate limit** sliding window per IP
-- **Header**: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
-- **Path proxy relatif** saja (tolak URL absolut di edge)
-- Tidak menyimpan kredensial pengguna (favorit = localStorage)
+Base (production): `https://lumen-delta-lyart.vercel.app/api`
 
-## REST docs
-
-Interactive playground: [`/lumenrest/docs`](https://lumen-delta-lyart.vercel.app/lumenrest/docs)
-
-Setiap respons JSON API menyertakan watermark Lumen (`creator`, `website`, `watermark`, `docs`).
-
-## API Lumen (backend)
-
-```text
+```http
+GET /api/ping
 GET /api/series?take=30&page=1&mode=newest
+GET /api/series?mode=hot
+GET /api/popular?take=20
+GET /api/genres
 GET /api/series/{slug}
 GET /api/series/{slug}/chapters
 GET /api/series/{slug}/chapters/{index}
-GET /api/genres
-GET /api/health
-GET /img?u=<encoded_url>&fmt=webp&w=480
+GET /img?u={imageUrl}&fmt=webp&w=360
 ```
 
-Upstream VoraToon (referensi):
+JSON responses include Lumen watermark fields (`creator`, `website`, `watermark`, `docs`).
 
-```text
-GET https://api.voratoon.com/series
-GET https://api.voratoon.com/series/{slug}/chapters/{index}
-GET https://api.voratoon.com/genres
-GET https://api.voratoon.com/popular
-```
+Interactive docs: **/lumenrest/docs**
 
-## Lisensi & etika
+---
 
-Proyek personal/edukasi. Hormati ToS sumber konten; jangan spam scrape.
-Gunakan cache + rate limit yang sudah disetel.
+## Security
 
-## Dokumen lain
+- Image proxy host **allowlist** + SSRF blocks (`localhost`, private IPs, `file://`)
+- Rate limits per IP
+- CSP + security headers on API responses
+- No open proxy: `/api` only relative paths to upstream
 
-- [`docs/SECURITY.md`](docs/SECURITY.md) — keamanan
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arsitektur
-- [`docs/RAILWAY.md`](docs/RAILWAY.md) — deploy Railway
+---
+
+## Ops notes
+
+- **Railway trial** expires → backend offline while Vercel UI may still load. Upgrade or migrate before trial ends.
+- Cold start: `/api/ping` + cache warmer + client wake on page load.
+- After deploy: hard refresh once so service worker **v6+** picks up the new shell.
+
+---
+
+## License
+
+Private / personal project unless otherwise stated.

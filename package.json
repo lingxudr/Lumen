@@ -6,7 +6,7 @@
   "scripts": {
     "start": "python3 -u server/boot.py",
     "dev": "python3 -u server/boot.py",
-    "test": "python3 tests/matching/test_canonical.py && python3 tests/matching/test_match_tiers.py && python3 tests/matching/test_chapter_parser.py && python3 tests/security/test_ssrf.py && python3 tests/providers/test_contract.py && python3 tests/providers/test_errors.py && python3 tests/providers/test_capabilities.py && python3 tests/providers/test_pages.py && python3 tests/providers/test_rate_limit.py && python3 tests/providers/test_page_fallback.py",
+    "test": "python3 tests/matching/test_canonical.py && python3 tests/matching/test_match_tiers.py && python3 tests/security/test_ssrf.py",
     "test:network": "python3 -c \"import tests.providers.test_contract as t; t.test_latest_contract_all_providers()\"",
     "check": "python3 -m compileall -q server && npm test",
     "lint:py": "python3 -m compileall -q server"

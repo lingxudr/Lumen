@@ -1,12 +1,6 @@
-"""
-Provider adapters.
-
-Jangan panggil provider langsung dari route/handler.
-Gunakan services.manga_service / ProviderChain.
-"""
-
+"""Provider adapters — Voratoon only."""
 from __future__ import annotations
 
-__all__ = ["sanka"]
+from . import voratoon  # noqa: F401
 
-from . import voratoon  # noqa
+__all__ = ["voratoon"]

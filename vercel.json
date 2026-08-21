@@ -18,14 +18,6 @@
       "destination": "/api/check-hotlink"
     },
     {
-      "source": "/api/komiku",
-      "destination": "/api/komiku"
-    },
-    {
-      "source": "/api/komiku/(.*)",
-      "destination": "/api/komiku"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/proxy?path=$1"
     },

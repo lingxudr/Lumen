@@ -1,41 +1,23 @@
 # Deployment
 
-## Vercel ≠ Python backend
+## Railway
 
-| Platform | Peran |
-|----------|--------|
-| **Vercel** | Frontend (`public/`) + serverless `api/*.js` |
-| **Railway/Render** | `server/app.py` — ProviderManager, Mongo, SQLite, Sanka |
-| **MongoDB Atlas** | Canonical catalog (DB-first) |
+1. Connect GitHub repo `lingxudr/Lumen`
+2. Use Dockerfile builder
+3. Set `API_BASE=https://api.voratoon.com`
+4. Set `LUMEN_UPSTREAM` on Vercel to this service URL
 
-`server/app.py` tidak otomatis jalan di Vercel.
+Healthcheck: `GET /api/ping`
 
-## Opsi A (disarankan)
+## Vercel
 
-```
-Vercel   → Frontend + edge proxy
-Railway  → Python API + sync worker
-MongoDB  → catalog
-```
+1. Root directory: repo root
+2. Output: static from `public/` (or framework preset that serves `public`)
+3. Env: `LUMEN_UPSTREAM`, `LUMEN_UPSTREAM_HOST`
 
-## Scripts
+## Checklist after deploy
 
-```bash
-npm run dev
-npm run check
-npm test
-```
-
-
-## Komiku IP ban (Railway)
-
-Jika log menunjukkan `403 Forbidden` ke komiku.org dari Railway:
-
-1. Deploy frontend ke Vercel (endpoint `/api/komiku` proxy).
-2. Di Railway Variables, set:
-
-```
-KOMIKU_PROXY_BASE=https://lumen-delta-lyart.vercel.app
-```
-
-Railway fetch Komiku lewat IP Vercel (bukan IP yang di-ban).
+- [ ] `GET /api/ping` → `{"ok":true,"pong":true}`
+- [ ] `GET /api/series?take=2&mode=newest` → items + watermark
+- [ ] `GET /api/series?mode=hot` → no `$attributes` / `modelOptions`
+- [ ] Cover `/img?u=…&fmt=webp&w=360` → `image/webp`
