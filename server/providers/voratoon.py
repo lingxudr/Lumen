@@ -1,6 +1,11 @@
 """
-Voratoon API client (api.voratoon.com) — fallback utama saat Komikcast down.
-Struktur response kompatibel frontend Lumen (mirip be.komikcast.cc).
+Voratoon API client (api.voratoon.com) + site RSC (v1.voratoon.com).
+
+Performance:
+  - gzip responses
+  - short in-process TTL cache (JSON ~45s, home RSC ~120s)
+  - parallel page fetch for newest/new_series
+  - tighter timeouts for list vs HTML
 """
 
 from __future__ import annotations
@@ -19,32 +24,92 @@ UA = os.environ.get(
     "LumenReader/2.0 (metadata; respectful caching)",
 )
 
-TIMEOUT = float(os.environ.get("VORATOON_TIMEOUT", "16"))
+TIMEOUT = float(os.environ.get("VORATOON_TIMEOUT", "12"))
+TIMEOUT_LIST = float(os.environ.get("VORATOON_TIMEOUT_LIST", "8"))
+TIMEOUT_HTML = float(os.environ.get("VORATOON_TIMEOUT_HTML", "10"))
 SITE_BASE = (os.environ.get("VORATOON_SITE") or "https://v1.voratoon.com").rstrip("/")
 
+# In-process short cache (reduces repeat RSC/API hits within warm window)
+import threading
+import time as _time
+import gzip as _gzip
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def _get_html(url: str) -> str:
+_MEM_LOCK = threading.Lock()
+_MEM: dict[str, tuple[float, Any]] = {}
+_MEM_MAX = 128
+
+# Precompiled RSC / chapter patterns
+_RE_RSC_PUSH = re.compile(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
+_RE_LAST_PAGE = re.compile(r'"lastPage"\s*:\s*(\d+)')
+_RE_PAGE = re.compile(r'"page"\s*:\s*(\d+)')
+_RE_CH = re.compile(r"(?:chapter|ch\.?|ep\.?|episode)\s*(\d+(?:\.\d+)?)", re.I)
+_RE_CH_RANGE = re.compile(r"\b(\d+)\s*[-–]\s*(\d+)\b")
+_RE_DIGITS = re.compile(r"(\d+(?:\.\d+)?)")
+
+
+def _mem_get(key: str):
+    now = _time.time()
+    with _MEM_LOCK:
+        row = _MEM.get(key)
+        if not row:
+            return None
+        exp, val = row
+        if now > exp:
+            _MEM.pop(key, None)
+            return None
+        return val
+
+
+def _mem_set(key: str, val: Any, ttl: float) -> None:
+    with _MEM_LOCK:
+        if len(_MEM) >= _MEM_MAX:
+            # drop oldest ~half
+            items = sorted(_MEM.items(), key=lambda kv: kv[1][0])
+            for k, _ in items[: max(1, _MEM_MAX // 2)]:
+                _MEM.pop(k, None)
+        _MEM[key] = (_time.time() + ttl, val)
+
+
+def _read_body(resp) -> bytes:
+    raw = resp.read()
+    enc = (resp.headers.get("Content-Encoding") or "").lower()
+    if "gzip" in enc or raw[:2] == b"\x1f\x8b":
+        try:
+            return _gzip.decompress(raw)
+        except Exception:
+            return raw
+    return raw
+
+
+def _get_html(url: str, *, ttl: float = 90.0) -> str:
+    ck = f"html:{url}"
+    hit = _mem_get(ck)
+    if hit is not None:
+        return hit
     req = urllib.request.Request(
         url,
         headers={
             "User-Agent": UA,
             "Accept": "text/html,application/xhtml+xml",
             "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip",
+            "Connection": "close",
         },
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+    with urllib.request.urlopen(req, timeout=TIMEOUT_HTML) as resp:
+        text = _read_body(resp).decode("utf-8", errors="replace")
+    _mem_set(ck, text, ttl)
+    return text
 
 
 
 def _decode_biggest_rsc_frame(html: str) -> str | None:
     """Ambil string Flight frame terbesar (sudah di-unescape via json.loads)."""
-    import re
-
     best = None
     best_len = 0
-    for m in re.finditer(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)', html):
+    for m in _RE_RSC_PUSH.finditer(html):
         q = m.group(1)
         if len(q) > best_len:
             best_len = len(q)
@@ -106,12 +171,10 @@ def _extract_rsc_initial_data(html: str):
         pos += 1
     data = _balanced_json(s, pos)
     meta: dict = {}
-    import re
-
-    m = re.search(r'"lastPage"\s*:\s*(\d+)', s)
+    m = _RE_LAST_PAGE.search(s)
     if m:
         meta["lastPage"] = int(m.group(1))
-    m = re.search(r'"page"\s*:\s*(\d+)', s)
+    m = _RE_PAGE.search(s)
     if m:
         meta["page"] = int(m.group(1))
     return data, meta
@@ -217,12 +280,16 @@ def fetch_home_rsc() -> dict[str, Any]:
     """
     Scrape https://v1.voratoon.com/ home initialData:
       banner, popular, updates, newSeries, completed, ...
+    Cached ~2 minutes in-process.
     """
-    html = _get_html(f"{SITE_BASE}/")
+    hit = _mem_get("home_rsc_payload")
+    if isinstance(hit, dict):
+        return hit
+    html = _get_html(f"{SITE_BASE}/", ttl=120)
     data, meta = _extract_rsc_initial_data(html)
     if not isinstance(data, dict):
         raise RuntimeError(f"home initialData not object: {type(data)}")
-    return {
+    out = {
         "banner": _normalize_feed_items(data.get("banner") or []),
         "updates": _normalize_feed_items(data.get("updates") or []),
         "newSeries": _normalize_feed_items(data.get("newSeries") or []),
@@ -230,6 +297,8 @@ def fetch_home_rsc() -> dict[str, Any]:
         "popular": _normalize_feed_items(data.get("popular") or []),
         "meta": {"source": "voratoon_home_rsc", "upstream": SITE_BASE, **meta},
     }
+    _mem_set("home_rsc_payload", out, 120)
+    return out
 
 
 def _home_feed_payload(mode: str, take: int, page: int) -> dict[str, Any] | None:
@@ -507,24 +576,35 @@ def get_genres() -> dict[str, Any]:
     }
 
 
-def _get(path: str, params: dict | None = None) -> dict[str, Any]:
+def _get(path: str, params: dict | None = None, *, ttl: float = 45.0, timeout: float | None = None) -> dict[str, Any]:
     q = urllib.parse.urlencode(
         {k: v for k, v in (params or {}).items() if v is not None and v != ""}
     )
     url = f"{BASE}{path}" + (f"?{q}" if q else "")
+    ck = f"json:{url}"
+    if ttl > 0:
+        hit = _mem_get(ck)
+        if isinstance(hit, dict):
+            return hit
     req = urllib.request.Request(
         url,
         headers={
             "User-Agent": UA,
             "Accept": "application/json",
             "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+            "Accept-Encoding": "gzip",
+            "Connection": "close",
         },
         method="GET",
     )
+    to = timeout if timeout is not None else TIMEOUT_LIST
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            body = resp.read()
-            return json.loads(body.decode("utf-8", errors="replace"))
+        with urllib.request.urlopen(req, timeout=to) as resp:
+            body = _read_body(resp)
+            data = json.loads(body.decode("utf-8", errors="replace"))
+            if ttl > 0 and isinstance(data, dict):
+                _mem_set(ck, data, ttl)
+            return data
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")[:200]
         raise RuntimeError(f"Voratoon HTTP {e.code}: {detail}") from e
@@ -817,39 +897,47 @@ def get_series_list(
         params["page"] = page
         params["sort"] = "updatedAt"
 
-    # Pool several pages for newest / new_series quality filter
+    # Pool pages for newest / new_series (parallel) — else single request
     raw_items: list[dict] = []
-    pages_to_fetch = 3 if mode in ("newest", "new_series") else 1
-    for pg in range(1, pages_to_fetch + 1):
+    meta: dict = {}
+    pages_to_fetch = 2 if mode in ("newest", "new_series") else 1
+
+    def _fetch_page(pg: int) -> tuple[int, list, dict]:
         p = dict(params)
         if mode in ("newest", "new_series"):
             p["page"] = pg
             p["take"] = 40
-        data = _get("/series", p)
+        data = _get("/series", p, ttl=40, timeout=TIMEOUT_LIST)
         batch = [
             _normalize_series_item(it, strip_chapter_images=True)
             for it in (data.get("data") or [])
             if isinstance(it, dict)
         ]
-        raw_items.extend(batch)
-        if mode not in ("newest", "new_series"):
-            meta = data.get("meta") or {}
-            break
-        if len(batch) < 20:
-            break
-    else:
-        data = data if raw_items else {"meta": {}}
-        meta = data.get("meta") or {}
+        return pg, batch, (data.get("meta") or {})
 
-    if mode not in ("newest", "new_series"):
-        data = _get("/series", params) if not raw_items else {"data": raw_items, "meta": meta}
-        if not raw_items:
-            raw_items = [
-                _normalize_series_item(it, strip_chapter_images=True)
-                for it in (data.get("data") or [])
-                if isinstance(it, dict)
-            ]
-        meta = data.get("meta") or {}
+    if pages_to_fetch == 1:
+        try:
+            _, batch, meta = _fetch_page(max(1, page))
+            raw_items = batch
+        except Exception as e:
+            print("voratoon list page fail:", e, flush=True)
+            raw_items = []
+            meta = {}
+    else:
+        # Parallel fetch page 1..N then merge in order
+        by_page: dict[int, list] = {}
+        with ThreadPoolExecutor(max_workers=min(3, pages_to_fetch)) as pool:
+            futs = [pool.submit(_fetch_page, pg) for pg in range(1, pages_to_fetch + 1)]
+            for fut in as_completed(futs):
+                try:
+                    pg, batch, m = fut.result()
+                    by_page[pg] = batch
+                    if pg == 1:
+                        meta = m or meta
+                except Exception as e:
+                    print("voratoon parallel page fail:", e, flush=True)
+        for pg in sorted(by_page.keys()):
+            raw_items.extend(by_page[pg])
 
     def enrich(it: dict) -> dict:
         d = it.get("data") if isinstance(it.get("data"), dict) else {}
