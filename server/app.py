@@ -156,8 +156,8 @@ from collections import defaultdict, deque
 
 # ── Tiered API cache + tag invalidation (see cache_policy.py) ────────
 IMG_CACHE = {}
-IMG_CACHE_MAX = 48
-IMG_CACHE_TTL = 2 * 3600
+IMG_CACHE_MAX = 96
+IMG_CACHE_TTL = 24 * 3600  # 24h in-process
 _CACHE_LOCK = threading.Lock()
 
 try:
@@ -250,7 +250,10 @@ def img_cache_set(key, body, content_type):
         if len(IMG_CACHE) >= IMG_CACHE_MAX:
             for k in list(IMG_CACHE.keys())[: IMG_CACHE_MAX // 2]:
                 IMG_CACHE.pop(k, None)
-        IMG_CACHE[key] = (body, time.time() + IMG_CACHE_TTL, content_type)
+        ttl = IMG_CACHE_TTL
+        if content_type and "webp" in content_type.lower():
+            ttl = max(ttl, 48 * 3600)  # WebP stays warmer
+        IMG_CACHE[key] = (body, time.time() + ttl, content_type)
 
 
 # ── Rate limit per IP (sliding window 60s) ────────────────────────────
@@ -1251,7 +1254,8 @@ class Handler(BaseHTTPRequestHandler):
                     body, ct = cached
                     extra = dict(rate_headers)
                     extra["X-Lumen-Cache"] = "HIT"
-                    extra["Cache-Control"] = "public, max-age=604800, immutable"
+                    extra["Cache-Control"] = "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
+                    extra["CDN-Cache-Control"] = "public, max-age=2592000, stale-while-revalidate=604800"
                     extra["X-Content-Type-Options"] = "nosniff"
                     if "webp" in (ct or ""):
                         extra["X-Lumen-Image"] = "webp"
@@ -1298,7 +1302,8 @@ class Handler(BaseHTTPRequestHandler):
                     img_cache_set(cache_key, body, ct)
                     extra["X-Lumen-Cache"] = "MISS"
                     # WebP/static pages cache longer; browser may revalidate weekly
-                    extra["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
+                    extra["Cache-Control"] = "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=604800"
+                    extra["CDN-Cache-Control"] = "public, max-age=2592000, stale-while-revalidate=604800"
                     extra["Vary"] = "Accept"
                 else:
                     extra["X-Lumen-Cache"] = "BYPASS"
