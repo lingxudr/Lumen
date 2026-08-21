@@ -745,6 +745,69 @@ def _sanka_fallback_for_sub(sub: str, qs=None) -> bytes | None:
 
 
 
+
+def sanitize_series_list_bytes(body: bytes) -> bytes:
+    """Strip Lucid/Adonis ORM fields from series list payloads before cache/serve."""
+    try:
+        obj = json.loads(body)
+    except Exception:
+        return body
+    data = obj.get("data")
+    if not isinstance(data, list):
+        return body
+    cleaned = []
+    orm_markers = (
+        "modelOptions", "fillInvoked", "cachedGetters", "forceUpdate",
+        "$columns", "$attributes", "$original", "$preloaded", "$extras",
+        "$sideloaded", "$isPersisted", "$isDeleted", "$isLocal",
+    )
+    for it in data:
+        if not isinstance(it, dict):
+            continue
+        has_orm = any(k in it for k in orm_markers) or any(str(k).startswith("$") for k in it.keys())
+        if has_orm:
+            attrs = it.get("$attributes") or it.get("attributes") or {}
+            if not isinstance(attrs, dict):
+                attrs = {}
+            d = it.get("data") if isinstance(it.get("data"), dict) else {}
+            if not d.get("slug"):
+                d = {
+                    "title": attrs.get("title"),
+                    "slug": attrs.get("slug"),
+                    "coverImage": attrs.get("coverImage") or attrs.get("cover"),
+                    "backgroundImage": attrs.get("backgroundImage"),
+                    "synopsis": attrs.get("synopsis"),
+                    "status": attrs.get("status"),
+                    "format": attrs.get("format") or attrs.get("type"),
+                    "type": attrs.get("type"),
+                    "rating": attrs.get("rating"),
+                    "author": attrs.get("author"),
+                    "totalChapters": attrs.get("totalChapters"),
+                    "isHot": attrs.get("isHot"),
+                    "genres": attrs.get("genres") or [],
+                    "provider": "voratoon",
+                }
+            cleaned.append({
+                "id": it.get("id") or attrs.get("id"),
+                "createdAt": it.get("createdAt") or attrs.get("createdAt"),
+                "updatedAt": it.get("updatedAt") or attrs.get("updatedAt"),
+                "data": d,
+                "chapters": it.get("chapters") if isinstance(it.get("chapters"), list) else [],
+                "metadata": it.get("metadata") if isinstance(it.get("metadata"), dict) else {},
+                "provider": "voratoon",
+            })
+        else:
+            cleaned.append({
+                k: v for k, v in it.items()
+                if (not str(k).startswith("$")) and k not in orm_markers
+            })
+    obj["data"] = cleaned
+    try:
+        return json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    except Exception:
+        return body
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1106,6 +1169,8 @@ class Handler(BaseHTTPRequestHandler):
                 sub0 = (sub or "").split("?")[0].strip("/")
                 if sub0 in ("series", "genres", "popular") or sub0.startswith("series/"):
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
+                    if sanka_body and sub0 == "series":
+                        sanka_body = sanitize_series_list_bytes(sanka_body)
                     if sanka_body:
                         cache_set(cache_key, sanka_body, ttl, sub_path=sub)
                         extra = dict(rate_headers)
@@ -1147,6 +1212,8 @@ class Handler(BaseHTTPRequestHandler):
                             200, fb, "application/json; charset=utf-8", extra_headers=extra
                         )
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
+                    if sanka_body and sub0 == "series":
+                        sanka_body = sanitize_series_list_bytes(sanka_body)
                     if sanka_body:
                         cache_set(cache_key, sanka_body, ttl, sub_path=sub)
                         extra = dict(rate_headers)
@@ -1453,6 +1520,11 @@ def main():
     print("  bind: %s:%s" % (HOST, PORT), flush=True)
     print("  api: %s" % API_BASE, flush=True)
     print("=" * 60, flush=True)
+    try:
+        _gen = cache_bump_generation()
+        print("[boot] cache generation ->", _gen, flush=True)
+    except Exception as _gerr:
+        print("[boot] cache gen bump skip", _gerr, flush=True)
     print("listening on %s:%s" % (HOST, PORT), flush=True)
 
     def _start_warmer():
