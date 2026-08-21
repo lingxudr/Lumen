@@ -615,34 +615,73 @@ def _normalize_chapter(ch: dict, *, strip_images: bool = False) -> dict:
 
 
 def _normalize_series_item(item: dict, *, strip_chapter_images: bool = True) -> dict:
+    """Normalize to public SeriesItem only (strip Lucid/Adonis ORM fields)."""
     if not isinstance(item, dict):
         return item
-    out = dict(item)
-    d = dict(out.get("data") or {}) if isinstance(out.get("data"), dict) else {}
-    d.setdefault("provider", "voratoon")
-    # totalChapters from metadata if present
-    if d.get("totalChapters") is None:
-        meta = out.get("dataMetadata") or out.get("metadata") or {}
+    # Unpack ORM wrapper first
+    if item.get("$attributes") or item.get("modelOptions") or item.get("$isPersisted") is not None:
+        unpacked = _orm_to_series_item(item)
+        if unpacked:
+            item = unpacked
+    # Nested data may still be missing — try attributes again
+    d_in = item.get("data") if isinstance(item.get("data"), dict) else {}
+    if not d_in.get("slug") and isinstance(item.get("$attributes"), dict):
+        unpacked = _orm_to_series_item(item)
+        if unpacked:
+            item = unpacked
+            d_in = item.get("data") or {}
+
+    d_in = dict(d_in) if isinstance(d_in, dict) else {}
+    data = {
+        "title": d_in.get("title"),
+        "nativeTitle": d_in.get("nativeTitle"),
+        "slug": d_in.get("slug"),
+        "coverImage": d_in.get("coverImage") or d_in.get("cover"),
+        "backgroundImage": d_in.get("backgroundImage"),
+        "synopsis": d_in.get("synopsis"),
+        "status": d_in.get("status"),
+        "format": d_in.get("format") or d_in.get("type"),
+        "type": d_in.get("type"),
+        "rating": d_in.get("rating"),
+        "author": d_in.get("author"),
+        "totalChapters": d_in.get("totalChapters"),
+        "isHot": d_in.get("isHot"),
+        "genres": d_in.get("genres") if isinstance(d_in.get("genres"), list) else [],
+        "latestChapterLabel": d_in.get("latestChapterLabel"),
+        "provider": "voratoon",
+    }
+    if data.get("totalChapters") is None:
+        meta = item.get("dataMetadata") or item.get("metadata") or {}
         if isinstance(meta, dict) and meta.get("totalChapters") is not None:
-            d["totalChapters"] = meta.get("totalChapters")
-    chs = out.get("chapters")
+            data["totalChapters"] = meta.get("totalChapters")
+
+    chs = item.get("chapters")
+    norm_chs = []
     if isinstance(chs, list):
-        norm_chs = [
-            _normalize_chapter(c, strip_images=strip_chapter_images)
-            for c in chs
-            if isinstance(c, dict)
-        ]
-        out["chapters"] = norm_chs
-        if norm_chs and not d.get("latestChapterLabel"):
-            top = norm_chs[0]
-            idx = _chapter_index(top)
+        for c in chs:
+            if isinstance(c, dict):
+                norm_chs.append(_normalize_chapter(c, strip_images=strip_chapter_images))
+        if norm_chs and not data.get("latestChapterLabel"):
+            idx = _chapter_index(norm_chs[0])
             if idx is not None:
-                d["latestChapterLabel"] = f"Chapter {idx}"
-                d.setdefault("totalChapters", d.get("totalChapters"))
-    out["data"] = d
-    out["provider"] = "voratoon"
-    out["_source"] = "voratoon"
-    return out
+                data["latestChapterLabel"] = f"Chapter {idx}"
+
+    meta_out = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    views = meta_out.get("views") if isinstance(meta_out.get("views"), dict) else {}
+    return {
+        "id": item.get("id"),
+        "createdAt": item.get("createdAt"),
+        "updatedAt": item.get("updatedAt"),
+        "data": data,
+        "chapters": norm_chs,
+        "metadata": {
+            "views": views,
+            "bookmarkCount": meta_out.get("bookmarkCount"),
+            "ranking": meta_out.get("ranking"),
+        },
+        "provider": "voratoon",
+        "_source": item.get("_source") or "voratoon",
+    }
 
 
 

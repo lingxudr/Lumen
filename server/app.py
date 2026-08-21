@@ -350,18 +350,21 @@ def convert_to_webp(body, max_width=None, quality=None):
         if need_resize:
             h = max(1, int(im.height * (max_width / float(im.width))))
             im = im.resize((max_width, h), Image.Resampling.LANCZOS)
-        # Flatten palette / weird modes
+        # Flatten palette / weird modes → RGB/RGBA for reliable WebP
         if im.mode in ("P", "LA"):
             im = im.convert("RGBA")
         elif im.mode == "CMYK":
             im = im.convert("RGB")
         elif im.mode not in ("RGB", "RGBA"):
-            im = im.convert("RGBA" if "A" in im.getbands() else "RGB")
+            im = im.convert("RGBA" if "A" in (im.getbands() or ()) else "RGB")
+        # Drop alpha if fully opaque (smaller encode)
+        if im.mode == "RGBA":
+            extrema = im.getchannel("A").getextrema()
+            if extrema == (255, 255):
+                im = im.convert("RGB")
         buf = BytesIO()
-        # method=4 = good compression vs speed balance; optimize for size
-        save_kw = {"format": "WEBP", "quality": quality, "method": 4}
-        if im.mode == "RGB":
-            save_kw["exact"] = False
+        # method=4 balance; method=0 on retry path via quality-only calls still ok
+        save_kw = {"format": "WEBP", "quality": int(quality), "method": 4}
         im.save(buf, **save_kw)
         data = buf.getvalue()
         # Prefer original only when source was already WebP and re-encode grew
