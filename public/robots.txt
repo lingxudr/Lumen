@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://v1lumen.vercel.app/sitemap.xml
+Sitemap: https://www.v1lumen.my.id/sitemap.xml

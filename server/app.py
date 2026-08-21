@@ -95,15 +95,15 @@ UA = (
 )
 SSL_CTX = ssl.create_default_context()
 
-# Branding / watermark — always https://v1lumen.vercel.app (never http://)
+# Branding / watermark — always https://www.v1lumen.my.id (never http://)
 def _public_url() -> str:
-    raw = (os.environ.get("LUMEN_PUBLIC_URL") or "https://v1lumen.vercel.app").strip().rstrip("/")
+    raw = (os.environ.get("LUMEN_PUBLIC_URL") or "https://www.v1lumen.my.id").strip().rstrip("/")
     if raw.startswith("http://"):
         raw = "https://" + raw[len("http://") :]
     if not raw.startswith("https://"):
         raw = "https://" + raw.lstrip("/")
     # production default host
-    if "vercel.app" in raw and "v1lumen.vercel.app" not in raw and "lumen" in raw.lower():
+    if "vercel.app" in raw and "www.v1lumen.my.id" not in raw and "lumen" in raw.lower():
         # keep explicit custom domains; only normalize empty/default
         pass
     return raw
@@ -114,7 +114,7 @@ LUMEN_HOST = LUMEN_PUBLIC_URL.replace("https://", "").replace("http://", "")
 LUMEN_WATERMARK = {
     "creator": "Lumen",
     "website": LUMEN_PUBLIC_URL,  # always https://…
-    "host": LUMEN_HOST,  # v1lumen.vercel.app
+    "host": LUMEN_HOST,  # www.v1lumen.my.id
     "watermark": f"Powered by Lumen · {LUMEN_HOST}",
     "docs": f"{LUMEN_PUBLIC_URL}/lumenrest/docs",
 }

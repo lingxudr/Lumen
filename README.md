@@ -7,7 +7,7 @@
 - **Source:** [VoraToon](https://v1.voratoon.com) REST + RSC (successor to KomikCast)
 - **Edge:** Vercel static hosting + `/api` & `/img` proxy
 
-**Live:** [v1lumen.vercel.app](https://v1lumen.vercel.app)
+**Live:** [www.v1lumen.my.id](https://www.v1lumen.my.id)
 
 ---
 
@@ -21,7 +21,7 @@
 | Reader | Vertical scroll, progress, WebP proxy, lazy load |
 | Library | Bookmarks & history in `localStorage` |
 | PWA | Installable, service worker shell cache |
-| API docs | [`/lumenrest/docs`](https://v1lumen.vercel.app/lumenrest/docs) |
+| API docs | [`/lumenrest/docs`](https://www.v1lumen.my.id/lumenrest/docs) |
 
 ---
 
@@ -92,12 +92,12 @@ npm run check     # compileall + tests
 
 ## Public URL
 
-**Live:** [https://v1lumen.vercel.app](https://v1lumen.vercel.app)
+**Live:** [https://www.v1lumen.my.id](https://www.v1lumen.my.id)
 
 Env (Railway + Vercel):
 
 ```bash
-LUMEN_PUBLIC_URL=https://v1lumen.vercel.app
+LUMEN_PUBLIC_URL=https://www.v1lumen.my.id
 ```
 
 ## Deploy
@@ -130,7 +130,7 @@ LUMEN_PUBLIC_URL=https://v1lumen.vercel.app
 
 ## Public API (examples)
 
-Base (production): `https://v1lumen.vercel.app/api`
+Base (production): `https://www.v1lumen.my.id/api`
 
 ```http
 GET /api/ping
