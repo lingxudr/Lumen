@@ -264,10 +264,10 @@ def img_cache_set(key, body, content_type):
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline'; "
-    "style-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "img-src 'self' data: blob: https://cdn.voratoon.com https://cvr.voratoon.id "
     "https://*.voratoon.com https://*.voratoon.id https://*.my.id https://*.shngm.id; "
-    "font-src 'self' data:; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
     "connect-src 'self' https://api.voratoon.com https://v1.voratoon.com "
     "https://*.up.railway.app https://*.vercel.app; "
     "media-src 'self' blob:; "
