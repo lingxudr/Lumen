@@ -96,11 +96,14 @@ UA = (
 SSL_CTX = ssl.create_default_context()
 
 # Branding / watermark on public API JSON
+# Set LUMEN_PUBLIC_URL on Railway/Vercel after project rename or custom domain
+# e.g. https://lumen.vercel.app  or  https://lumen.yourdomain.com
+LUMEN_PUBLIC_URL = (os.environ.get("LUMEN_PUBLIC_URL") or "https://lumen.vercel.app").rstrip("/")
 LUMEN_WATERMARK = {
     "creator": "Lumen",
-    "website": "https://lumen-delta-lyart.vercel.app",
-    "watermark": "Powered by Lumen Reader · lumen-delta-lyart.vercel.app",
-    "docs": "https://lumen-delta-lyart.vercel.app/lumenrest/docs",
+    "website": LUMEN_PUBLIC_URL,
+    "watermark": f"Powered by Lumen · {LUMEN_PUBLIC_URL.replace('https://', '').replace('http://', '')}",
+    "docs": f"{LUMEN_PUBLIC_URL}/lumenrest/docs",
 }
 
 

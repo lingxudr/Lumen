@@ -7,7 +7,7 @@
 - **Source:** [VoraToon](https://v1.voratoon.com) REST + RSC (successor to KomikCast)
 - **Edge:** Vercel static hosting + `/api` & `/img` proxy
 
-**Live:** [lumen-delta-lyart.vercel.app](https://lumen-delta-lyart.vercel.app)
+**Live:** [lumen.vercel.app](https://lumen.vercel.app)
 
 ---
 
@@ -21,7 +21,7 @@
 | Reader | Vertical scroll, progress, WebP proxy, lazy load |
 | Library | Bookmarks & history in `localStorage` |
 | PWA | Installable, service worker shell cache |
-| API docs | [`/lumenrest/docs`](https://lumen-delta-lyart.vercel.app/lumenrest/docs) |
+| API docs | [`/lumenrest/docs`](https://lumen.vercel.app/lumenrest/docs) |
 
 ---
 
@@ -90,6 +90,28 @@ npm run check     # compileall + tests
 
 ---
 
+## Public URL
+
+Production URL (brand pendek):
+
+```text
+https://lumen.vercel.app
+```
+
+Supaya URL itu aktif di Vercel:
+
+1. Vercel Dashboard → Project **Settings** → **General**
+2. Rename project menjadi **`lumen`** (hasil: `lumen.vercel.app`, jika nama masih tersedia)
+3. Atau **Domains** → tambah domain sendiri (mis. `lumen.id`) lalu set env:
+
+```bash
+LUMEN_PUBLIC_URL=https://lumen.vercel.app
+```
+
+di **Railway** dan **Vercel**.
+
+> Nama `lumen-delta-lyart` hanya sisa project lama; branding resmi: **Lumen**.
+
 ## Deploy
 
 | Layer | Platform | Entry |
@@ -120,7 +142,7 @@ npm run check     # compileall + tests
 
 ## Public API (examples)
 
-Base (production): `https://lumen-delta-lyart.vercel.app/api`
+Base (production): `https://lumen.vercel.app/api`
 
 ```http
 GET /api/ping
