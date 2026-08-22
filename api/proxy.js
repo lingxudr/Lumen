@@ -72,22 +72,30 @@ function assertTargetSafe(target) {
   return true;
 }
 
-async function fetchUpstream(target) {
+async function fetchUpstream(target, opts = {}) {
   let lastStatus = 0;
   let lastBuf = Buffer.alloc(0);
   let lastCt = "";
+  const method = (opts.method || "GET").toUpperCase();
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const upstream = await fetch(target, {
-        headers: {
-          "User-Agent": UA,
-          Accept: "application/json, text/plain, */*",
-          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-          Origin: "https://v1.voratoon.com",
-          Referer: "https://v1.voratoon.com/",
-        },
-        redirect: "manual", // prevent redirect-to-internal SSRF
-      });
+      const headers = {
+        "User-Agent": UA,
+        Accept: "application/json, text/plain, */*",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        Origin: "https://v1.voratoon.com",
+        Referer: "https://v1.voratoon.com/",
+      };
+      if (opts.contentType) headers["Content-Type"] = opts.contentType;
+      const init = {
+        method,
+        headers,
+        redirect: "manual",
+      };
+      if (method !== "GET" && method !== "HEAD" && opts.body != null) {
+        init.body = opts.body;
+      }
+      const upstream = await fetch(target, init);
       // disallow redirect off-host
       if (upstream.status >= 300 && upstream.status < 400) {
         const loc = upstream.headers.get("location") || "";
@@ -131,7 +139,7 @@ async function fetchUpstream(target) {
 
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.status(204).end();
 
@@ -153,7 +161,19 @@ module.exports = async function handler(req, res) {
       return res.status(403).json({ error: "host_not_allowed" });
     }
 
-    const { status, ct, buf } = await fetchUpstream(target);
+    let postBody = null;
+    let contentType = null;
+    if (req.method === "POST" || req.method === "PUT") {
+      contentType = req.headers["content-type"] || "application/json";
+      if (typeof req.body === "string") postBody = req.body;
+      else if (req.body != null) postBody = JSON.stringify(req.body);
+      else postBody = "";
+    }
+    const { status, ct, buf } = await fetchUpstream(target, {
+      method: req.method || "GET",
+      body: postBody,
+      contentType,
+    });
     const textStart = buf.subarray(0, 80).toString("utf8").toLowerCase();
 
     if (
@@ -178,7 +198,11 @@ module.exports = async function handler(req, res) {
     }
 
     res.setHeader("Content-Type", ct || "application/json; charset=utf-8");
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    if (req.method === "POST" || req.method === "PUT") {
+      res.setHeader("Cache-Control", "no-store");
+    } else {
+      res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    }
     res.setHeader("X-Content-Type-Options", "nosniff");
     return res.status(status).send(buf);
   } catch (e) {

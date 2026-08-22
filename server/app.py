@@ -694,6 +694,20 @@ class Handler(BaseHTTPRequestHandler):
             path = unquote(parsed.path or "/")
             qs = parse_qs(parsed.query or "")
 
+            if path in ("/api/presence", "/api/presence/"):
+                try:
+                    from presence import count_online, list_online
+                except Exception:
+                    from server.presence import count_online, list_online  # type: ignore
+                return self.send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "online": count_online(),
+                        "visitors": list_online(20),
+                    },
+                )
+
             if path in ("/", "/index.html", "/hub.html"):
                 return self.serve_file(STATIC / "index.html")
 
@@ -1191,6 +1205,22 @@ class Handler(BaseHTTPRequestHandler):
                 ua = self.headers.get("User-Agent") or ""
                 result = notify_visit(data, ip=ip, ua_header=ua)
                 return self.send_json(200, result)
+            if path in ("/api/presence", "/api/presence/"):
+                data = self.read_json() if int(self.headers.get("Content-Length") or 0) else {}
+                if not isinstance(data, dict):
+                    data = {}
+                try:
+                    from presence import heartbeat
+                except Exception:
+                    from server.presence import heartbeat  # type: ignore
+                sid = str(data.get("session") or data.get("sid") or "")
+                result = heartbeat(
+                    sid,
+                    path=str(data.get("path") or "/"),
+                    ip=client_ip(self),
+                    ua=self.headers.get("User-Agent") or "",
+                )
+                return self.send_json(200, result)
             if path != "/api/check-hotlink":
                 return self.send_json(404, {"error": "not found"})
 
@@ -1358,6 +1388,18 @@ def main():
             print("cache_warmer start failed:", _warm_err, flush=True)
 
     _th.Thread(target=_start_warmer, name="lumen-warm-boot", daemon=True).start()
+
+    def _start_telegram():
+        try:
+            try:
+                from telegram_bot import start_background
+            except Exception:
+                from server.telegram_bot import start_background  # type: ignore
+            start_background()
+        except Exception as e:
+            print("telegram_bot start failed:", e, flush=True)
+
+    _th.Thread(target=_start_telegram, name="lumen-tg-boot", daemon=True).start()
 
     try:
         server.serve_forever()

@@ -112,6 +112,39 @@ window.App = App;
 
 // Wake Railway backend early (reduces perceived cold start)
 
+
+function startPresenceHeartbeat() {
+  try {
+    let sid = sessionStorage.getItem("lumen_sid");
+    if (!sid) {
+      sid = "s" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      sessionStorage.setItem("lumen_sid", sid);
+    }
+    const beat = () => {
+      try {
+        const body = {
+          session: sid,
+          path: location.pathname + location.search + location.hash,
+        };
+        const url = (window.LUMEN_API_BASE || "/api") + "/presence";
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          keepalive: true,
+          credentials: "omit",
+          cache: "no-store",
+        }).catch(() => {});
+      } catch (_) {}
+    };
+    beat();
+    setInterval(beat, 45000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") beat();
+    });
+  } catch (_) {}
+}
+
 function reportVisit() {
   try {
     const key = "lumen_visit_ping";
@@ -167,6 +200,7 @@ function wakeBackend() {
 }
 wakeBackend();
 reportVisit();
+startPresenceHeartbeat();
 
 document.addEventListener("DOMContentLoaded", () => {
   setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
