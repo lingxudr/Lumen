@@ -82,31 +82,98 @@ function botScore(data, ip, uaHeader) {
   return { score: Math.min(100, score), reasons };
 }
 
+
+function deviceInfo(ua, screen, platform) {
+  const u = ua || "";
+  let device = "Unknown";
+  let os = "Unknown";
+  let browser = "Unknown";
+  let m;
+  if (/iPhone/.test(u)) {
+    device = "iPhone";
+    m = u.match(/iPhone OS ([0-9_]+)/) || u.match(/CPU OS ([0-9_]+)/);
+    os = m ? "iOS " + m[1].replace(/_/g, ".") : "iOS";
+  } else if (/iPad/.test(u)) {
+    device = "iPad";
+    m = u.match(/CPU OS ([0-9_]+)/);
+    os = m ? "iPadOS " + m[1].replace(/_/g, ".") : "iPadOS";
+  } else if (/Android/.test(u)) {
+    device = "Android";
+    m = u.match(/Android ([0-9.]+)/);
+    os = m ? "Android " + m[1] : "Android";
+    const mm = u.match(/Android [^;]+;\s*([^)]+?)\s*Build/) || u.match(/Android [^;]+;\s*([^);]+)/);
+    if (mm && mm[1] && !/^(wv|Mobile|U)$/i.test(mm[1].trim())) {
+      device = "Android (" + mm[1].trim().slice(0, 40) + ")";
+    }
+  } else if (/Windows/.test(u)) {
+    device = "PC";
+    m = u.match(/Windows NT ([0-9.]+)/);
+    const map = { "10.0": "10/11", "6.3": "8.1", "6.1": "7" };
+    os = "Windows " + (m ? map[m[1]] || m[1] : "");
+  } else if (/Mac OS X|Macintosh/.test(u)) {
+    device = "Mac";
+    m = u.match(/Mac OS X ([0-9_]+)/);
+    os = m ? "macOS " + m[1].replace(/_/g, ".") : "macOS";
+  } else if (/Linux/.test(u)) {
+    device = "Linux PC";
+    os = "Linux";
+  } else if (platform) device = String(platform).slice(0, 40);
+
+  if (/Edg\//.test(u) || /Edge\//.test(u)) {
+    m = u.match(/Edg[e]?\/([0-9.]+)/);
+    browser = "Edge " + (m ? m[1].split(".")[0] : "");
+  } else if (/OPR\//.test(u)) {
+    m = u.match(/OPR\/([0-9.]+)/);
+    browser = "Opera " + (m ? m[1].split(".")[0] : "");
+  } else if (/SamsungBrowser\//.test(u)) {
+    m = u.match(/SamsungBrowser\/([0-9.]+)/);
+    browser = "Samsung Internet " + (m ? m[1].split(".")[0] : "");
+  } else if (/Chrome\//.test(u) && !/Edg/.test(u)) {
+    m = u.match(/Chrome\/([0-9.]+)/);
+    browser = "Chrome " + (m ? m[1].split(".")[0] : "");
+  } else if (/Firefox\//.test(u)) {
+    m = u.match(/Firefox\/([0-9.]+)/);
+    browser = "Firefox " + (m ? m[1].split(".")[0] : "");
+  } else if (/Safari\//.test(u) && !/Chrome/.test(u)) {
+    m = u.match(/Version\/([0-9.]+)/);
+    browser = "Safari " + (m ? m[1].split(".")[0] : "");
+  } else if (/AppleWebKit/.test(u) && /iPhone|iPad/.test(u)) {
+    browser = "Safari";
+  }
+  return { device, os, browser, screen: screen || "-" };
+}
+
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatHtml(path, ip, ref, lang, screen, ua) {
-  const shortUa = ua.length > 80 ? ua.slice(0, 77) + "…" : ua;
+function formatHtml(path, ip, ref, lang, screen, ua, platform) {
+  const shortUa = ua.length > 72 ? ua.slice(0, 69) + "…" : ua;
   const refLine = ref && ref !== "-" ? ref : "langsung";
+  const d = deviceInfo(ua, screen, platform || "");
   return (
     "👁 <b>Pengunjung baru</b>\n━━━━━━━━━━━━\n" +
     `📄 <b>Halaman</b>\n<code>${esc(path)}</code>\n\n` +
-    `🌐 <b>IP</b>  <code>${esc(ip)}</code>\n` +
+    `📱 <b>Perangkat</b>  ${esc(d.device)}\n` +
+    `💻 <b>OS</b>  ${esc(d.os)}\n` +
+    `🌐 <b>Browser</b>  ${esc(d.browser)}\n` +
+    `📐 <b>Layar</b>  ${esc(d.screen)}\n\n` +
+    `🌍 <b>IP</b>  <code>${esc(ip)}</code>\n` +
     `🔗 <b>Dari</b>  ${esc(refLine)}\n` +
-    `🗣 <b>Bahasa</b>  ${esc(lang)}\n` +
-    `📱 <b>Layar</b>  ${esc(screen)}\n\n` +
+    `🗣 <b>Bahasa</b>  ${esc(lang)}\n\n` +
     `<i>${esc(shortUa)}</i>`
   );
 }
 
-function formatPlain(path, ip, ref, lang, screen, ua) {
-  const shortUa = ua.length > 80 ? ua.slice(0, 77) + "…" : ua;
+function formatPlain(path, ip, ref, lang, screen, ua, platform) {
+  const shortUa = ua.length > 72 ? ua.slice(0, 69) + "…" : ua;
   const refLine = ref && ref !== "-" ? ref : "langsung";
+  const d = deviceInfo(ua, screen, platform || "");
   return (
     "👁 Pengunjung baru\n————————————\n" +
-    `Halaman: ${path}\nIP: ${ip}\nDari: ${refLine}\n` +
-    `Bahasa: ${lang}\nLayar: ${screen}\n${shortUa}`
+    `Halaman: ${path}\nPerangkat: ${d.device}\nOS: ${d.os}\n` +
+    `Browser: ${d.browser}\nLayar: ${d.screen}\n` +
+    `IP: ${ip}\nDari: ${refLine}\nBahasa: ${lang}\n${shortUa}`
   );
 }
 
@@ -189,8 +256,9 @@ module.exports = async function handler(req, res) {
   const ua = String(data.ua || uaHeader || "-").slice(0, 200);
   const lang = String(data.lang || "-").slice(0, 40);
   const screen = String(data.screen || "-").slice(0, 40);
-  const html = formatHtml(path, ip, ref, lang, screen, ua);
-  const plain = formatPlain(path, ip, ref, lang, screen, ua);
+  const platform = String(data.platform || "").slice(0, 40);
+  const html = formatHtml(path, ip, ref, lang, screen, ua, platform);
+  const plain = formatPlain(path, ip, ref, lang, screen, ua, platform);
 
   try {
     await Promise.allSettled([

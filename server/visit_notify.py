@@ -57,6 +57,86 @@ _last_ip: dict[str, float] = {}
 _hour_bucket: list[float] = []
 
 
+
+def device_info(ua: str, screen: str = "", platform: str = "") -> dict[str, str]:
+    """Best-effort device/OS/browser from User-Agent (no exact iPhone model — Apple hides it)."""
+    u = ua or ""
+    device = "Unknown"
+    os_name = "Unknown"
+    browser = "Unknown"
+
+    # --- OS + device class ---
+    m = re.search(r"iPhone OS ([0-9_]+)", u) or re.search(r"CPU OS ([0-9_]+)", u)
+    if "iPhone" in u:
+        device = "iPhone"
+        if m:
+            os_name = "iOS " + m.group(1).replace("_", ".")
+        else:
+            os_name = "iOS"
+    elif "iPad" in u:
+        device = "iPad"
+        if m:
+            os_name = "iPadOS " + m.group(1).replace("_", ".")
+        else:
+            os_name = "iPadOS"
+    elif "Android" in u:
+        device = "Android"
+        am = re.search(r"Android ([0-9.]+)", u)
+        os_name = f"Android {am.group(1)}" if am else "Android"
+        # model in parentheses: Linux; Android 13; SM-S918B
+        mm = re.search(r"Android [^;]+;\s*([^)]+?)\s*Build", u) or re.search(
+            r"Android [^;]+;\s*([^);]+)", u
+        )
+        if mm:
+            model = mm.group(1).strip()
+            if model and model.lower() not in ("wv", "mobile", "u"):
+                device = f"Android ({model[:40]})"
+    elif "Windows" in u:
+        device = "PC"
+        wm = re.search(r"Windows NT ([0-9.]+)", u)
+        win_map = {"10.0": "10/11", "6.3": "8.1", "6.1": "7"}
+        ver = wm.group(1) if wm else ""
+        os_name = "Windows " + win_map.get(ver, ver or "")
+    elif "Mac OS X" in u or "Macintosh" in u:
+        device = "Mac"
+        mm = re.search(r"Mac OS X ([0-9_]+)", u)
+        os_name = "macOS " + mm.group(1).replace("_", ".") if mm else "macOS"
+    elif "Linux" in u:
+        device = "Linux PC"
+        os_name = "Linux"
+    elif platform:
+        device = platform[:40]
+
+    # --- Browser ---
+    if "Edg/" in u or "Edge/" in u:
+        bm = re.search(r"Edg[e]?/([0-9.]+)", u)
+        browser = "Edge " + (bm.group(1).split(".")[0] if bm else "")
+    elif "OPR/" in u or "Opera" in u:
+        bm = re.search(r"OPR/([0-9.]+)", u)
+        browser = "Opera " + (bm.group(1).split(".")[0] if bm else "")
+    elif "SamsungBrowser/" in u:
+        bm = re.search(r"SamsungBrowser/([0-9.]+)", u)
+        browser = "Samsung Internet " + (bm.group(1).split(".")[0] if bm else "")
+    elif "Chrome/" in u and "Chromium" not in u and "Edg" not in u:
+        bm = re.search(r"Chrome/([0-9.]+)", u)
+        browser = "Chrome " + (bm.group(1).split(".")[0] if bm else "")
+    elif "Firefox/" in u:
+        bm = re.search(r"Firefox/([0-9.]+)", u)
+        browser = "Firefox " + (bm.group(1).split(".")[0] if bm else "")
+    elif "Safari/" in u and "Chrome" not in u:
+        bm = re.search(r"Version/([0-9.]+)", u)
+        browser = "Safari " + (bm.group(1).split(".")[0] if bm else "")
+    elif "AppleWebKit" in u and ("iPhone" in u or "iPad" in u):
+        browser = "Safari"
+
+    return {
+        "device": device.strip(),
+        "os": os_name.strip(),
+        "browser": browser.strip(),
+        "screen": screen or "-",
+    }
+
+
 def enabled() -> bool:
     return bool(
         (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
@@ -200,28 +280,42 @@ def _esc(s: str) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _format_html(path: str, ip: str, ref: str, lang: str, screen: str, ua: str) -> str:
-    short_ua = ua if len(ua) <= 80 else ua[:77] + "…"
+def _format_html(
+    path: str, ip: str, ref: str, lang: str, screen: str, ua: str, platform: str = ""
+) -> str:
+    short_ua = ua if len(ua) <= 72 else ua[:69] + "…"
     ref_line = ref if ref and ref != "-" else "langsung"
+    d = device_info(ua, screen, platform)
     return (
         "👁 <b>Pengunjung baru</b>\n"
         "━━━━━━━━━━━━\n"
         f"📄 <b>Halaman</b>\n<code>{_esc(path)}</code>\n\n"
-        f"🌐 <b>IP</b>  <code>{_esc(ip)}</code>\n"
+        f"📱 <b>Perangkat</b>  {_esc(d['device'])}\n"
+        f"💻 <b>OS</b>  {_esc(d['os'])}\n"
+        f"🌐 <b>Browser</b>  {_esc(d['browser'])}\n"
+        f"📐 <b>Layar</b>  {_esc(d['screen'])}\n\n"
+        f"🌍 <b>IP</b>  <code>{_esc(ip)}</code>\n"
         f"🔗 <b>Dari</b>  {_esc(ref_line)}\n"
-        f"🗣 <b>Bahasa</b>  {_esc(lang)}\n"
-        f"📱 <b>Layar</b>  {_esc(screen)}\n\n"
+        f"🗣 <b>Bahasa</b>  {_esc(lang)}\n\n"
         f"<i>{_esc(short_ua)}</i>"
     )
 
 
-def _format_plain(path: str, ip: str, ref: str, lang: str, screen: str, ua: str) -> str:
-    short_ua = ua if len(ua) <= 80 else ua[:77] + "…"
+def _format_plain(
+    path: str, ip: str, ref: str, lang: str, screen: str, ua: str, platform: str = ""
+) -> str:
+    short_ua = ua if len(ua) <= 72 else ua[:69] + "…"
     ref_line = ref if ref and ref != "-" else "langsung"
+    d = device_info(ua, screen, platform)
     return (
         "👁 Pengunjung baru\n————————————\n"
-        f"Halaman: {path}\nIP: {ip}\nDari: {ref_line}\n"
-        f"Bahasa: {lang}\nLayar: {screen}\n{short_ua}"
+        f"Halaman: {path}\n"
+        f"Perangkat: {d['device']}\n"
+        f"OS: {d['os']}\n"
+        f"Browser: {d['browser']}\n"
+        f"Layar: {d['screen']}\n"
+        f"IP: {ip}\nDari: {ref_line}\nBahasa: {lang}\n"
+        f"{short_ua}"
     )
 
 
@@ -312,8 +406,9 @@ def notify_visit(payload: dict[str, Any], *, ip: str = "unknown", ua_header: str
     lang = str(payload.get("lang") or "-")[:40]
     screen = str(payload.get("screen") or "-")[:40]
 
-    html = _format_html(path, ip, ref, lang, screen, ua)
-    plain = _format_plain(path, ip, ref, lang, screen, ua)
+    platform = str(payload.get("platform") or "")[:40]
+    html = _format_html(path, ip, ref, lang, screen, ua, platform)
+    plain = _format_plain(path, ip, ref, lang, screen, ua, platform)
 
     def _run():
         for name, fn in (
