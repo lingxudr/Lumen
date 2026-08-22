@@ -1290,3 +1290,26 @@ html, body {
   .page-title { font-size: 1.15rem; }
   .home-hero-body { padding: 64px 12px 14px; }
 }
+
+
+/* Genre / filter polish */
+.chip--muted {
+  opacity: 0.55;
+  pointer-events: none;
+  border-style: dashed;
+}
+.filter-group--genres {
+  min-height: 2.25rem;
+  max-height: 5.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: 0.4rem;
+  padding-bottom: 0.15rem;
+}
+.filter-group--genres-wrap {
+  max-height: 40vh;
+  overflow-y: auto;
+  flex-wrap: wrap;
+}

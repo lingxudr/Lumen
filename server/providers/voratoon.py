@@ -467,6 +467,9 @@ def fetch_browse_html(
         qs["search"] = q  # browse page uses search query string
         qs["q"] = q
     if genre:
+        gid = resolve_genre_id(genre)
+        if gid:
+            qs["genreIds"] = gid
         qs["genre"] = genre
     query = urllib.parse.urlencode(qs)
     url = f"{SITE_BASE}/browse" + (f"?{query}" if query else "")
@@ -494,7 +497,11 @@ def fetch_browse_html(
         if q:
             params["title"] = q
         if genre:
-            params["genre"] = genre
+            gid = resolve_genre_id(genre)
+            if gid:
+                params["genreIds"] = gid
+            else:
+                params["genre"] = genre
         api = _get("/series", params)
         items = _normalize_feed_items(api.get("data") or [], strip_images=True)
         am = api.get("meta") or {}
@@ -547,6 +554,39 @@ def fetch_browse_html(
             "upstream": SITE_BASE,
         },
     }
+
+
+
+_genre_id_cache: dict[str, str] = {}
+
+
+def resolve_genre_id(genre: str) -> str:
+    """Map genre name/slug to Voratoon genreIds (API filter key)."""
+    g = (genre or "").strip()
+    if not g:
+        return ""
+    if g.isdigit():
+        return g
+    key = g.lower()
+    if key in _genre_id_cache:
+        return _genre_id_cache[key]
+    try:
+        payload = get_genres()
+        for item in payload.get("data") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            slug = str(item.get("slug") or "").strip()
+            gid = str(item.get("id") or "").strip()
+            if not gid:
+                continue
+            if name:
+                _genre_id_cache[name.lower()] = gid
+            if slug:
+                _genre_id_cache[slug.lower()] = gid
+    except Exception as e:
+        print("resolve_genre_id:", e, flush=True)
+    return _genre_id_cache.get(key, "")
 
 
 def get_genres() -> dict[str, Any]:
@@ -826,6 +866,9 @@ def get_series_list(
         mode = "search"
 
     # Feed resmi dari situs (RSC) — prioritas tertinggi
+    # Genre filter: REST genreIds lebih andal daripada RSC browse
+    if genre and mode in ("browse", "search", "newest", ""):
+        mode = "browse"
     if mode == "browse" or (mode == "search" and (status or format_ or type_)):
         try:
             payload = fetch_browse_html(
@@ -837,6 +880,47 @@ def get_series_list(
                 genre=genre,
             )
             items = payload.get("data") or []
+            # if genre requested, prefer API genreIds (RSC often ignores genre=)
+            if genre:
+                gid = resolve_genre_id(genre)
+                if gid:
+                    try:
+                        api = _get(
+                            "/series",
+                            {
+                                "take": take or 30,
+                                "page": page,
+                                "sort": "updatedAt",
+                                "sortOrder": "desc",
+                                "takeChapter": 2,
+                                "includeMeta": 1,
+                                "genreIds": gid,
+                            },
+                            ttl=60,
+                        )
+                        api_items = [
+                            _normalize_series_item(it, strip_chapter_images=True)
+                            for it in (api.get("data") or [])
+                            if isinstance(it, dict)
+                        ]
+                        if api_items:
+                            am = api.get("meta") or {}
+                            return {
+                                "status": 200,
+                                "message": f"Voratoon genre:{genre}",
+                                "data": api_items[: take or 30],
+                                "meta": {
+                                    "source": "voratoon_api_genreIds",
+                                    "page": am.get("page") or page,
+                                    "lastPage": am.get("lastPage") or 1,
+                                    "total": am.get("total") or len(api_items),
+                                    "mode": "browse",
+                                    "filters": {"genre": genre, "genreIds": gid},
+                                    "provider": "voratoon",
+                                },
+                            }
+                    except Exception as ge:
+                        print("voratoon genreIds api fail:", ge, flush=True)
             if take and take < len(items):
                 payload["data"] = items[:take]
             return payload
@@ -887,7 +971,11 @@ def get_series_list(
     if format_:
         params["format"] = format_
     if genre:
-        params["genre"] = genre
+        gid = resolve_genre_id(genre)
+        if gid:
+            params["genreIds"] = gid
+        else:
+            params["genre"] = genre
     if type_ and mode != "project":
         params["type"] = type_
     if q:

@@ -71,6 +71,10 @@ export function createHomeView(ctx) {
     const bar = document.getElementById("genre-bar");
     const sheetBar = document.getElementById("sheet-genre-bar");
     if (!bar) return;
+    if (!bar.dataset.loading) {
+      bar.dataset.loading = "1";
+      bar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
+    }
     try {
       const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
       const list = res?.data || [];
