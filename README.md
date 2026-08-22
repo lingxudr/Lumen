@@ -118,6 +118,10 @@ LUMEN_PUBLIC_URL=https://www.v1lumen.my.id
 | `WEBP_QUALITY` | auto | WebP encode quality |
 | `CACHE_WARM_INTERVAL` | `300` | Warm cycle (seconds) |
 | `CACHE_KEEPALIVE` | `1` | Ping list every ~45s |
+| `TELEGRAM_BOT_TOKEN` | — | Bot token (notif pengunjung) |
+| `TELEGRAM_CHAT_ID` | — | Chat ID Telegram kamu |
+| `DISCORD_WEBHOOK_URL` | — | Opsional webhook Discord |
+| `VISIT_NOTIFY_COOLDOWN` | `300` | Detik antar notif per IP |
 
 ### Vercel env
 

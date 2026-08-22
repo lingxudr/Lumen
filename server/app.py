@@ -1179,6 +1179,17 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = unquote(parsed.path or "/")
+            if path in ("/api/visit", "/api/visit/"):
+                data = self.read_json() if int(self.headers.get("Content-Length") or 0) else {}
+                if not isinstance(data, dict):
+                    data = {}
+                try:
+                    from visit_notify import notify_visit
+                except Exception:
+                    from server.visit_notify import notify_visit  # type: ignore
+                ip = client_ip(self)
+                result = notify_visit(data, ip=ip)
+                return self.send_json(200, result)
             if path != "/api/check-hotlink":
                 return self.send_json(404, {"error": "not found"})
 

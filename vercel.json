@@ -18,6 +18,10 @@
       "destination": "/api/check-hotlink"
     },
     {
+      "source": "/api/visit",
+      "destination": "/api/visit"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/proxy?path=$1"
     },
