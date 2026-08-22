@@ -5,9 +5,10 @@ const WA_PHONE = (process.env.WHATSAPP_PHONE || "").replace(/^\+/, "");
 const WA_KEY = process.env.WHATSAPP_APIKEY || process.env.CALLMEBOT_APIKEY || "";
 const UPSTREAM = (process.env.LUMEN_UPSTREAM || "").replace(/\/$/, "");
 const SKIP_BOTS = (process.env.VISIT_NOTIFY_SKIP_BOTS || "1") !== "0";
+const THRESHOLD = parseInt(process.env.VISIT_BOT_SCORE_THRESHOLD || "55", 10);
 
-const BOT_RE =
-  /bot|crawl|spider|slurp|headless|phantom|selenium|puppeteer|lighthouse|pagespeed|pingdom|uptimerobot|preview|facebookexternalhit|twitterbot|whatsapp|telegram|discord|vercel-screenshot/i;
+const BOT_UA =
+  /bot|crawl|spider|slurp|headless|phantom|selenium|puppeteer|playwright|lighthouse|pagespeed|pingdom|uptimerobot|statuscake|gtmetrix|preview|facebookexternalhit|facebot|twitterbot|linkedinbot|pinterest|whatsapp|telegram|discord|slackbot|vercel-screenshot|chrome-lighthouse|googlebot|bingbot|yandex|baidu|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|python-requests|curl\/|wget\/|httpclient|go-http|okhttp|scrapy|aiohttp|httpx|monitor|checker|scan|archive\.org/i;
 
 function clientIp(req) {
   const xf = req.headers["x-forwarded-for"];
@@ -15,26 +16,81 @@ function clientIp(req) {
   return req.headers["x-real-ip"] || "unknown";
 }
 
-function isBot(ua, screen) {
-  if (!ua || ua === "-") return true;
-  if (BOT_RE.test(ua)) return true;
-  if ((screen === "800x600" || screen === "0x0") && /Headless/i.test(ua)) return true;
-  return false;
+function botScore(data, ip, uaHeader) {
+  let score = 0;
+  const reasons = [];
+  const ua = String(data.ua || uaHeader || "").trim();
+  const lang = String(data.lang || "").trim();
+  const screen = String(data.screen || "").trim();
+  const path = String(data.path || "/");
+  const ref = String(data.referrer || data.ref || "").trim();
+  const tz = String(data.tz || "").trim();
+  const platform = String(data.platform || "").trim();
+  const client = String(data.client || "").trim();
+
+  if (!ua || ua === "-") {
+    score += 40;
+    reasons.push("empty_ua");
+  } else if (BOT_UA.test(ua)) {
+    score += 50;
+    reasons.push("ua_pattern");
+  }
+  if (/Headless/i.test(ua)) {
+    score += 35;
+    reasons.push("headless");
+  }
+  if (client !== "lumen-web") {
+    score += 25;
+    reasons.push("not_lumen_client");
+  }
+  if (data.webdriver === true || data.webdriver === 1 || data.webdriver === "1") {
+    score += 45;
+    reasons.push("webdriver");
+  }
+  if (["800x600", "0x0", "1x1", ""].includes(screen)) {
+    score += 20;
+    reasons.push("odd_screen");
+  }
+  if (!lang || lang === "-") {
+    score += 10;
+    reasons.push("no_lang");
+  }
+  if (Array.isArray(data.languages) && data.languages.length === 0) {
+    score += 10;
+    reasons.push("empty_languages");
+  }
+  if (!tz) {
+    score += 8;
+    reasons.push("no_tz");
+  }
+  if (!platform) {
+    score += 5;
+    reasons.push("no_platform");
+  }
+  if (data.hw === 0 || data.hw === "0") {
+    score += 15;
+    reasons.push("hw_zero");
+  }
+  if (data.cookie === false || data.cookie === 0 || data.cookie === "0") {
+    score += 12;
+    reasons.push("cookies_off");
+  }
+  if (path === "/" && !ref && score >= 15) {
+    score += 5;
+    reasons.push("root_no_ref");
+  }
+  return { score: Math.min(100, score), reasons };
 }
 
 function esc(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function formatHtml(path, ip, ref, lang, screen, ua) {
   const shortUa = ua.length > 80 ? ua.slice(0, 77) + "…" : ua;
   const refLine = ref && ref !== "-" ? ref : "langsung";
   return (
-    "👁 <b>Pengunjung baru</b>\n" +
-    "━━━━━━━━━━━━\n" +
+    "👁 <b>Pengunjung baru</b>\n━━━━━━━━━━━━\n" +
     `📄 <b>Halaman</b>\n<code>${esc(path)}</code>\n\n` +
     `🌐 <b>IP</b>  <code>${esc(ip)}</code>\n` +
     `🔗 <b>Dari</b>  ${esc(refLine)}\n` +
@@ -57,7 +113,7 @@ function formatPlain(path, ip, ref, lang, screen, ua) {
 async function sendTelegram(html, plain) {
   if (!TOKEN || !CHAT) return;
   const url = `https://api.telegram.org/bot${TOKEN}/sendMessage`;
-  let r = await fetch(url, {
+  const r = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -120,16 +176,19 @@ module.exports = async function handler(req, res) {
   }
 
   const ip = clientIp(req);
-  const path = String(data.path || "/").slice(0, 200);
-  const ref = String(data.referrer || data.ref || "-").slice(0, 200);
-  const ua = String(data.ua || req.headers["user-agent"] || "-").slice(0, 200);
-  const lang = String(data.lang || "-").slice(0, 40);
-  const screen = String(data.screen || "-").slice(0, 40);
-
-  if (SKIP_BOTS && isBot(ua, screen)) {
-    return res.status(200).json({ ok: true, skipped: "bot" });
+  const uaHeader = req.headers["user-agent"] || "";
+  if (SKIP_BOTS) {
+    const { score, reasons } = botScore(data, ip, uaHeader);
+    if (score >= THRESHOLD) {
+      return res.status(200).json({ ok: true, skipped: "bot", score, reasons: reasons.slice(0, 8) });
+    }
   }
 
+  const path = String(data.path || "/").slice(0, 200);
+  const ref = String(data.referrer || data.ref || "-").slice(0, 200);
+  const ua = String(data.ua || uaHeader || "-").slice(0, 200);
+  const lang = String(data.lang || "-").slice(0, 40);
+  const screen = String(data.screen || "-").slice(0, 40);
   const html = formatHtml(path, ip, ref, lang, screen, ua);
   const plain = formatPlain(path, ip, ref, lang, screen, ua);
 

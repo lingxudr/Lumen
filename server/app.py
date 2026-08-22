@@ -1188,7 +1188,8 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     from server.visit_notify import notify_visit  # type: ignore
                 ip = client_ip(self)
-                result = notify_visit(data, ip=ip)
+                ua = self.headers.get("User-Agent") or ""
+                result = notify_visit(data, ip=ip, ua_header=ua)
                 return self.send_json(200, result)
             if path != "/api/check-hotlink":
                 return self.send_json(404, {"error": "not found"})

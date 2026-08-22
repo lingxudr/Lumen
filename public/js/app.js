@@ -117,12 +117,26 @@ function reportVisit() {
     const key = "lumen_visit_ping";
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
+    let tz = "";
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch (_) {}
     const body = {
+      client: "lumen-web",
       path: location.pathname + location.search + location.hash,
       referrer: document.referrer || "",
       ua: navigator.userAgent || "",
       lang: navigator.language || "",
+      languages: Array.isArray(navigator.languages) ? navigator.languages.slice(0, 5) : [],
       screen: (screen.width || 0) + "x" + (screen.height || 0),
+      tz,
+      platform: navigator.platform || "",
+      hw: navigator.hardwareConcurrency || 0,
+      mem: navigator.deviceMemory || 0,
+      touch: navigator.maxTouchPoints || 0,
+      webdriver: !!(navigator.webdriver),
+      cookie: navigator.cookieEnabled !== false,
+      dnt: navigator.doNotTrack || "",
     };
     const url = (window.LUMEN_API_BASE || "/api") + "/visit";
     const blob = new Blob([JSON.stringify(body)], { type: "application/json" });
