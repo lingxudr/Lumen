@@ -929,9 +929,11 @@ class Handler(BaseHTTPRequestHandler):
                             200, body, "application/json; charset=utf-8", extra_headers=extra
                         )
 
-                # DB-first: Mongo canonical catalog untuk list series
+                # DB-first: Mongo catalog hanya untuk list (bukan search)
                 sub0 = (sub or "").split("?")[0].strip("/")
-                if sub0 == "series":
+                q_for_catalog = (qs.get("title") or qs.get("q") or qs.get("search") or [""])[0].strip()
+                mode_for_catalog = (qs.get("mode") or [""])[0].strip().lower()
+                if sub0 == "series" and not q_for_catalog and mode_for_catalog not in ("search",):
                     try:
                         from services.manga_service import catalog_newest
                     except Exception:
