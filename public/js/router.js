@@ -15,12 +15,21 @@ export function parseLocation(loc = window.location) {
   const parts = path.split("/").filter(Boolean);
 
   if (path === "/" || path === "/latest") {
-    return { name: "home", tab: "newest", query: qs.get("q") || "" };
+    const tab = qs.get("tab") || "newest";
+    const allowed = ["newest", "new_series", "completed", "browse", "hot", "project"];
+    return {
+      name: "home",
+      tab: allowed.includes(tab) ? tab : "newest",
+      query: qs.get("q") || "",
+    };
   }
   if (path === "/popular") {
     return { name: "home", tab: "hot", query: "" };
   }
   if (path === "/search") {
+    return { name: "home", tab: "newest", query: qs.get("q") || "" };
+  }
+  if (parts[0] === "manga" && !parts[1]) {
     return { name: "home", tab: "newest", query: qs.get("q") || "" };
   }
   if (parts[0] === "manga" && parts[1]) {
@@ -46,8 +55,11 @@ export function parseLocation(loc = window.location) {
 
 export function pathFor(route) {
   if (!route || route.name === "home") {
-    if (route?.tab === "hot") return "/popular";
     if (route?.query) return `/search?q=${encodeURIComponent(route.query)}`;
+    if (route?.tab === "hot") return "/popular";
+    if (route?.tab === "completed") return "/latest?tab=completed";
+    if (route?.tab === "new_series") return "/latest?tab=new_series";
+    if (route?.tab === "browse") return "/latest?tab=browse";
     return "/latest";
   }
   if (route.name === "series") return `/manga/${encodeURIComponent(route.slug)}`;

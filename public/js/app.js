@@ -236,16 +236,35 @@ async function routeFromLocation() {
     await ctx.openChapter(r.chapter);
     return;
   }
-  if (r.query) {
-    state.query = r.query;
-    const q = document.getElementById("q");
-    if (q) q.value = r.query;
-  }
+  // Sync search from URL (refresh / back). Empty q clears stuck search UI.
+  state.query = r.query || "";
+  const qEl = document.getElementById("q");
+  if (qEl) qEl.value = state.query;
   if (r.tab) state.tab = r.tab;
+  if (state.query) {
+    const titleEl = document.getElementById("list-title");
+    if (titleEl) titleEl.textContent = `Hasil untuk "${state.query}"`;
+  } else {
+    const titles = {
+      newest: "Terbaru",
+      new_series: "Series Baru",
+      completed: "Selesai",
+      browse: "Browse",
+      hot: "Populer",
+    };
+    const titleEl = document.getElementById("list-title");
+    if (titleEl) titleEl.textContent = titles[state.tab] || "Terbaru";
+  }
   setMeta({
-    title: "Lumen — Baca Komik Online",
+    title: state.query
+      ? `Cari "${state.query}" — Lumen`
+      : "Lumen — Baca Komik Online",
     description: "Baca komik online dengan koleksi terbaru setiap hari",
-    url: location.origin + (r.tab === "hot" ? "/popular" : "/latest"),
+    url: location.origin + (state.query
+      ? `/search?q=${encodeURIComponent(state.query)}`
+      : r.tab === "hot"
+        ? "/popular"
+        : "/latest"),
   });
   clearJsonLd();
   home.loadList();

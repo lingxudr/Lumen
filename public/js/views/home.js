@@ -1,4 +1,5 @@
 import { Config } from "../config.js";
+import { navigate } from "../router.js";
 import { api, apiPeek, clearApiCache } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
@@ -360,6 +361,9 @@ export function createHomeView(ctx) {
       hot: "Populer",
     };
     $("#list-title").textContent = titles[name] || name;
+    try {
+      navigate({ name: "home", tab: name, query: "" }, { replace: false });
+    } catch (_) {}
     showView("home");
     loadList();
   }
@@ -372,10 +376,23 @@ export function createHomeView(ctx) {
   }
 
   function search(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     ctx.state.query = (($("#q") && $("#q").value) || "").trim();
     ctx.state.page = 1;
-    $("#list-title").textContent = ctx.state.query ? `Hasil untuk "${ctx.state.query}"` : "Terbaru";
+    if (!ctx.state.query) {
+      // clear search → back to current tab feed
+      try {
+        navigate({ name: "home", tab: ctx.state.tab || "newest", query: "" }, { replace: true });
+      } catch (_) {}
+      $("#list-title").textContent = "Terbaru";
+      showView("home");
+      loadList();
+      return false;
+    }
+    $("#list-title").textContent = `Hasil untuk "${ctx.state.query}"`;
+    try {
+      navigate({ name: "home", tab: "newest", query: ctx.state.query }, { replace: false });
+    } catch (_) {}
     showView("home");
     loadList();
     return false;
