@@ -16,6 +16,7 @@ const state = {
   query: "",
   status: "",
   format: "",
+  genre: "",
   series: null,
   chapters: [],
   chapterIndex: null,

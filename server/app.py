@@ -929,11 +929,26 @@ class Handler(BaseHTTPRequestHandler):
                             200, body, "application/json; charset=utf-8", extra_headers=extra
                         )
 
-                # DB-first: Mongo catalog hanya untuk list (bukan search)
+                # DB-first: Mongo catalog hanya untuk newest default (bukan browse/hot/completed/search)
                 sub0 = (sub or "").split("?")[0].strip("/")
                 q_for_catalog = (qs.get("title") or qs.get("q") or qs.get("search") or [""])[0].strip()
                 mode_for_catalog = (qs.get("mode") or [""])[0].strip().lower()
-                if sub0 == "series" and not q_for_catalog and mode_for_catalog not in ("search",):
+                preset_for_catalog = (qs.get("preset") or [""])[0].strip().lower()
+                # Hanya cache catalog untuk feed "terbaru" polos
+                _catalog_modes = ("", "newest", "latest")
+                _skip_catalog = (
+                    q_for_catalog
+                    or mode_for_catalog not in _catalog_modes
+                    or preset_for_catalog in (
+                        "completed", "complete", "selesai", "hot", "popular",
+                        "new_series", "series_baru", "browse", "project",
+                    )
+                    or (qs.get("genre") or [""])[0].strip()
+                    or (qs.get("status") or [""])[0].strip()
+                    or (qs.get("format") or [""])[0].strip()
+                    or (qs.get("browse") or [""])[0] in ("1", "true")
+                )
+                if sub0 == "series" and not _skip_catalog:
                     try:
                         from services.manga_service import catalog_newest
                     except Exception:
