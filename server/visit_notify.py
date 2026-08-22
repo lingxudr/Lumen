@@ -58,6 +58,76 @@ _hour_bucket: list[float] = []
 
 
 
+
+# IP geo cache (in-process)
+_geo_cache: dict[str, tuple[float, dict]] = {}
+_GEO_TTL = 86400  # 24h
+
+
+def lookup_geo(ip: str) -> dict[str, str]:
+    """Country / city / ISP from IP. Best-effort, cached."""
+    ip = (ip or "").strip()
+    empty = {"country": "", "countryCode": "", "city": "", "region": "", "isp": ""}
+    if not ip or ip in ("unknown", "127.0.0.1", "::1") or ip.startswith("10.") or ip.startswith("192.168."):
+        return empty
+    now = time.time()
+    hit = _geo_cache.get(ip)
+    if hit and now - hit[0] < _GEO_TTL:
+        return hit[1]
+    data = dict(empty)
+    try:
+        # ip-api.com free (no key), fields limited
+        q = urllib.parse.quote(ip)
+        # HTTPS free providers (Vercel-friendly)
+        raw = None
+        for url in (
+            f"https://ipwho.is/{q}",
+            f"https://ipapi.co/{q}/json/",
+        ):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "LumenGeo/1"}, method="GET")
+                with urllib.request.urlopen(req, timeout=4) as resp:
+                    raw = json.loads(resp.read().decode("utf-8", errors="replace"))
+                if raw:
+                    break
+            except Exception:
+                continue
+        if isinstance(raw, dict):
+            # ipwho.is
+            if raw.get("success") is True or raw.get("country"):
+                data = {
+                    "country": str(raw.get("country") or "")[:60],
+                    "countryCode": str(raw.get("country_code") or raw.get("countryCode") or "")[:8],
+                    "city": str(raw.get("city") or "")[:60],
+                    "region": str(raw.get("region") or raw.get("regionName") or "")[:60],
+                    "isp": str(
+                        (raw.get("connection") or {}).get("isp")
+                        if isinstance(raw.get("connection"), dict)
+                        else raw.get("org") or raw.get("isp") or ""
+                    )[:80],
+                }
+    except Exception as e:
+        print("geo lookup:", e, flush=True)
+    _geo_cache[ip] = (now, data)
+    if len(_geo_cache) > 3000:
+        # drop oldest half
+        items = sorted(_geo_cache.items(), key=lambda x: x[1][0])
+        for k, _ in items[: len(items) // 2]:
+            _geo_cache.pop(k, None)
+    return data
+
+
+def _flag(cc: str) -> str:
+    """Regional indicator emoji from ISO country code."""
+    cc = (cc or "").upper()
+    if len(cc) != 2 or not cc.isalpha():
+        return ""
+    try:
+        return chr(0x1F1E6 + ord(cc[0]) - 65) + chr(0x1F1E6 + ord(cc[1]) - 65)
+    except Exception:
+        return ""
+
+
 def device_info(ua: str, screen: str = "", platform: str = "") -> dict[str, str]:
     """Best-effort device/OS/browser from User-Agent (no exact iPhone model — Apple hides it)."""
     u = ua or ""
@@ -281,32 +351,68 @@ def _esc(s: str) -> str:
 
 
 def _format_html(
-    path: str, ip: str, ref: str, lang: str, screen: str, ua: str, platform: str = ""
+    path: str,
+    ip: str,
+    ref: str,
+    lang: str,
+    screen: str,
+    ua: str,
+    platform: str = "",
+    geo: dict | None = None,
 ) -> str:
     short_ua = ua if len(ua) <= 72 else ua[:69] + "…"
     ref_line = ref if ref and ref != "-" else "langsung"
     d = device_info(ua, screen, platform)
-    return (
-        "👁 <b>Pengunjung baru</b>\n"
-        "━━━━━━━━━━━━\n"
-        f"📄 <b>Halaman</b>\n<code>{_esc(path)}</code>\n\n"
-        f"📱 <b>Perangkat</b>  {_esc(d['device'])}\n"
-        f"💻 <b>OS</b>  {_esc(d['os'])}\n"
-        f"🌐 <b>Browser</b>  {_esc(d['browser'])}\n"
-        f"📐 <b>Layar</b>  {_esc(d['screen'])}\n\n"
-        f"🌍 <b>IP</b>  <code>{_esc(ip)}</code>\n"
-        f"🔗 <b>Dari</b>  {_esc(ref_line)}\n"
-        f"🗣 <b>Bahasa</b>  {_esc(lang)}\n\n"
-        f"<i>{_esc(short_ua)}</i>"
+    g = geo or {}
+    loc_parts = [x for x in (g.get("city"), g.get("region"), g.get("country")) if x]
+    loc = ", ".join(loc_parts) if loc_parts else ""
+    flag = _flag(g.get("countryCode") or "")
+    loc_line = f"{flag} {loc}".strip() if loc else ""
+    isp = g.get("isp") or ""
+    lines = [
+        "👁 <b>Pengunjung baru</b>",
+        "━━━━━━━━━━━━",
+        f"📄 <b>Halaman</b>\n<code>{_esc(path)}</code>",
+        "",
+        f"📱 <b>Perangkat</b>  {_esc(d['device'])}",
+        f"💻 <b>OS</b>  {_esc(d['os'])}",
+        f"🌐 <b>Browser</b>  {_esc(d['browser'])}",
+        f"📐 <b>Layar</b>  {_esc(d['screen'])}",
+        "",
+        f"🌍 <b>IP</b>  <code>{_esc(ip)}</code>",
+    ]
+    if loc_line:
+        lines.append(f"📍 <b>Lokasi</b>  {_esc(loc_line)}")
+    if isp:
+        lines.append(f"📡 <b>ISP</b>  {_esc(isp)}")
+    lines.extend(
+        [
+            f"🔗 <b>Dari</b>  {_esc(ref_line)}",
+            f"🗣 <b>Bahasa</b>  {_esc(lang)}",
+            "",
+            f"<i>{_esc(short_ua)}</i>",
+        ]
     )
+    return "\n".join(lines)
 
 
 def _format_plain(
-    path: str, ip: str, ref: str, lang: str, screen: str, ua: str, platform: str = ""
+    path: str,
+    ip: str,
+    ref: str,
+    lang: str,
+    screen: str,
+    ua: str,
+    platform: str = "",
+    geo: dict | None = None,
 ) -> str:
     short_ua = ua if len(ua) <= 72 else ua[:69] + "…"
     ref_line = ref if ref and ref != "-" else "langsung"
     d = device_info(ua, screen, platform)
+    g = geo or {}
+    loc_parts = [x for x in (g.get("city"), g.get("region"), g.get("country")) if x]
+    loc = ", ".join(loc_parts) if loc_parts else "-"
+    isp = g.get("isp") or "-"
     return (
         "👁 Pengunjung baru\n————————————\n"
         f"Halaman: {path}\n"
@@ -314,7 +420,10 @@ def _format_plain(
         f"OS: {d['os']}\n"
         f"Browser: {d['browser']}\n"
         f"Layar: {d['screen']}\n"
-        f"IP: {ip}\nDari: {ref_line}\nBahasa: {lang}\n"
+        f"IP: {ip}\n"
+        f"Lokasi: {loc}\n"
+        f"ISP: {isp}\n"
+        f"Dari: {ref_line}\nBahasa: {lang}\n"
         f"{short_ua}"
     )
 
@@ -407,8 +516,9 @@ def notify_visit(payload: dict[str, Any], *, ip: str = "unknown", ua_header: str
     screen = str(payload.get("screen") or "-")[:40]
 
     platform = str(payload.get("platform") or "")[:40]
-    html = _format_html(path, ip, ref, lang, screen, ua, platform)
-    plain = _format_plain(path, ip, ref, lang, screen, ua, platform)
+    geo = lookup_geo(ip or "")
+    html = _format_html(path, ip, ref, lang, screen, ua, platform, geo)
+    plain = _format_plain(path, ip, ref, lang, screen, ua, platform, geo)
 
     def _run():
         for name, fn in (

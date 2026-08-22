@@ -83,6 +83,38 @@ function botScore(data, ip, uaHeader) {
 }
 
 
+
+async function lookupGeo(ip) {
+  const empty = { country: "", countryCode: "", city: "", region: "", isp: "" };
+  if (!ip || ip === "unknown" || ip.startsWith("10.") || ip.startsWith("192.168.") || ip === "127.0.0.1") {
+    return empty;
+  }
+  try {
+    const url =
+      "http://ip-api.com/json/" +
+      encodeURIComponent(ip) +
+      "?fields=status,country,countryCode,regionName,city,isp,query";
+    const r = await fetch(url, { headers: { "User-Agent": "LumenGeo/1" } });
+    const raw = await r.json();
+    if (raw && raw.status === "success") {
+      return {
+        country: String(raw.country || "").slice(0, 60),
+        countryCode: String(raw.countryCode || "").slice(0, 8),
+        city: String(raw.city || "").slice(0, 60),
+        region: String(raw.regionName || "").slice(0, 60),
+        isp: String(raw.isp || "").slice(0, 80),
+      };
+    }
+  } catch (_) {}
+  return empty;
+}
+
+function flagEmoji(cc) {
+  const c = String(cc || "").toUpperCase();
+  if (c.length !== 2) return "";
+  return String.fromCodePoint(...[...c].map((ch) => 0x1f1e6 - 65 + ch.charCodeAt(0)));
+}
+
 function deviceInfo(ua, screen, platform) {
   const u = ua || "";
   let device = "Unknown";
@@ -147,33 +179,43 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function formatHtml(path, ip, ref, lang, screen, ua, platform) {
+function formatHtml(path, ip, ref, lang, screen, ua, platform, geo) {
   const shortUa = ua.length > 72 ? ua.slice(0, 69) + "…" : ua;
   const refLine = ref && ref !== "-" ? ref : "langsung";
   const d = deviceInfo(ua, screen, platform || "");
-  return (
+  const g = geo || {};
+  const locParts = [g.city, g.region, g.country].filter(Boolean);
+  const loc = locParts.join(", ");
+  const flag = flagEmoji(g.countryCode);
+  let msg =
     "👁 <b>Pengunjung baru</b>\n━━━━━━━━━━━━\n" +
     `📄 <b>Halaman</b>\n<code>${esc(path)}</code>\n\n` +
     `📱 <b>Perangkat</b>  ${esc(d.device)}\n` +
     `💻 <b>OS</b>  ${esc(d.os)}\n` +
     `🌐 <b>Browser</b>  ${esc(d.browser)}\n` +
     `📐 <b>Layar</b>  ${esc(d.screen)}\n\n` +
-    `🌍 <b>IP</b>  <code>${esc(ip)}</code>\n` +
+    `🌍 <b>IP</b>  <code>${esc(ip)}</code>\n`;
+  if (loc) msg += `📍 <b>Lokasi</b>  ${esc((flag + " " + loc).trim())}\n`;
+  if (g.isp) msg += `📡 <b>ISP</b>  ${esc(g.isp)}\n`;
+  msg +=
     `🔗 <b>Dari</b>  ${esc(refLine)}\n` +
     `🗣 <b>Bahasa</b>  ${esc(lang)}\n\n` +
-    `<i>${esc(shortUa)}</i>`
-  );
+    `<i>${esc(shortUa)}</i>`;
+  return msg;
 }
 
-function formatPlain(path, ip, ref, lang, screen, ua, platform) {
+function formatPlain(path, ip, ref, lang, screen, ua, platform, geo) {
   const shortUa = ua.length > 72 ? ua.slice(0, 69) + "…" : ua;
   const refLine = ref && ref !== "-" ? ref : "langsung";
   const d = deviceInfo(ua, screen, platform || "");
+  const g = geo || {};
+  const loc = [g.city, g.region, g.country].filter(Boolean).join(", ") || "-";
   return (
     "👁 Pengunjung baru\n————————————\n" +
     `Halaman: ${path}\nPerangkat: ${d.device}\nOS: ${d.os}\n` +
     `Browser: ${d.browser}\nLayar: ${d.screen}\n` +
-    `IP: ${ip}\nDari: ${refLine}\nBahasa: ${lang}\n${shortUa}`
+    `IP: ${ip}\nLokasi: ${loc}\nISP: ${g.isp || "-"}\n` +
+    `Dari: ${refLine}\nBahasa: ${lang}\n${shortUa}`
   );
 }
 
@@ -257,8 +299,9 @@ module.exports = async function handler(req, res) {
   const lang = String(data.lang || "-").slice(0, 40);
   const screen = String(data.screen || "-").slice(0, 40);
   const platform = String(data.platform || "").slice(0, 40);
-  const html = formatHtml(path, ip, ref, lang, screen, ua, platform);
-  const plain = formatPlain(path, ip, ref, lang, screen, ua, platform);
+  const geo = await lookupGeo(ip);
+  const html = formatHtml(path, ip, ref, lang, screen, ua, platform, geo);
+  const plain = formatPlain(path, ip, ref, lang, screen, ua, platform, geo);
 
   try {
     await Promise.allSettled([
