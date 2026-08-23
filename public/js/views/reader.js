@@ -163,14 +163,12 @@ export function createReaderView(ctx) {
   function prefetchNeighborChapters(currentIndex) {
     const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
     if (!slug) return;
-    const idxs = ctx.state.chapters.map((c) => String(chapterIndex(c)));
-    const pos = idxs.indexOf(String(currentIndex));
-    if (pos < 0) return;
-    // prefetch tetangga segera — jangan tunggu last image
-    for (const p of [pos - 1, pos + 1, pos - 2]) {
-      if (p < 0 || p >= idxs.length) continue;
+    const { nums, pos } = chapterNavState(currentIndex);
+    if (pos < 0 || !nums.length) return;
+    for (const p of [pos - 1, pos + 1, pos - 2, pos + 2]) {
+      if (p < 0 || p >= nums.length) continue;
       apiPrefetch(
-        `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(idxs[p])}`,
+        `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(nums[p])}`,
         {},
         { ttl: 15 * 60_000, stale: 30 * 60_000 }
       );
@@ -199,6 +197,12 @@ export function createReaderView(ctx) {
   }
 
   async function openChapter(index) {
+    // normalize index (avoid "216" vs 216 mismatch)
+    if (index != null && index !== "" && !Number.isNaN(Number(index))) {
+      const n = Number(index);
+      // keep .5 etc
+      index = String(n);
+    }
     const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
     if (!slug) {
       toast("Data judul tidak lengkap");
@@ -441,14 +445,21 @@ export function createReaderView(ctx) {
       });
     }
 
-    const idxs = ctx.state.chapters.map((c) => String(chapterIndex(c)));
-    const pos = idxs.indexOf(String(idx));
+    const navState = chapterNavState(idx);
     const prevBtn = $("#btn-prev-ch");
     const nextBtn = $("#btn-next-ch");
-    if (prevBtn) prevBtn.disabled = pos < 0 || pos >= idxs.length - 1;
-    if (nextBtn) nextBtn.disabled = pos <= 0;
+    const navPrev = document.getElementById("btn-nav-prev");
+    const navNext = document.getElementById("btn-nav-next");
+    const disablePrev = !navState.hasPrev;
+    const disableNext = !navState.hasNext;
+    [prevBtn, navPrev].forEach((b) => {
+      if (b) b.disabled = disablePrev;
+    });
+    [nextBtn, navNext].forEach((b) => {
+      if (b) b.disabled = disableNext;
+    });
 
-    // tap zones: list is newest-first → prev chapter = older = +pos, next = newer = -pos
+    // tap zones
     const tapPrev = $("#tap-prev");
     const tapNext = $("#tap-next");
     if (tapPrev) {
@@ -456,27 +467,102 @@ export function createReaderView(ctx) {
         e.preventDefault();
         navChapter(-1);
       };
-      tapPrev.disabled = pos < 0 || pos >= idxs.length - 1;
+      tapPrev.disabled = disablePrev;
     }
     if (tapNext) {
       tapNext.onclick = (e) => {
         e.preventDefault();
         navChapter(1);
       };
-      tapNext.disabled = pos <= 0;
+      tapNext.disabled = disableNext;
     }
   }
 
-  function navChapter(dir) {
-    const idxs = ctx.state.chapters.map((c) => String(chapterIndex(c)));
-    const pos = idxs.indexOf(String(ctx.state.chapterIndex));
-    if (pos < 0) return;
-    const nextPos = pos - dir;
-    if (nextPos < 0 || nextPos >= idxs.length) {
-      toast(dir > 0 ? "Ini chapter terbaru" : "Ini chapter tertua");
-      return;
+  /** Sorted unique chapter numbers (ascending: oldest → newest). */
+  function sortedChapterNums() {
+    const set = new Set();
+    for (const c of ctx.state.chapters || []) {
+      const n = chapterIndex(c);
+      if (n != null && !Number.isNaN(Number(n))) set.add(Number(n));
     }
-    openChapter(idxs[nextPos]);
+    return Array.from(set).sort((a, b) => a - b);
+  }
+
+  function chapterNavState(current) {
+    const nums = sortedChapterNums();
+    const cur = Number(current);
+    let pos = nums.findIndex((n) => n === cur);
+    if (pos < 0) {
+      // fuzzy: match string form
+      pos = nums.findIndex((n) => String(n) === String(current));
+    }
+    return {
+      nums,
+      pos,
+      hasPrev: pos > 0,
+      hasNext: pos >= 0 && pos < nums.length - 1,
+    };
+  }
+
+  /**
+   * dir > 0 → chapter berikutnya (nomor lebih besar)
+   * dir < 0 → chapter sebelumnya (nomor lebih kecil)
+   */
+  async function navChapter(dir) {
+    try {
+      // Ensure chapter list loaded (deep-link / refresh)
+      if (!(ctx.state.chapters || []).length) {
+        const slug =
+          ctx.state.series?.data?.slug ||
+          ctx.state.series?.slug ||
+          "";
+        if (slug) {
+          try {
+            const chRes = await api(`series/${encodeURIComponent(slug)}/chapters`, {}, {});
+            const list = chRes?.data || chRes?.chapters || [];
+            if (Array.isArray(list) && list.length) ctx.state.chapters = list;
+          } catch (e) {
+            console.warn("navChapter load chapters", e);
+          }
+        }
+      }
+
+      const { nums, pos } = chapterNavState(ctx.state.chapterIndex);
+      if (!nums.length) {
+        toast("Daftar chapter belum tersedia");
+        return;
+      }
+      if (pos < 0) {
+        // Jump to nearest if current index missing from list
+        const cur = Number(ctx.state.chapterIndex);
+        let nearest = nums[0];
+        let best = Infinity;
+        for (const n of nums) {
+          const d = Math.abs(n - cur);
+          if (d < best) {
+            best = d;
+            nearest = n;
+          }
+        }
+        const npos = nums.indexOf(nearest);
+        const targetPos = npos + (dir > 0 ? 1 : -1);
+        if (targetPos < 0 || targetPos >= nums.length) {
+          toast(dir > 0 ? "Ini chapter terbaru" : "Ini chapter tertua");
+          return;
+        }
+        await openChapter(nums[targetPos]);
+        return;
+      }
+      const nextPos = pos + dir;
+      if (nextPos < 0 || nextPos >= nums.length) {
+        toast(dir > 0 ? "Ini chapter terbaru" : "Ini chapter tertua");
+        return;
+      }
+      await openChapter(nums[nextPos]);
+    } catch (err) {
+      console.error("navChapter", err);
+      toast(String(err.message || err || "Gagal pindah chapter"));
+    }
   }
 
   async function checkHotlink() {

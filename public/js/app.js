@@ -81,7 +81,7 @@ const App = {
     if (state.series) showView("series");
     else App.go("home");
   },
-  navChapter: reader.navChapter,
+  navChapter: (...a) => reader.navChapter(...a),
   reloadChapter: reader.reload,
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
