@@ -82,33 +82,31 @@ module.exports = async function handler(req, res) {
     const wantWebp = fmt === "webp";
     const w = url.searchParams.get("w") || "";
 
-    let upstream;
-    let via = "origin";
+    // Always via Railway /img — memory+disk cache + optional WebP
+    const qs = new URLSearchParams();
+    qs.set("u", src);
+    if (wantWebp) qs.set("fmt", "webp");
+    if (w) qs.set("w", w);
+    const railUrl = `${UPSTREAM.replace(/\/$/, "")}/img?${qs.toString()}`;
+    const via = wantWebp ? "railway-webp" : "railway-cache";
+    const upstream = await fetch(railUrl, {
+      headers: {
+        "User-Agent": UA,
+        Accept: wantWebp
+          ? "image/webp,image/*,*/*;q=0.8"
+          : "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "If-None-Match": req.headers["if-none-match"] || "",
+      },
+    });
 
-    if (wantWebp) {
-      // Convert on Railway (Pillow), then this response is CDN-cached at Vercel edge
-      const qs = new URLSearchParams();
-      qs.set("u", src);
-      qs.set("fmt", "webp");
-      if (w) qs.set("w", w);
-      const railUrl = `${UPSTREAM.replace(/\/$/, "")}/img?${qs.toString()}`;
-      upstream = await fetch(railUrl, {
-        headers: {
-          "User-Agent": UA,
-          Accept: "image/webp,image/*,*/*;q=0.8",
-        },
+    if (upstream.status === 304) {
+      setCdnHeaders(res, {
+        webp: wantWebp,
+        etag: req.headers["if-none-match"] || "",
+        hit: "REVALIDATED",
       });
-      via = "railway-webp";
-    } else {
-      upstream = await fetch(src, {
-        headers: {
-          "User-Agent": UA,
-          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-          Referer: "https://v1.voratoon.com/",
-        },
-      });
+      return res.status(304).end();
     }
-
     if (!upstream.ok) {
       return res.status(upstream.status >= 400 ? upstream.status : 502).json({
         error: "upstream_image_failed",
