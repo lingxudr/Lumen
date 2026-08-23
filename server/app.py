@@ -160,8 +160,9 @@ from collections import defaultdict, deque
 
 # ── Tiered API cache + tag invalidation (see cache_policy.py) ────────
 IMG_CACHE = {}
-IMG_CACHE_MAX = 96
-IMG_CACHE_TTL = 24 * 3600  # 24h in-process
+IMG_CACHE_MAX = 160
+IMG_CACHE_TTL = 24 * 3600
+
 _CACHE_LOCK = threading.Lock()
 
 try:
@@ -235,30 +236,129 @@ def cache_set(key, body, ttl, sub_path=None):
     _policy_set(key, body, sp, soft=soft, hard=hard)
 
 
+
+# ── Image proxy cache: memory LRU + disk (/tmp) ──────────────────────
+IMG_CACHE = {}  # key -> (body, exp, content_type, hits)
+IMG_CACHE_MAX = int(os.environ.get("IMG_CACHE_MAX", "160"))
+IMG_CACHE_TTL = int(os.environ.get("IMG_CACHE_TTL", str(24 * 3600)))
+IMG_DISK_DIR = os.environ.get("IMG_DISK_CACHE", "/tmp/lumen-img-cache")
+IMG_DISK_MAX_FILES = int(os.environ.get("IMG_DISK_MAX_FILES", "400"))
+IMG_DISK_TTL = int(os.environ.get("IMG_DISK_TTL", str(7 * 24 * 3600)))  # 7 days
+
+
+def _img_key_hash(key: str) -> str:
+    import hashlib
+    return hashlib.sha256(key.encode("utf-8", errors="replace")).hexdigest()
+
+
 def img_cache_get(key):
+    now = time.time()
     with _CACHE_LOCK:
         row = IMG_CACHE.get(key)
-        if not row:
-            return None
-        body, exp, ct = row
-        if time.time() > exp:
+        if row:
+            body, exp, ct, hits = row if len(row) == 4 else (*row, 0)
+            if now <= exp:
+                IMG_CACHE[key] = (body, exp, ct, hits + 1)
+                # LRU touch: re-insert
+                try:
+                    IMG_CACHE[key] = IMG_CACHE.pop(key)
+                except Exception:
+                    pass
+                return body, ct
             IMG_CACHE.pop(key, None)
-            return None
-        return body, ct
+    # Disk fallback
+    try:
+        os.makedirs(IMG_DISK_DIR, exist_ok=True)
+        h = _img_key_hash(key)
+        meta_path = os.path.join(IMG_DISK_DIR, h + ".json")
+        bin_path = os.path.join(IMG_DISK_DIR, h + ".bin")
+        if os.path.isfile(meta_path) and os.path.isfile(bin_path):
+            import json as _json
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = _json.load(f)
+            if now <= float(meta.get("exp") or 0):
+                with open(bin_path, "rb") as f:
+                    body = f.read()
+                ct = meta.get("ct") or "image/jpeg"
+                # promote to memory
+                img_cache_set(key, body, ct, from_disk=True)
+                return body, ct
+            try:
+                os.remove(meta_path)
+                os.remove(bin_path)
+            except Exception:
+                pass
+    except Exception as e:
+        print("img disk get:", e, flush=True)
+    return None
 
 
-def img_cache_set(key, body, content_type):
+def img_cache_set(key, body, content_type, from_disk=False):
+    if not body or len(body) > 2_500_000:
+        return
+    ttl = IMG_CACHE_TTL
+    if content_type and "webp" in content_type.lower():
+        ttl = max(ttl, 48 * 3600)
+    exp = time.time() + ttl
     with _CACHE_LOCK:
-        if len(body) > 2_500_000:
-            return
         if len(IMG_CACHE) >= IMG_CACHE_MAX:
-            for k in list(IMG_CACHE.keys())[: IMG_CACHE_MAX // 2]:
+            # drop oldest ~half (dict preserves insert order on 3.7+)
+            for k in list(IMG_CACHE.keys())[: max(1, IMG_CACHE_MAX // 2)]:
                 IMG_CACHE.pop(k, None)
-        ttl = IMG_CACHE_TTL
-        if content_type and "webp" in content_type.lower():
-            ttl = max(ttl, 48 * 3600)  # WebP stays warmer
-        IMG_CACHE[key] = (body, time.time() + ttl, content_type)
+        IMG_CACHE[key] = (body, exp, content_type, 0)
+    if from_disk:
+        return
+    # Write disk (best-effort)
+    try:
+        os.makedirs(IMG_DISK_DIR, exist_ok=True)
+        h = _img_key_hash(key)
+        meta_path = os.path.join(IMG_DISK_DIR, h + ".json")
+        bin_path = os.path.join(IMG_DISK_DIR, h + ".bin")
+        with open(bin_path, "wb") as f:
+            f.write(body)
+        import json as _json
+        with open(meta_path, "w", encoding="utf-8") as f:
+            _json.dump(
+                {
+                    "exp": time.time() + IMG_DISK_TTL,
+                    "ct": content_type,
+                    "key": key[:200],
+                    "n": len(body),
+                },
+                f,
+            )
+        # prune disk if too many files
+        files = [x for x in os.listdir(IMG_DISK_DIR) if x.endswith(".bin")]
+        if len(files) > IMG_DISK_MAX_FILES:
+            files.sort(key=lambda n: os.path.getmtime(os.path.join(IMG_DISK_DIR, n)))
+            for n in files[: len(files) - IMG_DISK_MAX_FILES]:
+                try:
+                    os.remove(os.path.join(IMG_DISK_DIR, n))
+                    os.remove(os.path.join(IMG_DISK_DIR, n.replace(".bin", ".json")))
+                except Exception:
+                    pass
+    except Exception as e:
+        print("img disk set:", e, flush=True)
 
+
+def img_cache_stats():
+    with _CACHE_LOCK:
+        n = len(IMG_CACHE)
+        hits = sum((row[3] if len(row) > 3 else 0) for row in IMG_CACHE.values())
+    disk_n = 0
+    try:
+        if os.path.isdir(IMG_DISK_DIR):
+            disk_n = len([x for x in os.listdir(IMG_DISK_DIR) if x.endswith(".bin")])
+    except Exception:
+        pass
+    return {
+        "memory": n,
+        "memory_max": IMG_CACHE_MAX,
+        "disk": disk_n,
+        "disk_max": IMG_DISK_MAX_FILES,
+        "ttl_sec": IMG_CACHE_TTL,
+        "hits_tracked": hits,
+    }
 
 # ── Rate limit per IP (sliding window 60s) ────────────────────────────
 CONTENT_SECURITY_POLICY = (
@@ -745,7 +845,7 @@ class Handler(BaseHTTPRequestHandler):
                         "ok": True,
                         "ready": True,
                         "api_base": API_BASE,
-                        "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                        "cache": {**cache_stats(), "img": img_cache_stats()},
                         "cache_warmer": _warmer_status(),
                     },
                 )
@@ -790,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
                         for r in providers
                         if isinstance(r, dict)
                     ],
-                    "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                    "cache": {**cache_stats(), "img": img_cache_stats()},
                     "cache_warmer": _warmer_status(),
                     "db": _db_stats_safe(),
                 }
@@ -832,7 +932,7 @@ class Handler(BaseHTTPRequestHandler):
                         {
                             "ok": True,
                             "api_base": API_BASE,
-                            "cache": {**cache_stats(), "img": len(IMG_CACHE)},
+                            "cache": {**cache_stats(), "img": img_cache_stats()},
                             "cache_warmer": _warmer_status(),
                             "db": _db_stats_safe(),
                             "providers": providers,
