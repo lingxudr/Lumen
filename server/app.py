@@ -936,9 +936,14 @@ class Handler(BaseHTTPRequestHandler):
                 preset_for_catalog = (qs.get("preset") or [""])[0].strip().lower()
                 # Hanya cache catalog untuk feed "terbaru" polos
                 _catalog_modes = ("", "newest", "latest")
+                try:
+                    page_for_catalog = int((qs.get("page") or ["1"])[0])
+                except Exception:
+                    page_for_catalog = 1
                 _skip_catalog = (
                     q_for_catalog
                     or mode_for_catalog not in _catalog_modes
+                    or page_for_catalog > 1  # pagination must hit Voratoon updates
                     or preset_for_catalog in (
                         "completed", "complete", "selesai", "hot", "popular",
                         "new_series", "series_baru", "browse", "project",
@@ -961,6 +966,7 @@ class Handler(BaseHTTPRequestHandler):
                             take = int((qs.get("take") or qs.get("limit") or ["20"])[0])
                         except Exception:
                             take = 20
+                        # Always page 1 only — page 2+ skipped above
                         cat = catalog_newest(take=take)
                         if cat:
                             extra = dict(rate_headers)

@@ -201,7 +201,17 @@ module.exports = async function handler(req, res) {
     if (req.method === "POST" || req.method === "PUT") {
       res.setHeader("Cache-Control", "no-store");
     } else {
-      res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      // Avoid CDN mixing page=1 and page=2 of /series
+      const isList =
+        /(?:^|\/)series\/?$/.test(apiPath || "") ||
+        (apiPath || "") === "genres" ||
+        (apiPath || "") === "popular";
+      if (isList) {
+        res.setHeader("Cache-Control", "public, max-age=30, s-maxage=0, stale-while-revalidate=60");
+        res.setHeader("Vary", "Accept-Encoding");
+      } else {
+        res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+      }
     }
     res.setHeader("X-Content-Type-Options", "nosniff");
     return res.status(status).send(buf);
