@@ -1,8 +1,8 @@
-/* Lumen service worker — optimized shell + bounded image cache */
-const VERSION = "v6";
+/* Lumen service worker v7 — shell only; never cache API/JSON chapter data */
+const VERSION = "v7";
 const SHELL_CACHE = `lumen-shell-${VERSION}`;
 const IMG_CACHE = `lumen-img-${VERSION}`;
-const IMG_MAX = 72;
+const IMG_MAX = 48;
 
 const SHELL = [
   "/",
@@ -33,7 +33,11 @@ function isSameOrigin(url) {
 
 function isApiOrProxy(url) {
   const p = url.pathname;
-  return p.startsWith("/api/") || p === "/api" || p === "/img";
+  // Never cache JSON/API/chapter/pages/proxy — always network
+  if (p.startsWith("/api/") || p === "/api") return true;
+  if (p === "/img" || p.startsWith("/img?")) return true;
+  if (p.includes("/series/") && p.includes("/chapters")) return true;
+  return false;
 }
 
 function isStaticAsset(url) {
@@ -47,8 +51,11 @@ function isStaticAsset(url) {
 
 function isCacheableResponse(res) {
   if (!res || !res.ok) return false;
-  if (res.status === 206) return false; // partial
+  if (res.status === 206) return false;
   if (res.type !== "basic" && res.type !== "cors") return false;
+  const ct = (res.headers.get("Content-Type") || "").toLowerCase();
+  // Never put JSON into SW cache (stale chapters risk)
+  if (ct.includes("application/json")) return false;
   return true;
 }
 
@@ -57,41 +64,11 @@ async function trimCache(cacheName, maxEntries) {
   const keys = await cache.keys();
   if (keys.length <= maxEntries) return;
   const overflow = keys.length - maxEntries;
-  // keys() order is insertion order — drop oldest first
   for (let i = 0; i < overflow; i++) {
     await cache.delete(keys[i]);
   }
 }
 
-async function putLimited(cacheName, request, response, maxEntries) {
-  if (!isCacheableResponse(response)) return;
-  const cache = await caches.open(cacheName);
-  await cache.put(request, response.clone());
-  await trimCache(cacheName, maxEntries);
-}
-
-/** stale-while-revalidate */
-async function swr(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const network = fetch(request)
-    .then(async (res) => {
-      if (isCacheableResponse(res)) {
-        await cache.put(request, res.clone());
-      }
-      return res;
-    })
-    .catch(() => null);
-  if (cached) {
-    network.catch(() => {});
-    return cached;
-  }
-  const res = await network;
-  if (res) return res;
-  throw new Error("offline");
-}
-
-/** network-first with cache fallback */
 async function networkFirst(request, cacheName, fallbackUrl) {
   const cache = await caches.open(cacheName);
   try {
@@ -111,12 +88,10 @@ async function networkFirst(request, cacheName, fallbackUrl) {
   }
 }
 
-/** cache-first for immutable-ish static files */
 async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) {
-    // background revalidate
     fetch(request)
       .then(async (res) => {
         if (isCacheableResponse(res)) await cache.put(request, res.clone());
@@ -134,13 +109,7 @@ self.addEventListener("install", (event) => {
     caches
       .open(SHELL_CACHE)
       .then((cache) =>
-        Promise.all(
-          SHELL.map((url) =>
-            cache.add(url).catch(() => {
-              /* ignore individual shell miss */
-            })
-          )
-        )
+        Promise.all(SHELL.map((url) => cache.add(url).catch(() => {})))
       )
       .then(() => self.skipWaiting())
   );
@@ -172,27 +141,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Never intercept API / image proxy — always network
+  // API / img / chapter JSON — network only, no SW cache
   if (isApiOrProxy(url)) return;
 
-  // Cross-origin: ignore (CDN covers handled by page/proxy)
   if (!isSameOrigin(url)) return;
-
-  // Skip non-GET extensions / chrome extensions etc. already same-origin only
 
   const accept = req.headers.get("Accept") || "";
   const isNav =
     req.mode === "navigate" ||
     (req.destination === "document" && accept.includes("text/html"));
 
-  // HTML navigations — network first (fresh app shell)
   if (isNav) {
     event.respondWith(networkFirst(req, SHELL_CACHE, "/"));
     return;
   }
 
-  // Same-origin images (icons, optional local assets)
-  if (req.destination === "image" || /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(url.pathname)) {
+  // Local icons only (not /img proxy)
+  if (
+    (req.destination === "image" || /\.(png|jpe?g|webp|gif|svg|avif)$/i.test(url.pathname)) &&
+    url.pathname.startsWith("/assets/")
+  ) {
     event.respondWith(
       (async () => {
         const cache = await caches.open(IMG_CACHE);
@@ -206,7 +174,6 @@ self.addEventListener("fetch", (event) => {
           return res;
         } catch {
           if (cached) return cached;
-          // offline fallback: transparent 1x1 if nothing else
           return new Response("", { status: 503, statusText: "offline" });
         }
       })()
@@ -214,19 +181,16 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // CSS / JS / icons / manifest — cache first + background update
   if (isStaticAsset(url) || req.destination === "style" || req.destination === "script") {
     event.respondWith(cacheFirst(req, SHELL_CACHE));
     return;
   }
 
-  // Non-static: network only (no cache pollution)
   event.respondWith(
     fetch(req).catch(() => caches.match(req).then((c) => c || Response.error()))
   );
 });
 
-// Optional: allow page to ask SW to clear image cache
 self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data && data.type === "CLEAR_IMG_CACHE") {

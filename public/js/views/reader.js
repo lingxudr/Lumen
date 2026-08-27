@@ -1,4 +1,4 @@
-import { api, apiPrefetch, proxyImageUrl, checkImageStatus } from "../api.js";
+import { api, apiPrefetch, proxyImageUrl, checkImageStatus, friendlyError } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 
@@ -164,13 +164,19 @@ export function createReaderView(ctx) {
     const slug = ctx.state.series?.data?.slug || ctx.state.series?.slug;
     if (!slug) return;
     const { nums, pos } = chapterNavState(currentIndex);
-    if (pos < 0 || !nums.length) return;
-    for (const p of [pos - 1, pos + 1, pos - 2, pos + 2]) {
+    if (pos < 0 || !nums.length) {
+      // still warm chapter list
+      apiPrefetch(`series/${encodeURIComponent(slug)}/chapters`, {}, { ttl: 10 * 60_000, stale: 20 * 60_000 });
+      return;
+    }
+    // Prefer next (newer) then prev; keep ±2 for smooth nav
+    const order = [pos + 1, pos - 1, pos + 2, pos - 2];
+    for (const p of order) {
       if (p < 0 || p >= nums.length) continue;
       apiPrefetch(
         `series/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(nums[p])}`,
         {},
-        { ttl: 15 * 60_000, stale: 30 * 60_000 }
+        { ttl: 15 * 60_000, stale: 45 * 60_000 }
       );
     }
   }
@@ -184,7 +190,7 @@ export function createReaderView(ctx) {
     const max = el.scrollHeight - el.clientHeight;
     if (max <= 0) return;
     const ratio = window.scrollY / max;
-    if (ratio >= 0.4) {
+    if (ratio >= 0.25) {
       _earlyPrefetchDone = true;
       prefetchNeighborChapters(ctx.state.chapterIndex);
     }
@@ -238,7 +244,7 @@ export function createReaderView(ctx) {
       updateProgress();
     } catch (err) {
       console.error(err);
-      toast("Chapter gagal dimuat");
+      toast(friendlyError(err.message || err) || "Chapter gagal dimuat");
       showView("reader");
       const box = document.querySelector("#reader-pages");
       if (box) {

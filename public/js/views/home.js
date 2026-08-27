@@ -1,6 +1,6 @@
 import { Config } from "../config.js";
 import { navigate } from "../router.js";
-import { api, apiPeek, clearApiCache } from "../api.js";
+import { api, apiPeek, clearApiCache, friendlyError } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { proxyImageUrl } from "../api.js";
@@ -285,11 +285,13 @@ export function createHomeView(ctx) {
       setTimeout(() => setDataBadge(null), 2500);
     } catch (err) {
       console.error(err);
-      const msg = String(err.message || err);
+      const raw = String(err.message || err);
+      const msg = friendlyError(raw);
+      const isEmpty = /kosong|empty|tidak ada data/i.test(raw);
       $("#list-status").textContent = msg;
       setDataBadge(null);
       renderState($("#series-list"), {
-        title: "Gagal memuat daftar",
+        title: isEmpty ? "Belum ada data" : "Gagal memuat daftar",
         detail: msg,
         retryLabel: "Coba lagi",
         onRetry: () => loadList({ force: true }),

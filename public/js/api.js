@@ -32,27 +32,32 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function friendlyError(raw) {
-  const s = String(raw || "");
-  if (/upstream_unavailable|no available server|503/i.test(s)) {
-    return "Server sumber sedang down (503). Coba lagi beberapa menit.";
+export function friendlyError(err) {
+  const s = String(err || "");
+  if (/Failed to fetch|NetworkError|Load failed|network/i.test(s)) {
+    return "Tidak ada koneksi atau server tidak merespons. Coba lagi.";
   }
-  if (/Application failed to respond|502|upstream/i.test(s)) {
-    return "Server sibuk atau sedang restart. Coba lagi sebentar.";
+  if (/timeout|AbortError|aborted/i.test(s)) {
+    return "Koneksi timeout — server mungkin sedang bangun. Coba lagi.";
   }
-  if (/Failed to fetch|NetworkError|Load failed/i.test(s)) {
-    return "Server sedang bangun atau jaringan terputus. Tunggu ~10 detik lalu coba lagi.";
+  if (/503|upstream_unavailable|unavailable/i.test(s)) {
+    return "Sumber data sedang sibuk. Coba beberapa detik lagi.";
   }
-  if (/Application failed to respond|502 Bad Gateway|504/i.test(s)) {
-    return "Server baru saja aktif kembali. Muat ulang sebentar lagi.";
+  if (/429|rate_limited/i.test(s)) {
+    return "Terlalu banyak permintaan. Tunggu sebentar.";
   }
-  if (/rate_limited|Terlalu banyak/i.test(s)) {
-    return "Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.";
+  if (/404|not found|tidak ditemukan/i.test(s)) {
+    return "Data tidak ditemukan.";
   }
-  if (/timeout|AbortError/i.test(s)) {
-    return "Koneksi timeout. Coba lagi.";
+  if (/kosong|empty|no data|tidak ada/i.test(s)) {
+    return "Tidak ada data untuk ditampilkan.";
   }
-  return s || "Terjadi kesalahan. Coba lagi.";
+  if (/Chapter gagal|gagal memuat chapter/i.test(s)) {
+    return "Chapter gagal dimuat. Coba lagi atau pilih chapter lain.";
+  }
+  // strip technical noise
+  if (s.length > 120) return s.slice(0, 117) + "…";
+  return s || "Terjadi kesalahan.";
 }
 
 async function fetchJsonOnce(url, signal) {
