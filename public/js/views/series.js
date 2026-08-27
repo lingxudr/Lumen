@@ -1,5 +1,7 @@
 import { api } from "../api.js";
 import { $, esc, escAttr, relTime, isNew, chapterIndex } from "../utils.js";
+import { setMeta, setJsonLd, seriesJsonLd } from "../seo.js";
+import { proxyImageUrl } from "../api.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
 import { proxyImageUrl } from "../api.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
@@ -197,6 +199,32 @@ export function createSeriesView(ctx) {
       ctx.state.series = series;
       ctx.state.chapters = chapters;
       showView("series");
+      try {
+        const d = series.data || series;
+        const slug = d.slug || series.slug || id;
+        const title = d.title || slug;
+        const cover = d.coverImage || d.cover || "";
+        const syn = (d.synopsis || d.description || "").replace(/<[^>]+>/g, "").slice(0, 160);
+        const genres = Array.isArray(d.genres)
+          ? d.genres.map((g) => (typeof g === "string" ? g : g?.name)).filter(Boolean)
+          : [];
+        setMeta({
+          title: `${title} — Lumen`,
+          description: syn || `Baca ${title} online di Lumen`,
+          image: cover ? proxyImageUrl(cover, { webp: true, w: 600 }) : undefined,
+          url: `/manga/${encodeURIComponent(slug)}`,
+          type: "website",
+        });
+        setJsonLd(
+          seriesJsonLd({
+            title,
+            slug,
+            description: syn,
+            image: cover,
+            genres,
+          })
+        );
+      } catch (_) {}
       render();
     } catch (err) {
       console.error(err);

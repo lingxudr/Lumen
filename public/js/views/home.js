@@ -1,5 +1,6 @@
 import { Config } from "../config.js";
 import { navigate } from "../router.js";
+import { setMeta, clearJsonLd } from "../seo.js";
 import { api, apiPeek, clearApiCache, friendlyError } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
@@ -374,6 +375,23 @@ export function createHomeView(ctx) {
     try {
       navigate({ name: "home", tab: name, query: "" }, { replace: false });
     } catch (_) {}
+    try {
+      const metaMap = {
+        newest: { t: "Terbaru — Lumen", d: "Update chapter komik terbaru setiap hari." },
+        new_series: { t: "Series Baru — Lumen", d: "Series komik baru di Lumen." },
+        completed: { t: "Selesai — Lumen", d: "Komik completed / tamat." },
+        browse: { t: "Browse — Lumen", d: "Jelajahi katalog komik dan genre." },
+        hot: { t: "Populer — Lumen", d: "Komik populer di Lumen." },
+        project: { t: "Project — Lumen", d: "Series project di Lumen." },
+      };
+      const m = metaMap[name] || metaMap.newest;
+      clearJsonLd();
+      setMeta({
+        title: m.t,
+        description: m.d,
+        url: typeof location !== "undefined" ? location.pathname + location.search : "/latest",
+      });
+    } catch (_) {}
     showView("home");
     loadList();
   }
@@ -402,6 +420,14 @@ export function createHomeView(ctx) {
     $("#list-title").textContent = `Hasil untuk "${ctx.state.query}"`;
     try {
       navigate({ name: "home", tab: "newest", query: ctx.state.query }, { replace: false });
+    } catch (_) {}
+    try {
+      clearJsonLd();
+      setMeta({
+        title: `Cari "${ctx.state.query}" — Lumen`,
+        description: `Hasil pencarian komik untuk ${ctx.state.query}`,
+        url: `/search?q=${encodeURIComponent(ctx.state.query)}`,
+      });
     } catch (_) {}
     showView("home");
     loadList();

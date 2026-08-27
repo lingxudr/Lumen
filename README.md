@@ -40,6 +40,14 @@ Browser (Vercel)
 ```
 
 **Single provider:** Voratoon only.  
+Do not re-enable multi-provider page fallback without strict title/ID matching (wrong chapter images risk).
+
+## SEO
+
+- `sitemap.xml` / `robots.txt` on `www.v1lumen.my.id`
+- Google verification file in `/public`
+- SPA `setMeta` + JSON-LD `ComicSeries` on manga detail
+- Shareable paths: `/latest`, `/popular`, `/search?q=`, `/manga/:slug`  
 Legacy KomikCast / Komiku / Sanka / hybrid stacks were removed.
 
 ---

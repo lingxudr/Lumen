@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
 
+# App shell & API are fine to crawl listing pages
 Sitemap: https://www.v1lumen.my.id/sitemap.xml
