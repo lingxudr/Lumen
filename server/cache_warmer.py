@@ -83,7 +83,7 @@ def warm_once(
     """
     fetch_json(sub_path, query_dict) -> response body bytes or None
     """
-    top_n = top_n if top_n is not None else _env_int("CACHE_WARM_TOP", 12)
+    top_n = top_n if top_n is not None else _env_int("CACHE_WARM_TOP", 16)
     stats: dict[str, Any] = {
         "list": False,
         "series": 0,
@@ -101,7 +101,7 @@ def warm_once(
     def put(sub: str, body: bytes, params: dict | None = None) -> None:
         """Store under same key shape as app.py: GET {API_BASE}/{sub}?{query}"""
         q = urlencode(params or {}, doseq=True)
-        api_base = (os.environ.get("API_BASE") or "https://be.komikcast.cc").rstrip("/")
+        api_base = (os.environ.get("API_BASE") or "https://api.voratoon.com").rstrip("/")
         key = f"GET {api_base}/{sub}" + (f"?{q}" if q else "")
         cache_set(key, body, sub, soft=None, hard=None)
         # without query variant for detail
@@ -109,13 +109,35 @@ def warm_once(
             key_plain = f"GET {api_base}/{sub}"
             cache_set(key_plain, body, sub, soft=None, hard=None)
 
-    # 1) Latest list
+    # 1) Latest list (newest feed — matches homepage)
     try:
-        params = {"page": "1", "take": "30", "sort": "updatedAt"}
+        params = {
+            "page": "1",
+            "take": "30",
+            "mode": "newest",
+            "sort": "updatedAt",
+            "sortOrder": "desc",
+            "takeChapter": "3",
+        }
         body = fetch_json("series", params)
         if body:
             put("series", body, params)
             stats["list"] = True
+            # page 2 newest (pagination UX)
+            try:
+                p2 = dict(params)
+                p2["page"] = "2"
+                b2 = fetch_json("series", p2)
+                if b2:
+                    put("series", b2, p2)
+            except Exception:
+                pass
+            try:
+                bpop = fetch_json("popular", {"take": "20", "page": "1"})
+                if bpop:
+                    put("popular", bpop, {"take": "20", "page": "1"})
+            except Exception:
+                pass
             # popular normalized
             try:
                 if fetch_json("popular", {"take": "20", "page": "1"}):
@@ -226,8 +248,8 @@ def start_background_warmer(
         return
 
     fetch = fetch_json or _default_fetch_json
-    delay = _env_int("CACHE_WARM_DELAY", 1)
-    interval = _env_int("CACHE_WARM_INTERVAL", 300)
+    delay = _env_int("CACHE_WARM_DELAY", 2)
+    interval = _env_int("CACHE_WARM_INTERVAL", 240)
 
     def loop() -> None:
         time.sleep(max(0, delay))

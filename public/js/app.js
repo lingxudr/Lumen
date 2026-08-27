@@ -189,17 +189,38 @@ function reportVisit() {
 }
 
 function wakeBackend() {
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
-    fetch((window.LUMEN_API_BASE || "/api") + "/ping", {
-      signal: ctrl.signal,
-      cache: "no-store",
-      credentials: "omit",
-    }).catch(() => {}).finally(() => clearTimeout(t));
-  } catch (_) {}
+  const base = window.LUMEN_API_BASE || "/api";
+  const ping = (path) => {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 12000);
+      fetch(base + path, {
+        signal: ctrl.signal,
+        cache: "no-store",
+        credentials: "omit",
+      })
+        .catch(() => {})
+        .finally(() => clearTimeout(t));
+    } catch (_) {}
+  };
+  // Multi-hit: ping + health + warm newest list (anti cold-start Railway)
+  ping("/ping");
+  ping("/health");
+  ping("/series?take=12&page=1&mode=newest&takeChapter=2");
 }
-wakeBackend();
+
+let _wakeTimer = null;
+function scheduleWakeKeepalive() {
+  wakeBackend();
+  if (_wakeTimer) clearInterval(_wakeTimer);
+  // Keep Railway warm ~every 4 minutes while tab open
+  _wakeTimer = setInterval(wakeBackend, 4 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") wakeBackend();
+  });
+}
+
+scheduleWakeKeepalive();
 reportVisit();
 startPresenceHeartbeat();
 

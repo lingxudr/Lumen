@@ -252,8 +252,12 @@ export function createHomeView(ctx) {
 
     const empty = !box || !box.children.length;
     if (empty) loading(true);
-    showSkeleton(8);
+    showSkeleton(10);
     $("#list-status").textContent = "Memuat…";
+    const t0 = Date.now();
+    let slowTimer = setTimeout(() => {
+      toast("Server sedang bangun… tunggu sebentar");
+    }, 3500);
     try {
       let data;
       try {
@@ -292,6 +296,10 @@ export function createHomeView(ctx) {
       });
       toast(msg);
     } finally {
+      try { clearTimeout(slowTimer); } catch (_) {}
+      if (Date.now() - t0 > 8000) {
+        /* cold start recovery tip once */
+      }
       loading(false);
     }
   }
@@ -340,7 +348,7 @@ export function createHomeView(ctx) {
           <div class="badges">${badges.join("")}</div>
           <div class="card-chapters">${chHtml}</div>
         </div>`;
-      setImg(card.querySelector("img"), d.coverImage || d.cover || "", { w: 360 });
+      setImg(card.querySelector("img"), d.coverImage || d.cover || "", { w: 360, cover: true });
       box.appendChild(card);
     });
   }

@@ -73,7 +73,7 @@ export function setImg(el, url, opts = {}) {
   el.decoding = "async";
   // Cover & UI images: proxy + WebP (mobile-first ~360px)
   const w = opts.w != null ? opts.w : 360;
-  el.src = proxyImageUrl(url, { webp: true, w });
+  el.src = proxyImageUrl(url, { webp: true, w, cover: !!(opts && opts.cover) });
   el.onerror = () => {
     if (el.dataset.proxied === "2") {
       el.style.opacity = "0.25";

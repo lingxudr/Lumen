@@ -213,18 +213,22 @@ export function proxyImageUrl(url, opts = {}) {
   if (!url) return "";
   const qs = new URLSearchParams();
   qs.set("u", url);
-  // Request WebP for covers/UI (server falls back only if encode fails)
+  // P0: always prefer WebP unless caller opts.webp === false
   if (opts.webp !== false) qs.set("fmt", "webp");
   let w = opts.w;
   if (w == null && typeof window !== "undefined") {
-    // Auto width for mobile reader: save data on narrow screens
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const vw = window.innerWidth || 400;
-    if (vw > 0 && vw <= 480) w = Math.round(vw * dpr);
-    else if (vw <= 900) w = Math.round(Math.min(900, vw) * dpr);
+    // Cover grid ~2 columns on mobile → ~half viewport
+    if (opts.cover) {
+      w = Math.round(Math.min(480, Math.max(180, (vw / 2) * dpr)));
+    } else if (vw > 0 && vw <= 480) {
+      w = Math.round(vw * dpr);
+    } else if (vw <= 900) {
+      w = Math.round(Math.min(900, vw) * dpr);
+    }
   }
-  if (w) qs.set("w", String(Math.max(240, Math.min(1600, Number(w) || 0))));
-  // cache-bust key helper for already-webp sources (still go through proxy for hotlink)
+  if (w) qs.set("w", String(Math.max(160, Math.min(1600, Number(w) || 0))));
   if (isAlreadyWebp(url)) qs.set("src", "webp");
   return `${Config.imgProxy}?${qs}`;
 }
