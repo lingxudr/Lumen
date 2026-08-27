@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Lumen Reader — pure stdlib HTTP server + API proxy."""
+LUMEN_BUILD = "2026-08-27-no-shinigami"
 import gzip
 import hashlib
 import json
@@ -207,6 +208,20 @@ def _warmer_status():
 def _ttl_for(sub_path):
     soft, hard = _policy_ttl(sub_path)
     return hard  # backward compat: hard TTL
+
+
+
+def _is_poisoned_provider_body(body) -> bool:
+    """Reject cached/legacy Shinigami chapter payloads (wrong images)."""
+    if not body:
+        return False
+    try:
+        s = body[:4000].decode("utf-8", errors="ignore").lower()
+    except Exception:
+        return False
+    if "shinigami" in s or "shngm.id" in s or "shinigami_pages" in s:
+        return True
+    return False
 
 
 def cache_get(key, allow_stale=True):
@@ -844,6 +859,7 @@ class Handler(BaseHTTPRequestHandler):
                     {
                         "ok": True,
                         "ready": True,
+                        "build": LUMEN_BUILD,
                         "api_base": API_BASE,
                         "cache": {**cache_stats(), "img": img_cache_stats()},
                         "cache_warmer": _warmer_status(),
@@ -1091,12 +1107,16 @@ class Handler(BaseHTTPRequestHandler):
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body and sub0 == "series":
                         sanka_body = sanitize_series_list_bytes(sanka_body)
+                    if sanka_body and _is_poisoned_provider_body(sanka_body):
+                        print("reject poisoned provider body", sub0, flush=True)
+                        sanka_body = None
                     if sanka_body:
                         cache_set(cache_key, sanka_body, ttl, sub_path=sub)
                         extra = dict(rate_headers)
                         extra["X-Lumen-Cache"] = "VORATOON"
                         extra["X-Lumen-DB"] = "MISS"
                         extra["X-Lumen-Cache-TTL"] = str(ttl)
+                        extra["X-Lumen-Build"] = LUMEN_BUILD
                         extra["Cache-Control"] = "public, max-age=%d" % min(120, ttl)
                         return self.send_bytes(
                             200, sanka_body, "application/json; charset=utf-8", extra_headers=extra
@@ -1105,17 +1125,22 @@ class Handler(BaseHTTPRequestHandler):
                 hit = cache_get(cache_key, allow_stale=True)
                 if hit is not None:
                     body, age_left, used_ttl, meta = hit
-                    extra = dict(rate_headers)
-                    extra["X-Lumen-Cache"] = "STALE" if meta.get("stale") else "HIT"
-                    extra["X-Lumen-Cache-TTL"] = str(used_ttl)
-                    extra["X-Lumen-Cache-Gen"] = str(meta.get("gen") or "")
-                    extra["Cache-Control"] = "public, max-age=%d" % min(age_left, used_ttl or age_left)
-                    return self.send_bytes(
-                        200,
-                        body,
-                        "application/json; charset=utf-8",
-                        extra_headers=extra,
-                    )
+                    if _is_poisoned_provider_body(body):
+                        print("drop poisoned cache", (cache_key or "")[:120], flush=True)
+                        hit = None
+                    else:
+                        extra = dict(rate_headers)
+                        extra["X-Lumen-Cache"] = "STALE" if meta.get("stale") else "HIT"
+                        extra["X-Lumen-Cache-TTL"] = str(used_ttl)
+                        extra["X-Lumen-Cache-Gen"] = str(meta.get("gen") or "")
+                        extra["X-Lumen-Build"] = LUMEN_BUILD
+                        extra["Cache-Control"] = "public, max-age=%d" % min(age_left, used_ttl or age_left)
+                        return self.send_bytes(
+                            200,
+                            body,
+                            "application/json; charset=utf-8",
+                            extra_headers=extra,
+                        )
 
                 try:
                     # retry: api.voratoon.com sering 503 sebentar
@@ -1457,6 +1482,11 @@ def main():
         nonlocal db_path
         try:
             db_path = lumen_db.init_db()
+            try:
+                cache_bump_generation()
+                print("[boot] cache generation bumped (purge stale)", flush=True)
+            except Exception as _be:
+                print("[boot] cache bump skip:", _be, flush=True)
             print("[boot] db ready:", db_path, flush=True)
         except Exception as e:
             print("db init failed:", e, flush=True)
