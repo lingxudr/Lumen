@@ -148,12 +148,69 @@ def _sg_resolve_manga_id(slug_or_title: str) -> str | None:
     return None
 
 
+
+def _extract_images(payload: dict | None) -> list:
+    """Pull image URL list from Voratoon/Lumen shaped chapter payloads."""
+    if not isinstance(payload, dict):
+        return []
+    candidates = []
+    d = payload.get("data")
+    if isinstance(d, list):
+        return [u for u in d if isinstance(u, str) and u.startswith("http")]
+    if isinstance(d, dict):
+        candidates.append(d.get("images") or d.get("pages"))
+        inner = d.get("data")
+        if isinstance(inner, dict):
+            candidates.append(inner.get("images") or inner.get("pages"))
+    candidates.append(payload.get("images"))
+    for c in candidates:
+        if isinstance(c, list) and c:
+            out = [u for u in c if isinstance(u, str) and u.startswith("http")]
+            if out:
+                return out
+        if isinstance(c, dict) and c:
+            def sk(k):
+                try:
+                    return int(k)
+                except Exception:
+                    return str(k)
+            out = [c[k] for k in sorted(c.keys(), key=sk) if isinstance(c.get(k), str) and str(c[k]).startswith("http")]
+            if out:
+                return out
+    return []
+
+
+def _ensure_page_images(payload: dict, imgs: list) -> dict:
+    """Normalize so reader always finds images under data.images and data.data.images."""
+    if not isinstance(payload, dict):
+        return payload
+    if not imgs:
+        imgs = _extract_images(payload)
+    d = payload.get("data")
+    if not isinstance(d, dict):
+        payload["data"] = {"images": imgs, "data": {"images": imgs}}
+        return payload
+    d["images"] = imgs or d.get("images") or []
+    inner = d.get("data")
+    if isinstance(inner, dict):
+        inner["images"] = imgs or inner.get("images") or []
+    else:
+        d["data"] = {"images": imgs, "index": d.get("index") or d.get("chapterIndex"), "title": d.get("title")}
+    payload["data"] = d
+    meta = payload.setdefault("meta", {})
+    if isinstance(meta, dict):
+        meta["total_images"] = len(imgs)
+        meta["provider"] = meta.get("provider") or "voratoon"
+        meta.pop("fallback", None)
+    return payload
+
+
 def provider_fallback(sub: str, qs: dict | None = None) -> bytes | None:
     """
     Resolve API sub-path:
       1) Voratoon (primary)
-      2) Shinigami (fallback)
-      3) caller may use sqlite_fallback
+      2) Shinigami only for list/detail if Voratoon empty (NOT for pages — mismatch risk)
+      3) sqlite_fallback last
     """
     qs = qs or {}
     sub0 = (sub or "").split("?")[0].strip("/")
@@ -365,27 +422,26 @@ def provider_fallback(sub: str, qs: dict | None = None) -> bytes | None:
         if vt is not None:
             try:
                 payload = vt.get_pages(slug, chapter)
-                imgs = None
-                if isinstance(payload, dict):
-                    d = payload.get("data")
-                    if isinstance(d, dict):
-                        imgs = d.get("images") or d.get("pages")
-                    elif isinstance(d, list):
-                        imgs = d
-                if imgs:
+                imgs = _extract_images(payload)
+                # Also accept meta.total_images > 0
+                meta = (payload or {}).get("meta") if isinstance(payload, dict) else {}
+                n_meta = 0
+                try:
+                    n_meta = int((meta or {}).get("total_images") or 0)
+                except Exception:
+                    n_meta = 0
+                if imgs or n_meta > 0:
+                    # Ensure client always sees images at data.data.images AND data.images
+                    payload = _ensure_page_images(payload, imgs)
                     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                print(
+                    f"voratoon pages empty slug={slug} ch={chapter}",
+                    flush=True,
+                )
             except Exception as e:
                 print("voratoon pages error:", e, flush=True)
-        if sg is not None:
-            try:
-                mid = _sg_resolve_manga_id(slug)
-                if mid and chapter is not None:
-                    payload = _sg_pages_by_number(mid, str(chapter))
-                    if payload:
-                        payload.setdefault("meta", {})["fallback"] = "shinigami"
-                        return json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            except Exception as e:
-                print("shinigami pages error:", e, flush=True)
+        # Shinigami pages fallback DISABLED — title/ch number match often maps wrong manga
+        # (same poster from Voratoon, images from another series on Shinigami).
         return sqlite_fallback(sub)
 
     return None
