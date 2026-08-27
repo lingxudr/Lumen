@@ -37,7 +37,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _MEM_LOCK = threading.Lock()
 _MEM: dict[str, tuple[float, Any]] = {}
-_MEM_MAX = 128
+_MEM_MAX = int(os.environ.get("VORATOON_MEM_MAX", "256"))
+
+# Shared pool — avoid creating ThreadPoolExecutor per request
+_POOL = ThreadPoolExecutor(max_workers=int(os.environ.get("VORATOON_WORKERS", "4")))
+
+# Keep-alive opener (fewer TCP handshakes to api.voratoon.com / v1.voratoon.com)
+_OPENER = urllib.request.build_opener(
+    urllib.request.HTTPHandler(),
+    urllib.request.HTTPSHandler(),
+)
 
 # Precompiled RSC / chapter patterns
 _RE_RSC_PUSH = re.compile(r'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
@@ -94,11 +103,11 @@ def _get_html(url: str, *, ttl: float = 90.0) -> str:
             "Accept": "text/html,application/xhtml+xml",
             "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
             "Accept-Encoding": "gzip",
-            "Connection": "close",
+            "Connection": "keep-alive",
         },
         method="GET",
     )
-    with urllib.request.urlopen(req, timeout=TIMEOUT_HTML) as resp:
+    with _OPENER.open(req, timeout=TIMEOUT_HTML) as resp:
         text = _read_body(resp).decode("utf-8", errors="replace")
     _mem_set(ck, text, ttl)
     return text
@@ -253,13 +262,17 @@ def fetch_updates_html(page: int = 1) -> dict[str, Any]:
     30 item / halaman, ~345 halaman.
     """
     page = max(1, int(page or 1))
+    ck = f"updates_payload:{page}"
+    hit = _mem_get(ck)
+    if isinstance(hit, dict) and hit.get("data") is not None:
+        return hit
     url = f"{SITE_BASE}/updates" if page == 1 else f"{SITE_BASE}/updates?page={page}"
-    html = _get_html(url)
+    html = _get_html(url, ttl=75.0)
     data, meta = _extract_rsc_initial_data(html)
     items = data if isinstance(data, list) else []
     out = _normalize_feed_items(items, strip_images=True)
     last = meta.get("lastPage") or 345
-    return {
+    result = {
         "status": 200,
         "message": "Voratoon updates (site RSC)",
         "data": out,
@@ -274,6 +287,8 @@ def fetch_updates_html(page: int = 1) -> dict[str, Any]:
             "per_page": len(out),
         },
     }
+    _mem_set(ck, result, float(os.environ.get("VORATOON_UPDATES_TTL", "60")))
+    return result
 
 
 def fetch_home_rsc() -> dict[str, Any]:
@@ -633,13 +648,13 @@ def _get(path: str, params: dict | None = None, *, ttl: float = 45.0, timeout: f
             "Accept": "application/json",
             "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
             "Accept-Encoding": "gzip",
-            "Connection": "close",
+            "Connection": "keep-alive",
         },
         method="GET",
     )
     to = timeout if timeout is not None else TIMEOUT_LIST
     try:
-        with urllib.request.urlopen(req, timeout=to) as resp:
+        with _OPENER.open(req, timeout=to) as resp:
             body = _read_body(resp)
             data = json.loads(body.decode("utf-8", errors="replace"))
             if ttl > 0 and isinstance(data, dict):
@@ -1014,16 +1029,15 @@ def get_series_list(
     else:
         # Parallel fetch page 1..N then merge in order
         by_page: dict[int, list] = {}
-        with ThreadPoolExecutor(max_workers=min(3, pages_to_fetch)) as pool:
-            futs = [pool.submit(_fetch_page, pg) for pg in range(1, pages_to_fetch + 1)]
-            for fut in as_completed(futs):
-                try:
-                    pg, batch, m = fut.result()
-                    by_page[pg] = batch
-                    if pg == 1:
-                        meta = m or meta
-                except Exception as e:
-                    print("voratoon parallel page fail:", e, flush=True)
+        futs = [_POOL.submit(_fetch_page, pg) for pg in range(1, pages_to_fetch + 1)]
+        for fut in as_completed(futs):
+            try:
+                pg, batch, m = fut.result()
+                by_page[pg] = batch
+                if pg == 1:
+                    meta = m or meta
+            except Exception as e:
+                print("voratoon parallel page fail:", e, flush=True)
         for pg in sorted(by_page.keys()):
             raw_items.extend(by_page[pg])
 
@@ -1196,7 +1210,11 @@ def get_series_detail(slug: str) -> dict[str, Any] | None:
 
 def get_chapters(slug: str) -> dict[str, Any]:
     slug = (slug or "").strip()
-    data = _get(f"/series/{urllib.parse.quote(slug)}/chapters")
+    data = _get(
+        f"/series/{urllib.parse.quote(slug)}/chapters",
+        ttl=float(os.environ.get("VORATOON_CHAPTERS_TTL", "120")),
+        timeout=TIMEOUT_LIST,
+    )
     rows = [
         _normalize_chapter(ch, strip_images=True)
         for ch in (data.get("data") or [])
@@ -1242,8 +1260,11 @@ def _images_from_payload(payload: dict) -> list[str]:
 def get_pages(slug: str, chapter: str | int) -> dict[str, Any]:
     slug = (slug or "").strip()
     ref = str(chapter)
+    # Chapter pages change rarely — cache longer (5 min)
     data = _get(
-        f"/series/{urllib.parse.quote(slug)}/chapters/{urllib.parse.quote(ref)}"
+        f"/series/{urllib.parse.quote(slug)}/chapters/{urllib.parse.quote(ref)}",
+        ttl=float(os.environ.get("VORATOON_PAGES_TTL", "300")),
+        timeout=float(os.environ.get("VORATOON_TIMEOUT_PAGES", "10")),
     )
     payload = data.get("data") or {}
     if not isinstance(payload, dict):
