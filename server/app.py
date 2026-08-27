@@ -1107,6 +1107,18 @@ class Handler(BaseHTTPRequestHandler):
                     sanka_body = _sanka_fallback_for_sub(sub, qs)
                     if sanka_body and sub0 == "series":
                         sanka_body = sanitize_series_list_bytes(sanka_body)
+                        # P0: never serve tiny newest feed (RSC partial ~6 items)
+                        try:
+                            _mode = ((qs.get("mode") or [""])[0] or "").lower()
+                            _page = int((qs.get("page") or ["1"])[0])
+                            if (not _mode or _mode in ("newest", "latest")) and _page <= 1:
+                                _obj = json.loads(sanka_body)
+                                _n = len(_obj.get("data") or [])
+                                if _n and _n < 12:
+                                    print(f"reject short newest list n={_n}", flush=True)
+                                    sanka_body = None
+                        except Exception:
+                            pass
                     if sanka_body and _is_poisoned_provider_body(sanka_body):
                         print("reject poisoned provider body", sub0, flush=True)
                         sanka_body = None

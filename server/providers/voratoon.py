@@ -164,29 +164,66 @@ def _balanced_json(s: str, start: int):
 def _extract_rsc_initial_data(html: str):
     """
     Return initialData from RSC HTML.
-    - /updates → list[SeriesItem]
-    - / → dict with banner, updates, newSeries, completed, popular, ...
+    Prefer the frame whose initialData is richest (full /updates list ~30 items).
     """
-    s = _decode_biggest_rsc_frame(html)
-    if not s:
-        return None, {"error": "no_rsc_payload"}
     key = '"initialData":'
-    idx = s.find(key)
-    if idx < 0:
+    best_data = None
+    best_meta: dict = {}
+    best_score = -1
+
+    frames: list[str] = []
+    big = _decode_biggest_rsc_frame(html)
+    if big:
+        frames.append(big)
+    for m in _RE_RSC_PUSH.finditer(html or ""):
+        try:
+            fr = json.loads(m.group(1))
+            if isinstance(fr, str):
+                frames.append(fr)
+        except Exception:
+            continue
+
+    for s in frames:
+        if not isinstance(s, str):
+            continue
+        idx = s.find(key)
+        if idx < 0:
+            continue
+        pos = idx + len(key)
+        while pos < len(s) and s[pos] in " \t\n\r":
+            pos += 1
+        # fix: use actual whitespace set
+        while pos < len(s) and s[pos].isspace():
+            pos += 1
+        data = _balanced_json(s, pos)
+        if data is None:
+            continue
+        if isinstance(data, list):
+            score = len(data)
+        elif isinstance(data, dict):
+            score = 0
+            for k in ("updates", "newSeries", "completed", "popular", "banner"):
+                if isinstance(data.get(k), list):
+                    score += len(data[k])
+            score = max(score, 1)
+        else:
+            continue
+        if score > best_score:
+            best_score = score
+            best_data = data
+            meta = {}
+            lm = _RE_LAST_PAGE.search(s)
+            if lm:
+                meta["lastPage"] = int(lm.group(1))
+            pm = _RE_PAGE.search(s)
+            if pm:
+                meta["page"] = int(pm.group(1))
+            best_meta = meta
+
+    if best_data is None:
         return None, {"error": "no_initialData"}
-    # value starts at first { or [ after key
-    pos = idx + len(key)
-    while pos < len(s) and s[pos] in " \t\n\r":
-        pos += 1
-    data = _balanced_json(s, pos)
-    meta: dict = {}
-    m = _RE_LAST_PAGE.search(s)
-    if m:
-        meta["lastPage"] = int(m.group(1))
-    m = _RE_PAGE.search(s)
-    if m:
-        meta["page"] = int(m.group(1))
-    return data, meta
+    return best_data, best_meta
+
 
 
 def _orm_to_series_item(raw: dict) -> dict | None:
@@ -264,30 +301,61 @@ def fetch_updates_html(page: int = 1) -> dict[str, Any]:
     page = max(1, int(page or 1))
     ck = f"updates_payload:{page}"
     hit = _mem_get(ck)
-    if isinstance(hit, dict) and hit.get("data") is not None:
+    if isinstance(hit, dict) and isinstance(hit.get("data"), list) and len(hit["data"]) >= 15:
         return hit
     url = f"{SITE_BASE}/updates" if page == 1 else f"{SITE_BASE}/updates?page={page}"
     html = _get_html(url, ttl=75.0)
     data, meta = _extract_rsc_initial_data(html)
     items = data if isinstance(data, list) else []
     out = _normalize_feed_items(items, strip_images=True)
+    # Guard: home "updates" snippet is ~6 items; real /updates page is ~30
+    if len(out) < 15:
+        print(f"updates RSC short n={len(out)} page={page} — fallback API", flush=True)
+        try:
+            api = _get(
+                "/series",
+                {
+                    "take": 30,
+                    "page": page,
+                    "sort": "updatedAt",
+                    "sortOrder": "desc",
+                    "takeChapter": 3,
+                    "includeMeta": 1,
+                },
+                ttl=40,
+                timeout=TIMEOUT_LIST,
+            )
+            api_items = _normalize_feed_items(api.get("data") or [], strip_images=True)
+            if len(api_items) > len(out):
+                out = api_items
+                meta = api.get("meta") or meta
+                src = "voratoon_api_series"
+            else:
+                src = "voratoon_updates_html_short"
+        except Exception as e:
+            print("updates API fallback fail:", e, flush=True)
+            src = "voratoon_updates_html_short"
+    else:
+        src = "voratoon_updates_html"
     last = meta.get("lastPage") or 345
     result = {
         "status": 200,
-        "message": "Voratoon updates (site RSC)",
+        "message": "Voratoon updates (site RSC)" if src.startswith("voratoon_updates") else "Voratoon series API",
         "data": out,
         "meta": {
-            "source": "voratoon_updates_html",
+            "source": src,
             "page": page,
             "lastPage": last,
-            "total": last * 30,
+            "total": meta.get("total") or last * 30,
             "take": 30,
             "mode": "newest",
-            "upstream": SITE_BASE,
+            "upstream": SITE_BASE if "html" in src else BASE,
             "per_page": len(out),
         },
     }
-    _mem_set(ck, result, float(os.environ.get("VORATOON_UPDATES_TTL", "60")))
+    # Only cache healthy page-size lists
+    if len(out) >= 15:
+        _mem_set(ck, result, float(os.environ.get("VORATOON_UPDATES_TTL", "60")))
     return result
 
 
