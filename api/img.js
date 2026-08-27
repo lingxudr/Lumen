@@ -10,7 +10,7 @@ const UA =
   "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36";
 
 const UPSTREAM =
-  process.env.LUMEN_UPSTREAM || "https://web-production-7769e.up.railway.app";
+  process.env.LUMEN_UPSTREAM || "https://lumen-production-d82a.up.railway.app";
 
 const ALLOWED = [
   "imgkc1.my.id",

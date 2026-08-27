@@ -1,5 +1,5 @@
 /** App config — lokal vs produksi */
-const DEFAULT_PROXY = "https://web-production-7769e.up.railway.app";
+const DEFAULT_PROXY = "https://lumen-production-d82a.up.railway.app";
 
 function detectEndpoints() {
   const host = typeof location !== "undefined" ? location.hostname : "";

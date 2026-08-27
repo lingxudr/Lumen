@@ -2,8 +2,8 @@
  * Edge proxy → Lumen Railway / Voratoon upstream.
  * Anti-SSRF: path relative saja, tidak boleh URL absolut / host asing.
  */
-const API_BASE = process.env.LUMEN_UPSTREAM || "https://web-production-7769e.up.railway.app";
-const ALLOWED_HOST = process.env.LUMEN_UPSTREAM_HOST || "web-production-7769e.up.railway.app";
+const API_BASE = process.env.LUMEN_UPSTREAM || "https://lumen-production-d82a.up.railway.app";
+const ALLOWED_HOST = process.env.LUMEN_UPSTREAM_HOST || "lumen-production-d82a.up.railway.app";
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36";
 
