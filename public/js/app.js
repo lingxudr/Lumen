@@ -85,6 +85,15 @@ const App = {
   reloadChapter: reader.reload,
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
+  setEyeCare: reader.setEyeCare,
+  cycleEyeCare: () => {
+    const order = ["off", "warm", "night"];
+    const cur = document.documentElement.getAttribute("data-eye-care") || "off";
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    reader.setEyeCare(next);
+    const labels = { off: "Normal", warm: "Hangat", night: "Malam" };
+    try { toast("Mata: " + (labels[next] || next)); } catch (_) {}
+  },
   setReaderWidth: (v) => reader.setWidth?.(v),
   setReaderPref: (k, v) => reader.setPref?.(k, v),
   setReaderFit: reader.setFit,
@@ -221,6 +230,20 @@ function scheduleWakeKeepalive() {
 }
 
 scheduleWakeKeepalive();
+
+function applyEyeCareFromPrefs() {
+  try {
+    const raw = localStorage.getItem("lumen:readerPrefs");
+    const prefs = raw ? JSON.parse(raw) : {};
+    const eye = prefs.eyeCare || "off";
+    document.documentElement.setAttribute("data-eye-care", eye);
+    document.body.setAttribute("data-eye-care", eye);
+  } catch (_) {
+    document.documentElement.setAttribute("data-eye-care", "off");
+  }
+}
+applyEyeCareFromPrefs();
+
 reportVisit();
 startPresenceHeartbeat();
 

@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=ui-pro-1" />
+  <link rel="stylesheet" href="/css/main.css?v=eye-care-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -102,6 +102,7 @@
               <button type="button" class="btn btn-icon" id="btn-prev" onclick="App.page(-1)" disabled aria-label="Previous page">←</button>
               <span class="pager-info" id="page-info">1</span>
               <button type="button" class="btn btn-icon" id="btn-next" onclick="App.page(1)" aria-label="Next page">→</button>
+              <button type="button" class="btn btn-icon" id="btn-eye-care" title="Perlindungan mata" aria-label="Perlindungan mata" onclick="App.cycleEyeCare && App.cycleEyeCare()">◑</button>
               <button type="button" class="btn btn-icon" id="btn-refresh" onclick="App.refresh(true)" title="Refresh" aria-label="Refresh">↻</button>
             </div>
           </div>
@@ -219,6 +220,16 @@
                 <button type="button" class="lumen-reader-seg-btn seg-btn is-active" data-theme="dark" onclick="App.setReaderTheme('dark')">Dark</button>
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-theme="sepia" onclick="App.setReaderTheme('sepia')">Sepia</button>
               </div>
+            </div>
+
+            <div class="lumen-reader-setting">
+              <span class="lumen-reader-setting-label">Perlindungan mata</span>
+              <div class="lumen-reader-seg seg">
+                <button type="button" class="lumen-reader-seg-btn seg-btn is-active" data-eye-care-btn="off" onclick="App.setEyeCare('off')">Normal</button>
+                <button type="button" class="lumen-reader-seg-btn seg-btn" data-eye-care-btn="warm" onclick="App.setEyeCare('warm')">Hangat</button>
+                <button type="button" class="lumen-reader-seg-btn seg-btn" data-eye-care-btn="night" onclick="App.setEyeCare('night')">Malam</button>
+              </div>
+              <p class="lumen-reader-setting-hint" style="margin:6px 0 0;font-size:11px;opacity:.7">Kurangi cahaya biru agar lebih nyaman dibaca lama</p>
             </div>
 
             <label class="lumen-reader-toggle">

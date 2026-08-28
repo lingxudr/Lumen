@@ -50,6 +50,13 @@ export function createReaderView(ctx) {
     }
     document.body.dataset.readerTheme = prefs.theme || "dark";
     document.body.dataset.readerFit = prefs.fit || "width";
+    const eye = prefs.eyeCare || "off";
+    document.documentElement.setAttribute("data-eye-care", eye);
+    document.body.setAttribute("data-eye-care", eye);
+    document.querySelectorAll("[data-eye-care-btn]").forEach((b) => {
+      b.classList.toggle("is-active", b.getAttribute("data-eye-care-btn") === eye);
+    });
+
     // segment active states
     document.querySelectorAll("#reader-menu [data-theme]").forEach((b) => {
       b.classList.toggle("is-active", b.dataset.theme === (prefs.theme || "dark"));
@@ -89,6 +96,13 @@ export function createReaderView(ctx) {
     savePrefs({ theme });
     applyPrefs();
   }
+
+  function setEyeCare(mode) {
+    const m = ["off", "warm", "night"].includes(mode) ? mode : "off";
+    savePrefs({ eyeCare: m });
+    applyPrefs();
+  }
+
 
   function setFit(fit) {
     savePrefs({ fit });
@@ -646,5 +660,6 @@ export function createReaderView(ctx) {
     setMode,
     setPref,
     applyPrefs,
+    setEyeCare,
   };
 }
