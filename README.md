@@ -44,7 +44,8 @@ Do not re-enable multi-provider page fallback without strict title/ID matching (
 
 ## SEO
 
-- `sitemap.xml` / `robots.txt` on `www.v1lumen.my.id`
+- **Dynamic sitemap** `/sitemap.xml` — static pages + latest manga (`/manga/{slug}`) auto-refreshed ~hourly
+- `robots.txt` points to that sitemap
 - Google verification file in `/public`
 - SPA `setMeta` + JSON-LD `ComicSeries` on manga detail
 - Shareable paths: `/latest`, `/popular`, `/search?q=`, `/manga/:slug`  

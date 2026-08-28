@@ -823,7 +823,29 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
 
+            # Dynamic SEO sitemap (auto-index manga from Voratoon updates)
+            if path in ("/sitemap.xml", "/api/sitemap", "/api/sitemap.xml"):
+                try:
+                    try:
+                        from sitemap import get_sitemap_xml
+                    except Exception:
+                        from server.sitemap import get_sitemap_xml  # type: ignore
+                    xml = get_sitemap_xml()
+                    return self.send_bytes(
+                        200,
+                        xml,
+                        "application/xml; charset=utf-8",
+                        extra_headers={
+                            "Cache-Control": "public, max-age=3600",
+                            "X-Lumen-Sitemap": "dynamic",
+                        },
+                    )
+                except Exception as e:
+                    print("sitemap error:", e, flush=True)
+                    return self.send_json(500, {"error": "sitemap_failed", "message": str(e)})
+
             if path in ("/", "/index.html", "/hub.html"):
+
                 return self.serve_file(STATIC / "index.html")
 
             if path in ("/comic.html", "/comic", "/reader"):
