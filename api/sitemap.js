@@ -64,13 +64,15 @@ module.exports = async function handler(req, res) {
 
   const { status, body } = await fetchXml(apiPath);
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  // Do NOT send X-Robots-Tag: noindex — Google Search Console will reject the sitemap
+  res.setHeader("X-Robots-Tag", "all");
   res.setHeader(
     "Cache-Control",
     status === 200
       ? "public, max-age=1800, s-maxage=3600, stale-while-revalidate=86400"
       : "public, max-age=60"
   );
-  res.setHeader("X-Robots-Tag", "noindex"); // sitemap itself need not rank
+  
   res.statusCode = status;
   res.end(body);
 };
