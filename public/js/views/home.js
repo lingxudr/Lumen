@@ -71,8 +71,23 @@ export function createHomeView(ctx) {
   async function loadGenres() {
     const bar = document.getElementById("genre-bar");
     const sheetBar = document.getElementById("sheet-genre-bar");
-    if (!bar && !sheetBar) return;
-    if (genresLoaded && bar && bar.querySelector("[data-filter-genre]")) return;
+    const mobileBar = document.getElementById("genre-bar-mobile");
+    if (!bar && !sheetBar && !mobileBar) return;
+    if (
+      genresLoaded &&
+      ((bar && bar.querySelector("[data-filter-genre]")) ||
+        (mobileBar && mobileBar.querySelector("[data-filter-genre]")))
+    ) {
+      // still refresh active state
+      const active = (ctx.state.genre || "").toLowerCase();
+      document.querySelectorAll("[data-filter-genre]").forEach((el) => {
+        el.classList.toggle(
+          "is-active",
+          (el.getAttribute("data-filter-genre") || "").toLowerCase() === active
+        );
+      });
+      return;
+    }
     if (bar && !bar.dataset.loading) {
       bar.dataset.loading = "1";
       bar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
@@ -97,6 +112,7 @@ export function createHomeView(ctx) {
         allBtn.textContent = allLabel;
         allBtn.addEventListener("click", () => {
           if (window.App && App.setFilter) App.setFilter("genre", "");
+          try { closeFilterSheet(); } catch (_) {}
         });
         container.appendChild(allBtn);
         list.forEach((g) => {
@@ -110,6 +126,7 @@ export function createHomeView(ctx) {
           btn.textContent = name;
           btn.addEventListener("click", () => {
             if (window.App && App.setFilter) App.setFilter("genre", name);
+            try { closeFilterSheet(); } catch (_) {}
           });
           container.appendChild(btn);
         });
@@ -117,6 +134,7 @@ export function createHomeView(ctx) {
 
       fill(bar, "Semua genre");
       fill(sheetBar, "Semua");
+      fill(mobileBar, "Semua");
       if (bar) delete bar.dataset.loading;
     } catch (e) {
       console.warn("genres", e);

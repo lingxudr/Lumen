@@ -2054,3 +2054,58 @@ html[data-theme="dark"] {
   max-height: 40vh;
   overflow-y: auto;
 }
+
+
+/* Always-visible genre strip (mobile + desktop) */
+.genre-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.genre-strip-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #8b929e);
+}
+.genre-strip-scroll {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding: 2px 0 8px;
+  max-width: 100%;
+}
+.genre-strip-scroll .chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.genre-strip-scroll .chip.is-active {
+  background: linear-gradient(135deg, #9f7aea, #7c3aed);
+  color: #fff;
+  border-color: transparent;
+}
+@media (min-width: 900px) {
+  .genre-strip {
+    margin-bottom: 14px;
+  }
+}
+/* Ensure Filter button visible on mobile */
+@media (max-width: 899px) {
+  .btn-filter {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    font-weight: 700;
+    background: var(--primary-soft, rgba(139, 92, 246, 0.15));
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    color: var(--primary2, #c4b5fd);
+  }
+}

@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=genre-fix-1" />
+  <link rel="stylesheet" href="/css/main.css?v=genre-visible-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -125,6 +125,10 @@
           <div class="filter-group filter-group--genres" id="genre-bar" aria-label="Genre"></div>
         </div>
 
+        <div class="genre-strip" id="genre-strip" aria-label="Filter genre">
+          <div class="genre-strip-label">Genre</div>
+          <div class="filter-group filter-group--genres genre-strip-scroll" id="genre-bar-mobile"></div>
+        </div>
         <div id="series-list" class="grid"></div>
       </section>
 
@@ -420,6 +424,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=genre-fix-1" type="module"></script>
+  <script src="/js/app.js?v=genre-visible-1" type="module"></script>
 </body>
 </html>
