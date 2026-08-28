@@ -1843,3 +1843,47 @@ html[data-eye-care="night"] #btn-eye-care {
   opacity: 0.55;
   line-height: 1.35;
 }
+
+
+/* Settings sheet */
+.settings-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--muted, #8b929e);
+  line-height: 1.4;
+}
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-weight: 600;
+}
+.settings-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+#settings-sheet .filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#settings-sheet .chip.is-active {
+  background: linear-gradient(135deg, #c4a574, #a67c52);
+  color: #1a1208;
+  border-color: transparent;
+}
+.bottom-nav {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+.bottom-link span:last-child {
+  font-size: 10px;
+}
+@media (min-width: 1024px) {
+  .bottom-nav { display: none; }
+}

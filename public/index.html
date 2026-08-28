@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=eye-clinical-1" />
+  <link rel="stylesheet" href="/css/main.css?v=settings-nav-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -45,6 +45,7 @@
         <div class="side-sep"></div>
         <button type="button" class="side-link" data-nav="bookmarks" onclick="App.library('bookmarks')"><span class="side-ico">★</span><span>Library</span></button>
         <button type="button" class="side-link" data-nav="history" onclick="App.library('history')"><span class="side-ico">◷</span><span>History</span></button>
+        <button type="button" class="side-link" data-nav="settings" onclick="App.openSettings()"><span class="side-ico">⚙</span><span>Pengaturan</span></button>
       </nav>
       <a class="side-link side-docs" href="/lumenrest/docs">API Docs</a>
     </aside>
@@ -317,9 +318,9 @@
     <nav class="bottom-nav" id="bottom-nav" aria-label="Mobile navigation">
       <button type="button" class="bottom-link is-active" data-nav="newest" onclick="App.tab('newest')"><span>⌂</span><span>Home</span></button>
       <button type="button" class="bottom-link" data-nav="browse" onclick="App.tab('browse')"><span>◈</span><span>Discover</span></button>
-      <button type="button" class="bottom-link" data-nav="hot" onclick="App.tab('hot')"><span>▲</span><span>Trending</span></button>
       <button type="button" class="bottom-link" data-nav="bookmarks" onclick="App.library('bookmarks')"><span>★</span><span>Library</span></button>
-      <button type="button" class="bottom-link" data-nav="history" onclick="App.library('history')"><span>◷</span><span>History</span></button>
+      <button type="button" class="bottom-link" data-nav="history" onclick="App.library('history')"><span>◷</span><span>Riwayat</span></button>
+      <button type="button" class="bottom-link" data-nav="settings" onclick="App.openSettings()"><span>⚙</span><span>Atur</span></button>
     </nav>
 
     <!-- Mobile filter sheet -->
@@ -359,6 +360,45 @@
       </div>
     </div>
 
+    
+    <div class="sheet-backdrop is-hidden" id="settings-backdrop" aria-hidden="true"></div>
+    <div class="sheet is-hidden" id="settings-sheet" role="dialog" aria-labelledby="settings-sheet-title" aria-modal="true">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="settings-sheet-title">Pengaturan</h2>
+        <button type="button" class="btn btn-icon" id="btn-close-settings" aria-label="Tutup">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="sheet-section">
+          <div class="sheet-label">Perlindungan mata</div>
+          <div class="filter-group" id="settings-eye-care">
+            <button type="button" class="chip is-active" data-eye-care-btn="off" onclick="App.setEyeCare('off')">Normal</button>
+            <button type="button" class="chip" data-eye-care-btn="warm" onclick="App.setEyeCare('warm')">Hangat</button>
+            <button type="button" class="chip" data-eye-care-btn="night" onclick="App.setEyeCare('night')">Malam</button>
+          </div>
+          <p class="settings-hint">Filter tampilan untuk kenyamanan (bukan pengobatan medis).</p>
+        </div>
+        <div class="sheet-section">
+          <div class="sheet-label">Kenyamanan baca</div>
+          <label class="settings-toggle">
+            <span>Pengingat 20-20-20</span>
+            <input type="checkbox" id="settings-rest-reminder" checked onchange="App.setRestReminder && App.setRestReminder(this.checked)" />
+          </label>
+          <p class="settings-hint">Setiap 20 menit: istirahat lihat jauh 20 detik.</p>
+          <label class="settings-toggle">
+            <span>Otomatis malam (Hangat/Malam)</span>
+            <input type="checkbox" id="settings-auto-evening" onchange="App.setAutoEveningEyeCare && App.setAutoEveningEyeCare(this.checked)" />
+          </label>
+          <p class="settings-hint">Jam 18+ Hangat, 21+ Malam. Bisa diubah manual.</p>
+        </div>
+        <div class="sheet-section">
+          <div class="sheet-label">Lainnya</div>
+          <button type="button" class="btn" style="width:100%;margin-bottom:8px" onclick="App.library('history');App.closeSettings&&App.closeSettings()">Buka Riwayat</button>
+          <a class="btn" style="width:100%;display:block;text-align:center;text-decoration:none" href="/lumenrest/docs">API Docs</a>
+        </div>
+      </div>
+    </div>
+
     <div id="toast" class="toast is-hidden" role="status"></div>
     <div id="loading" class="overlay is-hidden" aria-hidden="true">
       <div class="spinner"></div>
@@ -369,6 +409,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=eye-clinical-1" type="module"></script>
+  <script src="/js/app.js?v=settings-nav-1" type="module"></script>
 </body>
 </html>

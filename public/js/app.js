@@ -121,6 +121,43 @@ const App = {
     }
     try { toast(on ? "Mode malam otomatis aktif" : "Mode malam otomatis off"); } catch (_) {}
   },
+
+  openSettings() {
+    const sheet = document.getElementById("settings-sheet");
+    const bd = document.getElementById("settings-backdrop");
+    if (!sheet) return;
+    // sync controls
+    try {
+      const raw = localStorage.getItem("lumen:readerPrefs");
+      const p = raw ? JSON.parse(raw) : {};
+      const eye = p.eyeCare || document.documentElement.getAttribute("data-eye-care") || "off";
+      document.querySelectorAll("#settings-eye-care [data-eye-care-btn]").forEach((b) => {
+        b.classList.toggle("is-active", b.getAttribute("data-eye-care-btn") === eye);
+      });
+      const rr = document.getElementById("settings-rest-reminder");
+      if (rr) rr.checked = p.restReminder !== false;
+      const ae = document.getElementById("settings-auto-evening");
+      if (ae) ae.checked = !!p.autoEveningEyeCare;
+    } catch (_) {}
+    sheet.classList.remove("is-hidden");
+    if (bd) {
+      bd.classList.remove("is-hidden");
+      bd.setAttribute("aria-hidden", "false");
+    }
+    document.querySelectorAll(".bottom-link, .side-link").forEach((el) => {
+      el.classList.toggle("is-active", el.getAttribute("data-nav") === "settings");
+    });
+  },
+  closeSettings() {
+    const sheet = document.getElementById("settings-sheet");
+    const bd = document.getElementById("settings-backdrop");
+    if (sheet) sheet.classList.add("is-hidden");
+    if (bd) {
+      bd.classList.add("is-hidden");
+      bd.setAttribute("aria-hidden", "true");
+    }
+  },
+
   cycleEyeCare() {
     const order = ["off", "warm", "night"];
     const cur = document.documentElement.getAttribute("data-eye-care") || "off";
@@ -287,6 +324,9 @@ reportVisit();
 startPresenceHeartbeat();
 
 document.addEventListener("DOMContentLoaded", () => {
+  const closeS = () => App.closeSettings();
+  document.getElementById("btn-close-settings")?.addEventListener("click", closeS);
+  document.getElementById("settings-backdrop")?.addEventListener("click", closeS);
   try {
     const raw = localStorage.getItem("lumen:readerPrefs");
     const p = raw ? JSON.parse(raw) : {};
