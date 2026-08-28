@@ -2,6 +2,18 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/sitemap-images.xml",
+      "destination": "/api/proxy?path=sitemap/images"
+    },
+    {
+      "source": "/sitemap-manga.xml",
+      "destination": "/api/proxy?path=sitemap/manga"
+    },
+    {
+      "source": "/sitemap-pages.xml",
+      "destination": "/api/proxy?path=sitemap/pages"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "/api/proxy?path=sitemap"
     },

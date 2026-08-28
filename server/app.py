@@ -823,21 +823,48 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 )
 
-            # Dynamic SEO sitemap (auto-index manga from Voratoon updates)
-            if path in ("/sitemap.xml", "/api/sitemap", "/api/sitemap.xml"):
+            # SEO sitemaps (index + pages + manga + images)
+            if path in (
+                "/sitemap.xml",
+                "/api/sitemap",
+                "/api/sitemap.xml",
+                "/sitemap-pages.xml",
+                "/sitemap-manga.xml",
+                "/sitemap-images.xml",
+                "/api/sitemap/pages",
+                "/api/sitemap/manga",
+                "/api/sitemap/images",
+            ):
                 try:
                     try:
-                        from sitemap import get_sitemap_xml
+                        from sitemap import (
+                            get_sitemap_xml,
+                            get_sitemap_pages,
+                            get_sitemap_manga,
+                            get_sitemap_images,
+                        )
                     except Exception:
-                        from server.sitemap import get_sitemap_xml  # type: ignore
-                    xml = get_sitemap_xml()
+                        from server.sitemap import (  # type: ignore
+                            get_sitemap_xml,
+                            get_sitemap_pages,
+                            get_sitemap_manga,
+                            get_sitemap_images,
+                        )
+                    if path.endswith("pages.xml") or path.endswith("/pages"):
+                        xml, kind = get_sitemap_pages(), "pages"
+                    elif path.endswith("manga.xml") or path.endswith("/manga"):
+                        xml, kind = get_sitemap_manga(), "manga"
+                    elif path.endswith("images.xml") or path.endswith("/images"):
+                        xml, kind = get_sitemap_images(), "images"
+                    else:
+                        xml, kind = get_sitemap_xml(), "index"
                     return self.send_bytes(
                         200,
                         xml,
                         "application/xml; charset=utf-8",
                         extra_headers={
                             "Cache-Control": "public, max-age=3600",
-                            "X-Lumen-Sitemap": "dynamic",
+                            "X-Lumen-Sitemap": kind,
                         },
                     )
                 except Exception as e:
