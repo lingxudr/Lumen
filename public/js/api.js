@@ -1,5 +1,8 @@
 import { Config } from "./config.js";
 
+const FALLBACK_API_ORIGIN = "https://lumen-production-d82a.up.railway.app";
+
+
 /** In-memory request cache + in-flight dedup */
 const MEM = new Map(); // key -> { exp, data, staleExp }
 const INFLIGHT = new Map(); // key -> Promise
@@ -60,6 +63,27 @@ export function friendlyError(err) {
   return s || "Terjadi kesalahan.";
 }
 
+function shouldTryRailwayFallback(url, data, err) {
+  try {
+    if (typeof location === "undefined") return false;
+    const h = location.hostname || "";
+    if (h.endsWith(".railway.app")) return false;
+    if (!String(url || "").includes("/api")) return false;
+    if (err) return true;
+    if (!data || typeof data !== "object") return true;
+    if (Array.isArray(data.data) && data.data.length === 0 && /series/.test(String(url))) return true;
+    if (Number(data.status) >= 500) return true;
+  } catch (_) {}
+  return false;
+}
+function toRailwayUrl(url) {
+  try {
+    const u = new URL(url, typeof location !== "undefined" ? location.origin : FALLBACK_API_ORIGIN);
+    return FALLBACK_API_ORIGIN + u.pathname + u.search;
+  } catch (_) {
+    return FALLBACK_API_ORIGIN + "/api/series";
+  }
+}
 async function fetchJsonOnce(url, signal) {
   let res;
   try {
@@ -98,7 +122,7 @@ async function fetchJsonOnce(url, signal) {
   return data;
 }
 
-async function fetchJson(url) {
+async function fetchJsonCore(url) {
   let lastErr;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -124,6 +148,32 @@ async function fetchJson(url) {
  * @param {object} params
  * @param {{ ttl?: number, stale?: number, force?: boolean }} [opts]
  */
+
+async function fetchJson(url) {
+  try {
+    const data = await fetchJsonCore(url);
+    if (
+      shouldTryRailwayFallback(url, data, null) &&
+      !String(url).includes("lumen-production-d82a")
+    ) {
+      const alt = toRailwayUrl(url);
+      console.warn("[lumen] empty/fail same-origin, retry Railway", alt);
+      return await fetchJsonCore(alt);
+    }
+    return data;
+  } catch (err) {
+    if (
+      shouldTryRailwayFallback(url, null, err) &&
+      !String(url).includes("lumen-production-d82a")
+    ) {
+      const alt = toRailwayUrl(url);
+      console.warn("[lumen] same-origin error, retry Railway", err && err.message);
+      return await fetchJsonCore(alt);
+    }
+    throw err;
+  }
+}
+
 export async function api(path, params = {}, opts = {}) {
   const ttl = opts.ttl != null ? opts.ttl : DEFAULT_TTL;
   const stale = opts.stale != null ? opts.stale : DEFAULT_STALE;
