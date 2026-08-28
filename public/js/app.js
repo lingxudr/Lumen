@@ -325,6 +325,41 @@ function applyEyeCareFromPrefs() {
 }
 try { initTheme(); } catch (e) { console.warn("theme", e); }
 applyEyeCareFromPrefs();
+
+/** Auto hard-refresh when deploy ships new version.json (bypass SW/cache). */
+async function checkAssetVersion() {
+  try {
+    const res = await fetch("/version.json?_=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const v = String(data.v || data.version || "");
+    if (!v) return;
+    const key = "lumen:assetVersion";
+    const prev = localStorage.getItem(key);
+    if (prev && prev !== v) {
+      localStorage.setItem(key, v);
+      // One-shot reload to pick new CSS/JS
+      if (!sessionStorage.getItem("lumen:reloaded:" + v)) {
+        sessionStorage.setItem("lumen:reloaded:" + v, "1");
+        if ("serviceWorker" in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+          if (window.caches) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+          }
+        }
+        location.reload(true);
+        return;
+      }
+    }
+    localStorage.setItem(key, v);
+  } catch (_) {}
+}
+checkAssetVersion();
+setInterval(checkAssetVersion, 5 * 60 * 1000);
+
+
 try {
   initEyeCareClinical((m) => {
     // auto evening should not mark as manual

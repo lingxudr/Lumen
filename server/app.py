@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Lumen Reader — pure stdlib HTTP server + API proxy."""
-LUMEN_BUILD = "2026-08-27-no-shinigami"
+LUMEN_BUILD = "2026-08-28-log-fix"
 import gzip
 import hashlib
 import json
