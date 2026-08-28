@@ -311,25 +311,47 @@ export function createHomeView(ctx) {
     if (!data || typeof data !== "object") data = { data: [], meta: {} };
     let items = data.data;
     if (!Array.isArray(items)) {
-      // some proxies wrap twice
       items = (items && items.data) || data.results || data.items || [];
     }
     if (!Array.isArray(items)) items = [];
     const meta = data.meta || data.pagination || {};
-    ctx.state.lastPage = meta.lastPage || 1;
-    ctx.state.page = meta.page || ctx.state.page;
-    $("#page-info").textContent = `${ctx.state.page} / ${ctx.state.lastPage}`;
-    $("#btn-prev").disabled = ctx.state.page <= 1;
-    $("#btn-next").disabled = ctx.state.page >= ctx.state.lastPage;
-    renderList(items);
-    renderContinue();
-    $("#list-status").textContent = items.length
-      ? `${items.length} judul · ${meta.total != null ? Number(meta.total).toLocaleString("id-ID") : "—"} total`
-      : "Tidak ada hasil.";
+    ctx.state.lastPage = Number(meta.lastPage || meta.total_pages || 1) || 1;
+    ctx.state.page = Number(meta.page || meta.current_page || ctx.state.page || 1) || 1;
+    const pageInfo = $("#page-info");
+    if (pageInfo) pageInfo.textContent = `${ctx.state.page} / ${ctx.state.lastPage}`;
+    const bp = $("#btn-prev");
+    const bn = $("#btn-next");
+    if (bp) bp.disabled = ctx.state.page <= 1;
+    if (bn) bn.disabled = ctx.state.page >= ctx.state.lastPage;
+    try {
+      renderList(items);
+    } catch (e) {
+      console.error("renderList", e);
+      const box = $("#series-list");
+      if (box) {
+        box.innerHTML =
+          '<p class="page-sub">Gagal menampilkan kartu. <button type="button" class="btn" id="retry-render">Coba lagi</button></p>';
+        const b = document.getElementById("retry-render");
+        if (b) b.onclick = () => loadList({ force: true });
+      }
+    }
+    try {
+      renderContinue();
+    } catch (_) {}
+    const st = $("#list-status");
+    if (st) {
+      st.textContent = items.length
+        ? `${items.length} judul · ${meta.total != null ? Number(meta.total).toLocaleString("id-ID") : "—"} total`
+        : "Tidak ada hasil.";
+    }
   }
 
   async function loadList(opts = {}) {
-    loadGenres();
+    try {
+      loadGenres();
+    } catch (e) {
+      console.warn("loadGenres", e);
+    }
     const force = !!opts.force;
     const params = buildListParams();
     const box = $("#series-list");

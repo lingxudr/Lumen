@@ -335,6 +335,7 @@ applyEyeCareFromPrefs();
 /** Auto hard-refresh when deploy ships new version.json (bypass SW/cache). */
 async function checkAssetVersion() {
   try {
+    if (sessionStorage.getItem("lumen:reloadLock")) return;
     const res = await fetch("/version.json?_=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
@@ -342,24 +343,27 @@ async function checkAssetVersion() {
     if (!v) return;
     const key = "lumen:assetVersion";
     const prev = localStorage.getItem(key);
-    if (prev && prev !== v) {
+    if (!prev) {
       localStorage.setItem(key, v);
-      // One-shot reload to pick new CSS/JS
-      if (!sessionStorage.getItem("lumen:reloaded:" + v)) {
-        sessionStorage.setItem("lumen:reloaded:" + v, "1");
-        if ("serviceWorker" in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
-          if (window.caches) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map((k) => caches.delete(k)));
-          }
-        }
-        location.reload(true);
-        return;
-      }
+      return;
     }
+    if (prev === v) return;
     localStorage.setItem(key, v);
+    const flag = "lumen:reloaded:" + v;
+    if (sessionStorage.getItem(flag)) return;
+    sessionStorage.setItem(flag, "1");
+    sessionStorage.setItem("lumen:reloadLock", "1");
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
+      }
+      if (window.caches) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (_) {}
+    location.reload();
   } catch (_) {}
 }
 checkAssetVersion();

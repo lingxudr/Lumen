@@ -2003,17 +2003,13 @@ html[data-theme="dark"] {
   content-visibility: auto;
   contain-intrinsic-size: auto 800px;
 }
-.card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 280px;
-  contain: layout paint style;
-}
+/* content-visibility removed — blank cards on some Android Chrome */
 .card-cover {
-  content-visibility: auto;
   background-color: var(--elevated, #171a22);
 }
 #series-list {
-  contain: layout;
+  display: grid;
+  min-height: 120px;
 }
 .page-slot {
   content-visibility: auto;
