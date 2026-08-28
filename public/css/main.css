@@ -1887,3 +1887,112 @@ html[data-eye-care="night"] #btn-eye-care {
 @media (min-width: 1024px) {
   .bottom-nav { display: none; }
 }
+
+
+/* ========== Dynamic themes (data-theme on html/body) ========== */
+html[data-theme="amoled"],
+html[data-theme="amoled"] body {
+  --bg: #000000;
+  --bg2: #050505;
+  --panel: #0a0a0a;
+  --elevated: #121212;
+  --ink: #f5f5f5;
+  --text2: #a3a3a3;
+  --muted: #737373;
+  --line: rgba(255, 255, 255, 0.08);
+  --line2: rgba(255, 255, 255, 0.14);
+  background: #000;
+  color-scheme: dark;
+}
+
+html[data-theme="light"],
+html[data-theme="light"] body {
+  --bg: #F4F5F8;
+  --bg2: #FFFFFF;
+  --panel: #FFFFFF;
+  --elevated: #EEF0F5;
+  --ink: #0F1218;
+  --text2: #4B5563;
+  --muted: #6B7280;
+  --line: rgba(15, 18, 24, 0.08);
+  --line2: rgba(15, 18, 24, 0.14);
+  --primary: #6D28D9;
+  --primary2: #5B21B6;
+  --primary-hover: #7C3AED;
+  --primary-soft: rgba(109, 40, 217, 0.12);
+  --shadow: 0 16px 40px rgba(15, 18, 24, 0.08);
+  --shadow-card: 0 8px 24px rgba(15, 18, 24, 0.06);
+  background: var(--bg);
+  color: var(--ink);
+  color-scheme: light;
+}
+
+html[data-theme="light"] body {
+  background:
+    radial-gradient(1000px 500px at 10% -10%, rgba(109, 40, 217, 0.08), transparent 55%),
+    var(--bg);
+}
+
+html[data-theme="light"] .site-header,
+html[data-theme="light"] .header {
+  background: rgba(244, 245, 248, 0.85) !important;
+}
+html[data-theme="light"] .bottom-nav {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-top-color: var(--line);
+}
+html[data-theme="light"] .sidebar {
+  background: #fff;
+  border-right-color: var(--line);
+}
+html[data-theme="light"] .card {
+  background: var(--panel);
+  border-color: var(--line);
+}
+html[data-theme="light"] .tab.is-active {
+  color: #fff;
+}
+html[data-theme="light"] .sheet {
+  background: #fff !important;
+  color: var(--ink);
+}
+
+html[data-theme="sepia"],
+html[data-theme="sepia"] body {
+  --bg: #F2E8D5;
+  --bg2: #EBE0C8;
+  --panel: #F7F0E4;
+  --elevated: #E8DCC8;
+  --ink: #3D2E1E;
+  --text2: #6B553C;
+  --muted: #8A7355;
+  --line: rgba(61, 46, 30, 0.12);
+  --line2: rgba(61, 46, 30, 0.2);
+  --primary: #9A6B3F;
+  --primary2: #7A5230;
+  --primary-hover: #B07D4C;
+  --primary-soft: rgba(154, 107, 63, 0.15);
+  background: var(--bg);
+  color: var(--ink);
+  color-scheme: light;
+}
+html[data-theme="sepia"] .site-header,
+html[data-theme="sepia"] .header {
+  background: rgba(242, 232, 213, 0.9) !important;
+}
+html[data-theme="sepia"] .bottom-nav {
+  background: rgba(247, 240, 228, 0.95) !important;
+}
+html[data-theme="sepia"] .sheet {
+  background: #F7F0E4 !important;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+#settings-ui-theme .chip.is-active {
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  color: #fff;
+  border-color: transparent;
+}

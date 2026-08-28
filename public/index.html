@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=settings-nav-1" />
+  <link rel="stylesheet" href="/css/main.css?v=theme-dyn-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -370,6 +370,17 @@
       </div>
       <div class="sheet-body">
         <div class="sheet-section">
+          <div class="sheet-label">Tema tampilan</div>
+          <div class="filter-group" id="settings-ui-theme">
+            <button type="button" class="chip" data-ui-theme-btn="system" onclick="App.setUiTheme('system')">Sistem</button>
+            <button type="button" class="chip is-active" data-ui-theme-btn="dark" onclick="App.setUiTheme('dark')">Gelap</button>
+            <button type="button" class="chip" data-ui-theme-btn="amoled" onclick="App.setUiTheme('amoled')">AMOLED</button>
+            <button type="button" class="chip" data-ui-theme-btn="light" onclick="App.setUiTheme('light')">Terang</button>
+            <button type="button" class="chip" data-ui-theme-btn="sepia" onclick="App.setUiTheme('sepia')">Sepia</button>
+          </div>
+          <p class="settings-hint">Sistem mengikuti pengaturan gelap/terang perangkat. Bisa diganti kapan saja.</p>
+        </div>
+        <div class="sheet-section">
           <div class="sheet-label">Perlindungan mata</div>
           <div class="filter-group" id="settings-eye-care">
             <button type="button" class="chip is-active" data-eye-care-btn="off" onclick="App.setEyeCare('off')">Normal</button>
@@ -409,6 +420,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=settings-nav-1" type="module"></script>
+  <script src="/js/app.js?v=theme-dyn-1" type="module"></script>
 </body>
 </html>

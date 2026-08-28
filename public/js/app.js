@@ -8,6 +8,7 @@ import { createReaderView } from "./views/reader.js";
 import { createLibraryView } from "./views/library.js";
 import { parseLocation, navigate, pathFor } from "./router.js";
 import { setMeta, setJsonLd, clearJsonLd } from "./seo.js";
+import { initTheme, setUiTheme, applyTheme } from "./theme.js";
 import {
   initEyeCareClinical,
   setRestReminder as eyeSetRest,
@@ -122,6 +123,12 @@ const App = {
     try { toast(on ? "Mode malam otomatis aktif" : "Mode malam otomatis off"); } catch (_) {}
   },
 
+  setUiTheme(mode) {
+    const r = setUiTheme(mode);
+    const labels = { system: "Sistem", dark: "Gelap", amoled: "AMOLED", light: "Terang", sepia: "Sepia" };
+    try { toast("Tema: " + (labels[mode] || mode)); } catch (_) {}
+    return r;
+  },
   openSettings() {
     const sheet = document.getElementById("settings-sheet");
     const bd = document.getElementById("settings-backdrop");
@@ -133,6 +140,10 @@ const App = {
       const eye = p.eyeCare || document.documentElement.getAttribute("data-eye-care") || "off";
       document.querySelectorAll("#settings-eye-care [data-eye-care-btn]").forEach((b) => {
         b.classList.toggle("is-active", b.getAttribute("data-eye-care-btn") === eye);
+      });
+      const ut = p.uiTheme || "dark";
+      document.querySelectorAll("[data-ui-theme-btn]").forEach((b) => {
+        b.classList.toggle("is-active", b.getAttribute("data-ui-theme-btn") === ut);
       });
       const rr = document.getElementById("settings-rest-reminder");
       if (rr) rr.checked = p.restReminder !== false;
@@ -312,6 +323,7 @@ function applyEyeCareFromPrefs() {
     document.documentElement.setAttribute("data-eye-care", "off");
   }
 }
+try { initTheme(); } catch (e) { console.warn("theme", e); }
 applyEyeCareFromPrefs();
 try {
   initEyeCareClinical((m) => {

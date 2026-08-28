@@ -46,6 +46,7 @@ export function saveLastRead(entry) {
 export function getPrefs() {
   return {
     theme: "dark",
+    uiTheme: "dark", // system | dark | amoled | light | sepia
     eyeCare: "off", // off | warm | night
     restReminder: true, // 20-20-20 every 20 min
     autoEveningEyeCare: false,
