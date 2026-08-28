@@ -68,13 +68,79 @@ function renderHero(items) {
 export function createHomeView(ctx) {
   let genresLoaded = false;
 
-  async function loadGenres() {
+  const FALLBACK_GENRES = [
+    { name: "Action", slug: "action" },
+    { name: "Adventure", slug: "adventure" },
+    { name: "Romance", slug: "romance" },
+    { name: "Fantasy", slug: "fantasy" },
+    { name: "Isekai", slug: "isekai" },
+    { name: "Comedy", slug: "comedy" },
+    { name: "Drama", slug: "drama" },
+    { name: "Ecchi", slug: "ecchi" },
+    { name: "Harem", slug: "harem" },
+    { name: "Horror", slug: "horror" },
+    { name: "Mystery", slug: "mystery" },
+    { name: "School", slug: "school" },
+    { name: "School Life", slug: "school-life" },
+    { name: "Sci-Fi", slug: "sci-fi" },
+    { name: "Slice of Life", slug: "slice-of-life" },
+    { name: "Supernatural", slug: "supernatural" },
+    { name: "Martial Arts", slug: "martial-arts" },
+    { name: "Shounen", slug: "shounen" },
+    { name: "Seinen", slug: "seinen" },
+    { name: "Shoujo", slug: "shoujo" },
+    { name: "Mature", slug: "mature" },
+    { name: "Adult", slug: "adult" },
+    { name: "Gore", slug: "gore" },
+    { name: "Psychological", slug: "psychological" },
+    { name: "Thriller", slug: "thriller" },
+    { name: "Tragedy", slug: "tragedy" },
+    { name: "Mecha", slug: "mecha" },
+    { name: "Sports", slug: "sports" },
+    { name: "Historical", slug: "historical" },
+    { name: "Magic", slug: "magic" },
+    { name: "Reincarnation", slug: "reincarnation" },
+    { name: "Webtoons", slug: "webtoons" },
+    { name: "Yuri", slug: "yuri" },
+    { name: "Shoujo Ai", slug: "shoujo-ai" },
+    { name: "Shounen Ai", slug: "shounen-ai" },
+    { name: "Josei", slug: "josei" },
+    { name: "Demons", slug: "demons" },
+    { name: "Vampire", slug: "vampire" },
+    { name: "Game", slug: "game" },
+    { name: "Cooking", slug: "cooking" },
+    { name: "Music", slug: "music" },
+    { name: "Medical", slug: "medical" },
+    { name: "Military", slug: "military" },
+    { name: "Police", slug: "police" },
+    { name: "Gender Bender", slug: "gender-bender" },
+    { name: "One-Shot", slug: "one-shot" },
+    { name: "4-Koma", slug: "4-koma" },
+    { name: "Super Power", slug: "super-power" },
+  ];
+
+  async function loadGenres(opts = {}) {
+    const force = !!(opts && opts.force);
     const bar = document.getElementById("genre-bar");
     const sheetBar = document.getElementById("sheet-genre-bar");
     const mobileBar = document.getElementById("genre-bar-mobile");
     if (!bar && !sheetBar && !mobileBar) return;
 
-    const paintActive = () => {
+    const chipCount = (el) =>
+      el ? el.querySelectorAll("[data-filter-genre]").length : 0;
+    // Need more than just "Semua" (empty data-filter-genre)
+    const hasRealChips = (el) => {
+      if (!el) return false;
+      return [...el.querySelectorAll("[data-filter-genre]")].some(
+        (n) => (n.getAttribute("data-filter-genre") || "").trim() !== ""
+      );
+    };
+
+    if (
+      !force &&
+      genresLoaded &&
+      (hasRealChips(mobileBar) || hasRealChips(bar) || hasRealChips(sheetBar))
+    ) {
       const active = (ctx.state.genre || "").toLowerCase();
       document.querySelectorAll("[data-filter-genre]").forEach((el) => {
         el.classList.toggle(
@@ -82,122 +148,87 @@ export function createHomeView(ctx) {
           (el.getAttribute("data-filter-genre") || "").toLowerCase() === active
         );
       });
-    };
-
-    if (
-      genresLoaded &&
-      ((mobileBar && mobileBar.querySelector("[data-filter-genre]")) ||
-        (bar && bar.querySelector("[data-filter-genre]")) ||
-        (sheetBar && sheetBar.querySelector("[data-filter-genre]")))
-    ) {
-      paintActive();
       return;
     }
 
-    if (bar && !bar.dataset.loading) {
-      bar.dataset.loading = "1";
-      bar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
-    }
-    if (mobileBar && !mobileBar.dataset.loading) {
-      mobileBar.dataset.loading = "1";
-      mobileBar.innerHTML = '<span class="chip chip--muted">Memuat…</span>';
+    const setLoading = (el) => {
+      if (!el) return;
+      el.dataset.loading = "1";
+      el.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
+    };
+    setLoading(bar);
+    setLoading(mobileBar);
+    if (sheetBar) {
+      sheetBar.dataset.loading = "1";
+      sheetBar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
     }
 
+    let list = [];
     try {
-      const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
-      let list = Array.isArray(res?.data) ? res.data.slice() : [];
-      if (!list.length) {
-        const empty = '<span class="chip chip--muted">Genre tidak tersedia</span>';
-        if (bar) bar.innerHTML = empty;
-        if (mobileBar) mobileBar.innerHTML = empty;
-        if (sheetBar) sheetBar.innerHTML = empty;
-        return;
-      }
-
-      // Popular first (Action, Romance, Ecchi, …) then A–Z
-      const PRIORITY = [
-        "Action",
-        "Adventure",
-        "Romance",
-        "Fantasy",
-        "Isekai",
-        "Comedy",
-        "Drama",
-        "Ecchi",
-        "Harem",
-        "Horror",
-        "Mystery",
-        "School",
-        "School Life",
-        "Sci-Fi",
-        "Slice of Life",
-        "Supernatural",
-        "Martial Arts",
-        "Shounen",
-        "Seinen",
-        "Shoujo",
-        "Mature",
-        "Adult",
-      ];
-      const rank = new Map(PRIORITY.map((n, i) => [n.toLowerCase(), i]));
-      list.sort((a, b) => {
-        const na = (a.name || (a.data && a.data.name) || "").trim();
-        const nb = (b.name || (b.data && b.data.name) || "").trim();
-        const ra = rank.has(na.toLowerCase()) ? rank.get(na.toLowerCase()) : 1000;
-        const rb = rank.has(nb.toLowerCase()) ? rank.get(nb.toLowerCase()) : 1000;
-        if (ra !== rb) return ra - rb;
-        return na.localeCompare(nb, "en", { sensitivity: "base" });
-      });
-
-      genresLoaded = true;
-      const active = (ctx.state.genre || "").toLowerCase();
-
-      function fill(container, allLabel) {
-        if (!container) return;
-        container.innerHTML = "";
-        delete container.dataset.loading;
-        const allBtn = document.createElement("button");
-        allBtn.type = "button";
-        allBtn.className = "chip" + (!active ? " is-active" : "");
-        allBtn.dataset.filterGenre = "";
-        allBtn.textContent = allLabel;
-        allBtn.addEventListener("click", () => {
-          if (window.App && App.setFilter) App.setFilter("genre", "");
-          try {
-            closeFilterSheet();
-          } catch (_) {}
-        });
-        container.appendChild(allBtn);
-        list.forEach((g) => {
-          const name = (g.name || (g.data && g.data.name) || "").trim();
-          if (!name) return;
-          const btn = document.createElement("button");
-          btn.type = "button";
-          const on = active === name.toLowerCase();
-          btn.className = "chip" + (on ? " is-active" : "");
-          btn.dataset.filterGenre = name;
-          btn.title = name;
-          btn.textContent = name;
-          btn.addEventListener("click", () => {
-            if (window.App && App.setFilter) App.setFilter("genre", name);
-            try {
-              closeFilterSheet();
-            } catch (_) {}
-          });
-          container.appendChild(btn);
-        });
-      }
-
-      fill(bar, "Semua genre");
-      fill(sheetBar, "Semua");
-      fill(mobileBar, "Semua");
-      if (bar) delete bar.dataset.loading;
+      const res = await api("genres", {}, { force: !!force, ttl: force ? 0 : 6 * 60 * 60_000 });
+      list = Array.isArray(res?.data) ? res.data.slice() : [];
     } catch (e) {
-      console.warn("genres", e);
-      const err = '<span class="chip chip--muted">Gagal muat genre</span>';
-      if (bar) bar.innerHTML = err;
-      if (mobileBar) mobileBar.innerHTML = err;
+      console.warn("genres api", e);
     }
+    if (!list.length) {
+      list = FALLBACK_GENRES.slice();
+    }
+
+    const PRIORITY = [
+      "Action", "Adventure", "Romance", "Fantasy", "Isekai", "Comedy", "Drama",
+      "Ecchi", "Harem", "Horror", "Mystery", "School", "School Life", "Sci-Fi",
+      "Slice of Life", "Supernatural", "Martial Arts", "Shounen", "Seinen",
+      "Shoujo", "Mature", "Adult",
+    ];
+    const rank = new Map(PRIORITY.map((n, i) => [n.toLowerCase(), i]));
+    list.sort((a, b) => {
+      const na = (a.name || (a.data && a.data.name) || "").trim();
+      const nb = (b.name || (b.data && b.data.name) || "").trim();
+      const ra = rank.has(na.toLowerCase()) ? rank.get(na.toLowerCase()) : 1000;
+      const rb = rank.has(nb.toLowerCase()) ? rank.get(nb.toLowerCase()) : 1000;
+      if (ra !== rb) return ra - rb;
+      return na.localeCompare(nb, "en", { sensitivity: "base" });
+    });
+
+    const active = (ctx.state.genre || "").toLowerCase();
+
+    function fill(container, allLabel) {
+      if (!container) return;
+      container.innerHTML = "";
+      delete container.dataset.loading;
+      const allBtn = document.createElement("button");
+      allBtn.type = "button";
+      allBtn.className = "chip" + (!active ? " is-active" : "");
+      allBtn.setAttribute("data-filter-genre", "");
+      allBtn.textContent = allLabel;
+      allBtn.addEventListener("click", () => {
+        if (window.App && App.setFilter) App.setFilter("genre", "");
+        try { closeFilterSheet(); } catch (_) {}
+      });
+      container.appendChild(allBtn);
+      list.forEach((g) => {
+        const name = (g.name || (g.data && g.data.name) || "").trim();
+        if (!name) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        const on = active === name.toLowerCase();
+        btn.className = "chip" + (on ? " is-active" : "");
+        btn.setAttribute("data-filter-genre", name);
+        btn.title = name;
+        btn.textContent = name;
+        btn.addEventListener("click", () => {
+          if (window.App && App.setFilter) App.setFilter("genre", name);
+          try { closeFilterSheet(); } catch (_) {}
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    fill(bar, "Semua genre");
+    fill(sheetBar, "Semua");
+    fill(mobileBar, "Semua");
+    genresLoaded = list.length > 0;
+    console.info("[lumen] genres loaded:", list.length);
   }
 
   function showSkeleton(n = 8) {
@@ -631,7 +662,9 @@ export function createHomeView(ctx) {
     sheet.classList.remove("is-hidden");
     bd.classList.remove("is-hidden");
     document.body.style.overflow = "hidden";
-    loadGenres();
+    // Always refresh chips when opening (avoid stuck "Semua" only)
+    genresLoaded = false;
+    loadGenres({ force: true });
   }
   function closeFilterSheet() {
     const sheet = document.getElementById("filter-sheet");

@@ -2118,3 +2118,20 @@ html[data-theme="dark"] {
 #sheet-genre-bar {
   max-height: min(50vh, 360px);
 }
+
+#sheet-genre-bar {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  max-height: min(55vh, 420px) !important;
+  overflow-y: auto !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+#sheet-genre-bar .chip {
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+#filter-sheet .sheet-section {
+  display: block !important;
+}
