@@ -3,19 +3,19 @@
   "rewrites": [
     {
       "source": "/sitemap-images.xml",
-      "destination": "/api/proxy?path=sitemap/images"
+      "destination": "/api/sitemap?kind=images"
     },
     {
       "source": "/sitemap-manga.xml",
-      "destination": "/api/proxy?path=sitemap/manga"
+      "destination": "/api/sitemap?kind=manga"
     },
     {
       "source": "/sitemap-pages.xml",
-      "destination": "/api/proxy?path=sitemap/pages"
+      "destination": "/api/sitemap?kind=pages"
     },
     {
       "source": "/sitemap.xml",
-      "destination": "/api/proxy?path=sitemap"
+      "destination": "/api/sitemap"
     },
     {
       "source": "/lumenrest",
