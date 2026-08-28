@@ -1,9 +1,8 @@
 import { api } from "../api.js";
 import { $, esc, escAttr, relTime, isNew, chapterIndex } from "../utils.js";
-import { setMeta, setJsonLd, seriesJsonLd } from "../seo.js";
+import { setMeta, setJsonLdGraph, seriesJsonLd, breadcrumbJsonLd } from "../seo.js";
 import { proxyImageUrl } from "../api.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
-import { proxyImageUrl } from "../api.js";
 import { isBookmarked, toggleBookmark, getPrefs, savePrefs } from "../storage.js";
 
 /** Normalize series detail payload (Sanka / KC / hybrid). */
@@ -209,21 +208,19 @@ export function createSeriesView(ctx) {
           ? d.genres.map((g) => (typeof g === "string" ? g : g?.name)).filter(Boolean)
           : [];
         setMeta({
-          title: `${title} — Lumen`,
+          title: title,
           description: syn || `Baca ${title} online di Lumen`,
           image: cover ? proxyImageUrl(cover, { webp: true, w: 600 }) : undefined,
           url: `/manga/${encodeURIComponent(slug)}`,
           type: "website",
         });
-        setJsonLd(
-          seriesJsonLd({
+        setJsonLdGraph([seriesJsonLd({
             title,
             slug,
             description: syn,
             image: cover,
             genres,
-          })
-        );
+          }), breadcrumbJsonLd([{ name: "Beranda", path: "/" }, { name: (title || slug), path: "/manga/" + encodeURIComponent(slug) }])]);
       } catch (_) {}
       render();
     } catch (err) {

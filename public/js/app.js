@@ -7,7 +7,7 @@ import { createSeriesView } from "./views/series.js";
 import { createReaderView } from "./views/reader.js";
 import { createLibraryView } from "./views/library.js";
 import { parseLocation, navigate, pathFor } from "./router.js";
-import { setMeta, setJsonLd, clearJsonLd } from "./seo.js";
+import { setMeta, setJsonLd, clearJsonLd, websiteJsonLd, breadcrumbJsonLd, chapterJsonLd, setJsonLdGraph } from "./seo.js";
 import { initTheme, setUiTheme, applyTheme } from "./theme.js";
 import {
   initEyeCareClinical,
@@ -439,19 +439,29 @@ async function routeFromLocation() {
     const titleEl = document.getElementById("list-title");
     if (titleEl) titleEl.textContent = titles[state.tab] || "Terbaru";
   }
+  const homePath = state.query
+    ? `/search?q=${encodeURIComponent(state.query)}`
+    : r.tab === "hot"
+      ? "/popular"
+      : r.tab && r.tab !== "newest"
+        ? `/latest?tab=${encodeURIComponent(r.tab)}`
+        : "/";
   setMeta({
     title: state.query
       ? `Cari "${state.query}" — Lumen`
       : "Lumen — Baca Komik Online",
-    description: "Baca komik online dengan koleksi terbaru setiap hari",
-    url: location.origin + (state.query
-      ? `/search?q=${encodeURIComponent(state.query)}`
-      : r.tab === "hot"
-        ? "/popular"
-        : r.tab && r.tab !== "newest"
-          ? `/latest?tab=${encodeURIComponent(r.tab)}`
-          : "/"),
+    description:
+      "Baca manga, manhwa, dan manhua online gratis. Update chapter terbaru setiap hari di Lumen.",
+    url: homePath,
+    keywords: "manga, manhwa, manhua, komik online, baca komik gratis",
   });
-  clearJsonLd();
+  try {
+    setJsonLdGraph([
+      websiteJsonLd(),
+      breadcrumbJsonLd([{ name: "Beranda", path: "/" }]),
+    ]);
+  } catch (_) {
+    clearJsonLd();
+  }
   home.loadList();
 }

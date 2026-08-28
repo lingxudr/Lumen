@@ -1,6 +1,6 @@
 import { Config } from "../config.js";
 import { navigate } from "../router.js";
-import { setMeta, clearJsonLd } from "../seo.js";
+import { setMeta, clearJsonLd, setJsonLd, websiteJsonLd, breadcrumbJsonLd } from "../seo.js";
 import { api, apiPeek, clearApiCache, friendlyError } from "../api.js";
 import { $, esc, relTime, isNew, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
@@ -505,11 +505,30 @@ export function createHomeView(ctx) {
       };
       const m = metaMap[name] || metaMap.newest;
       clearJsonLd();
+      const tabUrl =
+        name === "hot"
+          ? "/popular"
+          : name === "newest" || !name
+            ? "/"
+            : `/latest?tab=${encodeURIComponent(name)}`;
       setMeta({
         title: m.t,
         description: m.d,
-        url: typeof location !== "undefined" ? location.pathname + location.search : "/latest",
+        url: tabUrl,
+        keywords: "manga, manhwa, manhua, komik online, baca komik, " + (name || "terbaru"),
       });
+      try {
+        setJsonLd({
+          "@context": "https://schema.org",
+          "@graph": [
+            websiteJsonLd(),
+            breadcrumbJsonLd([
+              { name: "Beranda", path: "/" },
+              { name: (m.t || "Terbaru").split("—")[0].trim(), path: tabUrl },
+            ]),
+          ],
+        });
+      } catch (_) {}
     } catch (_) {}
     showView("home");
     loadList();

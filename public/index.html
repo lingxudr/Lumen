@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+  <meta name="googlebot" content="index,follow,max-image-preview:large" />
+  <link rel="canonical" href="https://www.v1lumen.my.id/" />
   <meta name="theme-color" content="#07080B" />
   <meta name="description" content="Platform baca manga, manhwa, dan manhua dengan UI cinematic dan reader nyaman." />
   <meta name="google-site-verification" content="PgpYnUogrn8ysWObJzr9dz3SM0tPUxFA2fvDH0t7je4" />
@@ -20,7 +23,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=home-root-1" />
+  <link rel="stylesheet" href="/css/main.css?v=seo-spa-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -28,8 +31,23 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Lumen" />
+
+  <script type="application/ld+json" id="json-ld-boot">
+  {"@context":"https://schema.org","@type":"WebSite","name":"Lumen","url":"https://www.v1lumen.my.id/","potentialAction":{"@type":"SearchAction","target":"https://www.v1lumen.my.id/search?q={search_term_string}","query-input":"required name=search_term_string"}}
+  </script>
 </head>
 <body>
+  <noscript>
+    <p>Lumen — baca komik online. Aktifkan JavaScript untuk pengalaman penuh.</p>
+    <ul>
+      <li><a href="/">Terbaru</a></li>
+      <li><a href="/popular">Populer</a></li>
+      <li><a href="/latest?tab=completed">Selesai</a></li>
+      <li><a href="/search">Cari</a></li>
+      <li><a href="/sitemap.xml">Sitemap</a></li>
+    </ul>
+  </noscript>
+
   <div id="app" class="app-shell">
     <aside class="sidebar" id="sidebar" aria-label="Navigasi">
       <button type="button" class="brand sidebar-brand" onclick="App.go('home')" aria-label="Beranda">
@@ -424,6 +442,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=home-root-1" type="module"></script>
+  <script src="/js/app.js?v=seo-spa-1" type="module"></script>
 </body>
 </html>

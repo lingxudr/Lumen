@@ -1,6 +1,9 @@
 User-agent: *
 Allow: /
 
+# Prefer HTTPS host
+Host: www.v1lumen.my.id
+
 Sitemap: https://www.v1lumen.my.id/sitemap.xml
 Sitemap: https://www.v1lumen.my.id/sitemap-pages.xml
 Sitemap: https://www.v1lumen.my.id/sitemap-manga.xml
