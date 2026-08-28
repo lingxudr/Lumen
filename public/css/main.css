@@ -2109,3 +2109,12 @@ html[data-theme="dark"] {
     color: var(--primary2, #c4b5fd);
   }
 }
+
+.genre-strip-scroll::after {
+  content: "";
+  flex: 0 0 12px;
+}
+/* sheet: show all genres in wrap */
+#sheet-genre-bar {
+  max-height: min(50vh, 360px);
+}

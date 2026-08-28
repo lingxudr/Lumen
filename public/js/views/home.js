@@ -73,12 +73,8 @@ export function createHomeView(ctx) {
     const sheetBar = document.getElementById("sheet-genre-bar");
     const mobileBar = document.getElementById("genre-bar-mobile");
     if (!bar && !sheetBar && !mobileBar) return;
-    if (
-      genresLoaded &&
-      ((bar && bar.querySelector("[data-filter-genre]")) ||
-        (mobileBar && mobileBar.querySelector("[data-filter-genre]")))
-    ) {
-      // still refresh active state
+
+    const paintActive = () => {
       const active = (ctx.state.genre || "").toLowerCase();
       document.querySelectorAll("[data-filter-genre]").forEach((el) => {
         el.classList.toggle(
@@ -86,25 +82,80 @@ export function createHomeView(ctx) {
           (el.getAttribute("data-filter-genre") || "").toLowerCase() === active
         );
       });
+    };
+
+    if (
+      genresLoaded &&
+      ((mobileBar && mobileBar.querySelector("[data-filter-genre]")) ||
+        (bar && bar.querySelector("[data-filter-genre]")) ||
+        (sheetBar && sheetBar.querySelector("[data-filter-genre]")))
+    ) {
+      paintActive();
       return;
     }
+
     if (bar && !bar.dataset.loading) {
       bar.dataset.loading = "1";
       bar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
     }
+    if (mobileBar && !mobileBar.dataset.loading) {
+      mobileBar.dataset.loading = "1";
+      mobileBar.innerHTML = '<span class="chip chip--muted">Memuat…</span>';
+    }
+
     try {
       const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
-      const list = res?.data || [];
+      let list = Array.isArray(res?.data) ? res.data.slice() : [];
       if (!list.length) {
-        if (bar) bar.innerHTML = '<span class="chip chip--muted">Genre tidak tersedia</span>';
+        const empty = '<span class="chip chip--muted">Genre tidak tersedia</span>';
+        if (bar) bar.innerHTML = empty;
+        if (mobileBar) mobileBar.innerHTML = empty;
+        if (sheetBar) sheetBar.innerHTML = empty;
         return;
       }
+
+      // Popular first (Action, Romance, Ecchi, …) then A–Z
+      const PRIORITY = [
+        "Action",
+        "Adventure",
+        "Romance",
+        "Fantasy",
+        "Isekai",
+        "Comedy",
+        "Drama",
+        "Ecchi",
+        "Harem",
+        "Horror",
+        "Mystery",
+        "School",
+        "School Life",
+        "Sci-Fi",
+        "Slice of Life",
+        "Supernatural",
+        "Martial Arts",
+        "Shounen",
+        "Seinen",
+        "Shoujo",
+        "Mature",
+        "Adult",
+      ];
+      const rank = new Map(PRIORITY.map((n, i) => [n.toLowerCase(), i]));
+      list.sort((a, b) => {
+        const na = (a.name || (a.data && a.data.name) || "").trim();
+        const nb = (b.name || (b.data && b.data.name) || "").trim();
+        const ra = rank.has(na.toLowerCase()) ? rank.get(na.toLowerCase()) : 1000;
+        const rb = rank.has(nb.toLowerCase()) ? rank.get(nb.toLowerCase()) : 1000;
+        if (ra !== rb) return ra - rb;
+        return na.localeCompare(nb, "en", { sensitivity: "base" });
+      });
+
       genresLoaded = true;
       const active = (ctx.state.genre || "").toLowerCase();
 
       function fill(container, allLabel) {
         if (!container) return;
         container.innerHTML = "";
+        delete container.dataset.loading;
         const allBtn = document.createElement("button");
         allBtn.type = "button";
         allBtn.className = "chip" + (!active ? " is-active" : "");
@@ -112,7 +163,9 @@ export function createHomeView(ctx) {
         allBtn.textContent = allLabel;
         allBtn.addEventListener("click", () => {
           if (window.App && App.setFilter) App.setFilter("genre", "");
-          try { closeFilterSheet(); } catch (_) {}
+          try {
+            closeFilterSheet();
+          } catch (_) {}
         });
         container.appendChild(allBtn);
         list.forEach((g) => {
@@ -123,10 +176,13 @@ export function createHomeView(ctx) {
           const on = active === name.toLowerCase();
           btn.className = "chip" + (on ? " is-active" : "");
           btn.dataset.filterGenre = name;
+          btn.title = name;
           btn.textContent = name;
           btn.addEventListener("click", () => {
             if (window.App && App.setFilter) App.setFilter("genre", name);
-            try { closeFilterSheet(); } catch (_) {}
+            try {
+              closeFilterSheet();
+            } catch (_) {}
           });
           container.appendChild(btn);
         });
@@ -138,7 +194,9 @@ export function createHomeView(ctx) {
       if (bar) delete bar.dataset.loading;
     } catch (e) {
       console.warn("genres", e);
-      if (bar) bar.innerHTML = '<span class="chip chip--muted">Gagal muat genre</span>';
+      const err = '<span class="chip chip--muted">Gagal muat genre</span>';
+      if (bar) bar.innerHTML = err;
+      if (mobileBar) mobileBar.innerHTML = err;
     }
   }
 
