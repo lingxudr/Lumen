@@ -2033,3 +2033,24 @@ html[data-theme="dark"] {
     transform: none;
   }
 }
+
+
+/* Genre filter visibility */
+#genre-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
+  max-width: 100%;
+}
+#genre-bar .chip { flex: 0 0 auto; }
+#sheet-genre-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 40vh;
+  overflow-y: auto;
+}

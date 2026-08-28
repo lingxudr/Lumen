@@ -69,54 +69,58 @@ export function createHomeView(ctx) {
   let genresLoaded = false;
 
   async function loadGenres() {
-    if (genresLoaded) return;
     const bar = document.getElementById("genre-bar");
     const sheetBar = document.getElementById("sheet-genre-bar");
-    if (!bar) return;
-    if (!bar.dataset.loading) {
+    if (!bar && !sheetBar) return;
+    if (genresLoaded && bar && bar.querySelector("[data-filter-genre]")) return;
+    if (bar && !bar.dataset.loading) {
       bar.dataset.loading = "1";
       bar.innerHTML = '<span class="chip chip--muted">Memuat genre…</span>';
     }
     try {
       const res = await api("genres", {}, { ttl: 6 * 60 * 60_000 });
       const list = res?.data || [];
-      if (!list.length) return;
+      if (!list.length) {
+        if (bar) bar.innerHTML = '<span class="chip chip--muted">Genre tidak tersedia</span>';
+        return;
+      }
       genresLoaded = true;
-      // mobile sheet genres (same handlers)
-      if (sheetBar) {
-        sheetBar.innerHTML = "";
-        const all2 = document.createElement("button");
-        all2.type = "button";
-        all2.className = "chip is-active";
-        all2.dataset.filterGenre = "";
-        all2.textContent = "Semua";
-        all2.setAttribute("onclick", "App.setFilter('genre','')");
-        sheetBar.appendChild(all2);
+      const active = (ctx.state.genre || "").toLowerCase();
+
+      function fill(container, allLabel) {
+        if (!container) return;
+        container.innerHTML = "";
+        const allBtn = document.createElement("button");
+        allBtn.type = "button";
+        allBtn.className = "chip" + (!active ? " is-active" : "");
+        allBtn.dataset.filterGenre = "";
+        allBtn.textContent = allLabel;
+        allBtn.addEventListener("click", () => {
+          if (window.App && App.setFilter) App.setFilter("genre", "");
+        });
+        container.appendChild(allBtn);
+        list.forEach((g) => {
+          const name = (g.name || (g.data && g.data.name) || "").trim();
+          if (!name) return;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const on = active === name.toLowerCase();
+          btn.className = "chip" + (on ? " is-active" : "");
+          btn.dataset.filterGenre = name;
+          btn.textContent = name;
+          btn.addEventListener("click", () => {
+            if (window.App && App.setFilter) App.setFilter("genre", name);
+          });
+          container.appendChild(btn);
+        });
       }
 
-      const frag = document.createDocumentFragment();
-      const all = document.createElement("button");
-      all.type = "button";
-      all.className = "chip is-active";
-      all.dataset.filterGenre = "";
-      all.textContent = "Semua genre";
-      all.onclick = () => ctx.setFilter?.("genre", "") || setFilter("genre", "");
-      // wire via returned setFilter after init — use App
-      all.setAttribute("onclick", "App.setFilter('genre','')");
-      bar.appendChild(all);
-      list.slice(0, 24).forEach((g) => {
-        const name = g.name || g.data?.name;
-        if (!name) return;
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "chip";
-        btn.dataset.filterGenre = name;
-        btn.textContent = name;
-        btn.setAttribute("onclick", `App.setFilter('genre','${name.replace(/'/g, "\\'")}')`);
-        bar.appendChild(btn);
-      });
+      fill(bar, "Semua genre");
+      fill(sheetBar, "Semua");
+      if (bar) delete bar.dataset.loading;
     } catch (e) {
       console.warn("genres", e);
+      if (bar) bar.innerHTML = '<span class="chip chip--muted">Gagal muat genre</span>';
     }
   }
 
@@ -186,9 +190,10 @@ export function createHomeView(ctx) {
     if (ctx.state.format) params.format = ctx.state.format;
     if (ctx.state.genre) {
       params.genre = ctx.state.genre;
-      params.mode = params.mode === "newest" ? "browse" : params.mode || "browse";
+      params.mode = "browse";
+      params.browse = "1";
     }
-    if ((ctx.state.status || ctx.state.format || ctx.state.genre) && ctx.state.tab === "browse") {
+    if (ctx.state.status || ctx.state.format || ctx.state.genre) {
       params.mode = "browse";
       params.browse = "1";
     }
@@ -479,23 +484,38 @@ export function createHomeView(ctx) {
   }
 
 
-    function setFilter(kind, value) {
+  function setFilter(kind, value) {
     if (kind === "status") ctx.state.status = value || "";
     if (kind === "format") ctx.state.format = value || "";
     if (kind === "genre") ctx.state.genre = value || "";
-    // Filter katalog → mode browse (bukan feed terbaru RSC)
-    if ((ctx.state.status || ctx.state.format || ctx.state.genre) && ctx.state.tab === "newest") {
-      ctx.state.tab = "browse";
-      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("is-active", t.dataset.tab === "browse"));
+    if (ctx.state.status || ctx.state.format || ctx.state.genre) {
+      if (ctx.state.tab === "newest" || ctx.state.tab === "hot") {
+        ctx.state.tab = "browse";
+      }
+      document.querySelectorAll(".tab").forEach((t) =>
+        t.classList.toggle("is-active", t.dataset.tab === "browse")
+      );
       const titleEl = $("#list-title");
-      if (titleEl) titleEl.textContent = "Browse";
+      if (titleEl) {
+        titleEl.textContent = ctx.state.genre ? `Genre: ${ctx.state.genre}` : "Browse";
+      }
     }
-    document.querySelectorAll(`[data-filter-${kind}]`).forEach((el) => {
-      el.classList.toggle("is-active", (el.getAttribute(`data-filter-${kind}`) || "") === (value || ""));
+    const attr = "data-filter-" + kind;
+    document.querySelectorAll("[" + attr + "]").forEach((el) => {
+      el.classList.toggle("is-active", (el.getAttribute(attr) || "") === (value || ""));
     });
+    if (kind === "genre") {
+      document.querySelectorAll("[data-filter-genre]").forEach((el) => {
+        el.classList.toggle(
+          "is-active",
+          (el.getAttribute("data-filter-genre") || "") === (value || "")
+        );
+      });
+    }
     ctx.state.page = 1;
     loadList({ force: true });
   }
+
 
 
   function setupPullToRefresh() {
