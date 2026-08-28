@@ -1738,61 +1738,45 @@ input[type="search"]:focus,
   }
 }
 
-/* ---- Eye care / anti blue light ---- */
-html[data-eye-care="warm"],
-body[data-eye-care="warm"] {
-  /* warm filter reduces blue spike without heavy dim */
+
+/* ---- Eye care / anti blue light (must be visible on dark UI) ---- */
+html[data-eye-care="warm"] {
+  filter: sepia(0.28) saturate(0.82) brightness(0.97);
+}
+html[data-eye-care="night"] {
+  filter: sepia(0.5) saturate(0.65) brightness(0.86) hue-rotate(-12deg);
+}
+/* Fixed warm veil as backup (visible even if filter ignored) */
+html[data-eye-care="warm"] body::before,
+html[data-eye-care="night"] body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+}
+html[data-eye-care="warm"] body::before {
+  background: rgba(255, 160, 60, 0.14);
+}
+html[data-eye-care="night"] body::before {
+  background: rgba(255, 120, 40, 0.2);
+}
+html[data-eye-care="off"] {
   filter: none;
 }
-html[data-eye-care="warm"] body,
-body[data-eye-care="warm"] {
-  --primary: #c4a574;
-  --primary2: #e8d4a8;
-  --primary-hover: #d4b896;
-  --primary-soft: rgba(196, 165, 116, 0.18);
+html[data-eye-care="off"] body::before {
+  display: none;
 }
-html[data-eye-care="warm"]::after,
-body[data-eye-care="warm"]::after {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
-  background: rgba(255, 170, 80, 0.12);
-  mix-blend-mode: multiply;
+#btn-eye-care {
+  font-size: 1.1rem;
 }
-
-html[data-eye-care="night"],
-body[data-eye-care="night"] {
-  --bg: #0a0806;
-  --bg2: #120e0a;
-  --panel: #1a1410;
-  --ink: #f0e6d8;
-  --text2: #c4b5a0;
+html[data-eye-care="warm"] #btn-eye-care,
+html[data-eye-care="night"] #btn-eye-care {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.12);
 }
-html[data-eye-care="night"]::after,
-body[data-eye-care="night"]::after {
-  content: "";
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  z-index: 9998;
-  background: rgba(255, 140, 50, 0.22);
-  mix-blend-mode: multiply;
-}
-
-/* Don't double-filter reader images too hard — still soft warm */
-html[data-eye-care="warm"] #view-reader,
-html[data-eye-care="night"] #view-reader {
-  isolation: isolate;
-}
-html[data-eye-care="night"] #reader-pages img,
-html[data-eye-care="warm"] #reader-pages img {
-  filter: brightness(0.96) sepia(0.12);
-}
-
-#btn-eye-care.is-active,
-body[data-eye-care="warm"] #btn-eye-care,
-body[data-eye-care="night"] #btn-eye-care {
-  color: #fbbf24;
+.lumen-reader-seg-btn[data-eye-care-btn].is-active {
+  background: linear-gradient(135deg, #c4a574, #a67c52) !important;
+  color: #1a1208 !important;
+  border-color: transparent !important;
 }

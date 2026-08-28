@@ -85,14 +85,28 @@ const App = {
   reloadChapter: reader.reload,
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
-  setEyeCare: reader.setEyeCare,
-  cycleEyeCare: () => {
+  setEyeCare(mode) {
+    if (typeof reader.setEyeCare === "function") {
+      reader.setEyeCare(mode);
+    } else {
+      const m = ["off", "warm", "night"].includes(mode) ? mode : "off";
+      document.documentElement.setAttribute("data-eye-care", m);
+      document.body.setAttribute("data-eye-care", m);
+      try {
+        const raw = localStorage.getItem("lumen:readerPrefs");
+        const prefs = raw ? JSON.parse(raw) : {};
+        prefs.eyeCare = m;
+        localStorage.setItem("lumen:readerPrefs", JSON.stringify(prefs));
+      } catch (_) {}
+    }
+    const labels = { off: "Normal", warm: "Hangat", night: "Malam" };
+    try { toast("Perlindungan mata: " + (labels[mode] || mode)); } catch (_) {}
+  },
+  cycleEyeCare() {
     const order = ["off", "warm", "night"];
     const cur = document.documentElement.getAttribute("data-eye-care") || "off";
-    const next = order[(order.indexOf(cur) + 1) % order.length];
-    reader.setEyeCare(next);
-    const labels = { off: "Normal", warm: "Hangat", night: "Malam" };
-    try { toast("Mata: " + (labels[next] || next)); } catch (_) {}
+    const next = order[(Math.max(0, order.indexOf(cur)) + 1) % order.length];
+    App.setEyeCare(next);
   },
   setReaderWidth: (v) => reader.setWidth?.(v),
   setReaderPref: (k, v) => reader.setPref?.(k, v),

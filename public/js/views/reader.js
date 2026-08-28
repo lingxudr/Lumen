@@ -99,8 +99,19 @@ export function createReaderView(ctx) {
 
   function setEyeCare(mode) {
     const m = ["off", "warm", "night"].includes(mode) ? mode : "off";
-    savePrefs({ eyeCare: m });
-    applyPrefs();
+    try {
+      savePrefs({ eyeCare: m });
+    } catch (_) {}
+    document.documentElement.setAttribute("data-eye-care", m);
+    document.body.setAttribute("data-eye-care", m);
+    document.querySelectorAll("[data-eye-care-btn]").forEach((b) => {
+      b.classList.toggle("is-active", b.getAttribute("data-eye-care-btn") === m);
+    });
+    const btn = document.getElementById("btn-eye-care");
+    if (btn) btn.classList.toggle("is-active", m !== "off");
+    try {
+      applyPrefs();
+    } catch (_) {}
   }
 
 
