@@ -1,8 +1,8 @@
 /**
  * Path-based URL architecture (shareable + SEO-friendly)
  *
- * /                  → home /latest
- * /latest            → home newest
+ * /                  → home (Terbaru / newest)
+ * /latest            → alias home newest
  * /popular           → home hot
  * /search?q=         → search
  * /manga/:slug       → series detail
@@ -60,7 +60,9 @@ export function pathFor(route) {
     if (route?.tab === "completed") return "/latest?tab=completed";
     if (route?.tab === "new_series") return "/latest?tab=new_series";
     if (route?.tab === "browse") return "/latest?tab=browse";
-    return "/latest";
+    // Default home (Terbaru) stays at root — not /latest or /newest
+    if (!route?.tab || route.tab === "newest") return "/";
+    return "/latest?tab=" + encodeURIComponent(route.tab);
   }
   if (route.name === "series") return `/manga/${encodeURIComponent(route.slug)}`;
   if (route.name === "reader") {

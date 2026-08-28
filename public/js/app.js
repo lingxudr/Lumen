@@ -66,15 +66,21 @@ const App = {
     if (where === "home") {
       state.series = null;
       state.chapterData = null;
-      navigate({ name: "home", tab: state.tab }, { replace: false });
+      state.query = "";
+      state.tab = "newest";
+      state.page = 1;
+      state.genre = "";
+      state.status = "";
+      state.format = "";
+      navigate({ name: "home", tab: "newest" }, { replace: false });
       document.querySelectorAll(".tab").forEach((t) => {
-        t.classList.toggle("is-active", t.dataset.tab === state.tab);
+        t.classList.toggle("is-active", t.dataset.tab === "newest");
       });
       document.querySelectorAll("[data-nav]").forEach((el) => {
-        el.classList.toggle("is-active", el.getAttribute("data-nav") === state.tab);
+        el.classList.toggle("is-active", el.getAttribute("data-nav") === "newest");
       });
       showView("home");
-      home.loadList();
+      home.loadList({ force: true });
     }
   },
   tab(name) {
@@ -442,7 +448,9 @@ async function routeFromLocation() {
       ? `/search?q=${encodeURIComponent(state.query)}`
       : r.tab === "hot"
         ? "/popular"
-        : "/latest"),
+        : r.tab && r.tab !== "newest"
+          ? `/latest?tab=${encodeURIComponent(r.tab)}`
+          : "/"),
   });
   clearJsonLd();
   home.loadList();
