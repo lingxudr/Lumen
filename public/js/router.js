@@ -76,3 +76,18 @@ export function navigate(route, { replace = false } = {}) {
   if (replace) history.replaceState(route, "", url);
   else history.pushState(route, "", url);
 }
+
+/** If user opens /latest or /newest, clean address bar to / */
+export function normalizeHomeUrl() {
+  try {
+    const path = (location.pathname || "/").replace(/\/+$/, "") || "/";
+    const qs = new URLSearchParams(location.search || "");
+    const tab = qs.get("tab") || "";
+    // /newest (typo legacy) or /latest without extra tab → /
+    if (path === "/newest" || (path === "/latest" && (!tab || tab === "newest"))) {
+      history.replaceState({ name: "home", tab: "newest" }, "", "/");
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}

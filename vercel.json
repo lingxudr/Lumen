@@ -42,6 +42,10 @@
       "destination": "/api/proxy?path=$1"
     },
     {
+      "source": "/newest",
+      "destination": "/index.html"
+    },
+    {
       "source": "/latest",
       "destination": "/index.html"
     },

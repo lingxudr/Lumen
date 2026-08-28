@@ -6,7 +6,7 @@ import { createHomeView } from "./views/home.js";
 import { createSeriesView } from "./views/series.js";
 import { createReaderView } from "./views/reader.js";
 import { createLibraryView } from "./views/library.js";
-import { parseLocation, navigate, pathFor } from "./router.js";
+import { parseLocation, navigate, pathFor, normalizeHomeUrl } from "./router.js";
 import { setMeta, setJsonLd, clearJsonLd, websiteJsonLd, breadcrumbJsonLd, chapterJsonLd, setJsonLdGraph } from "./seo.js";
 import { initTheme, setUiTheme, applyTheme } from "./theme.js";
 import {
@@ -330,6 +330,7 @@ function applyEyeCareFromPrefs() {
   }
 }
 try { initTheme(); } catch (e) { console.warn("theme", e); }
+try { normalizeHomeUrl(); } catch (_) {}
 applyEyeCareFromPrefs();
 
 /** Auto hard-refresh when deploy ships new version.json (bypass SW/cache). */
