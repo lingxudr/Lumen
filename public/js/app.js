@@ -8,6 +8,13 @@ import { createReaderView } from "./views/reader.js";
 import { createLibraryView } from "./views/library.js";
 import { parseLocation, navigate, pathFor } from "./router.js";
 import { setMeta, setJsonLd, clearJsonLd } from "./seo.js";
+import {
+  initEyeCareClinical,
+  setRestReminder as eyeSetRest,
+  setAutoEvening as eyeSetAuto,
+  markEyeCareManual,
+  scheduleRestReminder,
+} from "./eye-care.js";
 
 const state = {
   tab: "newest",
@@ -86,6 +93,7 @@ const App = {
   checkHotlink: reader.checkHotlink,
   setReaderTheme: reader.setTheme,
   setEyeCare(mode) {
+    try { markEyeCareManual(); } catch (_) {}
     if (typeof reader.setEyeCare === "function") {
       reader.setEyeCare(mode);
     } else {
@@ -101,6 +109,17 @@ const App = {
     }
     const labels = { off: "Normal", warm: "Hangat", night: "Malam" };
     try { toast("Perlindungan mata: " + (labels[mode] || mode)); } catch (_) {}
+  },
+  setRestReminder(on) {
+    eyeSetRest(!!on);
+    try { toast(on ? "Pengingat 20-20-20 aktif" : "Pengingat dimatikan"); } catch (_) {}
+  },
+  setAutoEveningEyeCare(on) {
+    eyeSetAuto(!!on);
+    if (on) {
+      try { initEyeCareClinical((m) => App.setEyeCare(m)); } catch (_) {}
+    }
+    try { toast(on ? "Mode malam otomatis aktif" : "Mode malam otomatis off"); } catch (_) {}
   },
   cycleEyeCare() {
     const order = ["off", "warm", "night"];
@@ -257,11 +276,25 @@ function applyEyeCareFromPrefs() {
   }
 }
 applyEyeCareFromPrefs();
+try {
+  initEyeCareClinical((m) => {
+    // auto evening should not mark as manual
+    if (typeof reader.setEyeCare === "function") reader.setEyeCare(m);
+  });
+} catch (e) { console.warn("eye-care init", e); }
 
 reportVisit();
 startPresenceHeartbeat();
 
 document.addEventListener("DOMContentLoaded", () => {
+  try {
+    const raw = localStorage.getItem("lumen:readerPrefs");
+    const p = raw ? JSON.parse(raw) : {};
+    const rr = document.getElementById("pref-rest-reminder");
+    if (rr) rr.checked = p.restReminder !== false;
+    const ae = document.getElementById("pref-auto-evening");
+    if (ae) ae.checked = !!p.autoEveningEyeCare;
+  } catch (_) {}
   setOffline(typeof navigator !== "undefined" && navigator.onLine === false);
   window.addEventListener("offline", () => {
     setOffline(true);

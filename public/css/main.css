@@ -1780,3 +1780,66 @@ html[data-eye-care="night"] #btn-eye-care {
   color: #1a1208 !important;
   border-color: transparent !important;
 }
+
+
+/* 20-20-20 rest overlay */
+.eye-rest-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+.eye-rest-overlay.is-open { display: flex; }
+.eye-rest-card {
+  width: min(400px, 100%);
+  background: linear-gradient(165deg, #1a1620, #0e0c12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 22px 20px 18px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.eye-rest-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4a574;
+}
+.eye-rest-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+.eye-rest-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text2, #a8aeb8);
+  line-height: 1.45;
+}
+.eye-rest-count {
+  font-size: 3rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #fbbf24;
+  margin: 8px 0 16px;
+  line-height: 1;
+}
+.eye-rest-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.eye-rest-ref {
+  margin: 14px 0 0;
+  font-size: 10px;
+  opacity: 0.55;
+  line-height: 1.35;
+}

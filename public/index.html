@@ -20,7 +20,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=eye-care-2" />
+  <link rel="stylesheet" href="/css/main.css?v=eye-clinical-1" />
     <link rel="stylesheet" href="/css/reader-v2.css" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
@@ -229,8 +229,22 @@
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-eye-care-btn="warm" onclick="App.setEyeCare('warm')">Hangat</button>
                 <button type="button" class="lumen-reader-seg-btn seg-btn" data-eye-care-btn="night" onclick="App.setEyeCare('night')">Malam</button>
               </div>
-              <p class="lumen-reader-setting-hint" style="margin:6px 0 0;font-size:11px;opacity:.7">Kurangi cahaya biru agar lebih nyaman dibaca lama</p>
+              <p class="lumen-reader-setting-hint" style="margin:6px 0 0;font-size:11px;opacity:.7">Filter tampilan (bukan pengobatan). Bukti lensa filter biru untuk eye strain masih lemah (Cochrane 2023); kenyamanan bisa subjektif.</p>
             </div>
+
+            <label class="lumen-reader-toggle">
+              <span>Pengingat 20-20-20</span>
+              <input type="checkbox" id="pref-rest-reminder" checked onchange="App.setRestReminder && App.setRestReminder(this.checked)" />
+              <span class="lumen-reader-switch"></span>
+            </label>
+            <p class="lumen-reader-setting-hint" style="margin:0 0 10px;font-size:11px;opacity:.7">Setiap 20 menit: lihat jauh ~20 detik — praktik ergonomi visual untuk kurangi kelelahan layar.</p>
+
+            <label class="lumen-reader-toggle">
+              <span>Otomatis malam (Hangat/Malam)</span>
+              <input type="checkbox" id="pref-auto-evening" onchange="App.setAutoEveningEyeCare && App.setAutoEveningEyeCare(this.checked)" />
+              <span class="lumen-reader-switch"></span>
+            </label>
+            <p class="lumen-reader-setting-hint" style="margin:0 0 10px;font-size:11px;opacity:.7">Setelah jam 18 → Hangat, setelah 21 → Malam (bisa diubah manual).</p>
 
             <label class="lumen-reader-toggle">
               <span>Auto Next Chapter</span>
@@ -355,6 +369,6 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=eye-care-2" type="module"></script>
+  <script src="/js/app.js?v=eye-clinical-1" type="module"></script>
 </body>
 </html>

@@ -46,7 +46,10 @@ export function saveLastRead(entry) {
 export function getPrefs() {
   return {
     theme: "dark",
-    eyeCare: "off", // off | warm | night — anti blue light
+    eyeCare: "off", // off | warm | night
+    restReminder: true, // 20-20-20 every 20 min
+    autoEveningEyeCare: false,
+    eyeCareManual: false,
     fit: "width",
     chapterOrder: "desc", // desc = terbaru dulu, asc = dari ch 1
     mode: "webtoon", // webtoon | vertical | single | double
