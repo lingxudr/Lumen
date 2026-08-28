@@ -310,8 +310,11 @@ export function createHomeView(ctx) {
   function renderList(items) {
     try { renderHero(items); } catch (_) {}
     const box = $("#series-list");
-    box.innerHTML = "";
-    items.forEach((item) => {
+    if (!box) return;
+    // Batch DOM: single reflow via DocumentFragment
+    const frag = document.createDocumentFragment();
+    const list = Array.isArray(items) ? items : [];
+    list.forEach((item, i) => {
       const d = item.data || {};
       const chapters = item.chapters || [];
       const card = document.createElement("article");
@@ -344,16 +347,20 @@ export function createHomeView(ctx) {
           : `<div>Total ch. ${esc(String(d.totalChapters ?? "—"))}</div>`;
       }
 
+      const eager = i < 4;
       card.innerHTML = `
-        <img class="card-cover" alt="" loading="lazy" />
+        <img class="card-cover" alt="" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="360" height="540" />
         <div class="card-body">
           <div class="card-title">${esc(d.title || "—")}</div>
           <div class="badges">${badges.join("")}</div>
           <div class="card-chapters">${chHtml}</div>
         </div>`;
-      setImg(card.querySelector("img"), d.coverImage || d.cover || "", { w: 360, cover: true });
-      box.appendChild(card);
+      const img = card.querySelector("img");
+      if (eager && img) img.fetchPriority = "high";
+      setImg(img, d.coverImage || d.cover || "", { w: 360, cover: true });
+      frag.appendChild(card);
     });
+    box.replaceChildren(frag);
   }
 
   function setTab(name) {

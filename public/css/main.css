@@ -1996,3 +1996,40 @@ html[data-theme="dark"] {
   color: #fff;
   border-color: transparent;
 }
+
+
+/* ========== Rendering performance ========== */
+.grid {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 800px;
+}
+.card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
+  contain: layout paint style;
+}
+.card-cover {
+  content-visibility: auto;
+  background-color: var(--elevated, #171a22);
+}
+#series-list {
+  contain: layout;
+}
+.page-slot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 70vh;
+  contain: layout style;
+}
+.lumen-reader-pages,
+#reader-pages {
+  contain: layout;
+}
+/* Avoid expensive filters during scroll on low-end (eye-care still ok on html) */
+@media (max-width: 640px) {
+  .card:hover {
+    transform: none;
+  }
+  .card:hover .card-cover {
+    transform: none;
+  }
+}

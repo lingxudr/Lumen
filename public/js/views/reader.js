@@ -394,6 +394,7 @@ export function createReaderView(ctx) {
       }
     }
 
+    const frag = document.createDocumentFragment();
     resolved.forEach((src, i) => {
       const wrap = document.createElement("div");
       wrap.className = "page-slot";
@@ -445,8 +446,9 @@ export function createReaderView(ctx) {
       }
 
       wrap.appendChild(img);
-      box.appendChild(wrap);
+      frag.appendChild(wrap);
     });
+    box.replaceChildren(frag);
 
     if ("IntersectionObserver" in window) {
       _pageObserver = new IntersectionObserver(
