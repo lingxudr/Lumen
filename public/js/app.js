@@ -333,42 +333,32 @@ try { initTheme(); } catch (e) { console.warn("theme", e); }
 try { normalizeHomeUrl(); } catch (_) {}
 applyEyeCareFromPrefs();
 
-/** Auto hard-refresh when deploy ships new version.json (bypass SW/cache). */
+/** Version stamp only — no auto reload (was causing blank pages on some browsers). */
 async function checkAssetVersion() {
   try {
-    if (sessionStorage.getItem("lumen:reloadLock")) return;
     const res = await fetch("/version.json?_=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     const data = await res.json();
     const v = String(data.v || data.version || "");
-    if (!v) return;
-    const key = "lumen:assetVersion";
-    const prev = localStorage.getItem(key);
-    if (!prev) {
-      localStorage.setItem(key, v);
-      return;
-    }
-    if (prev === v) return;
-    localStorage.setItem(key, v);
-    const flag = "lumen:reloaded:" + v;
-    if (sessionStorage.getItem(flag)) return;
-    sessionStorage.setItem(flag, "1");
-    sessionStorage.setItem("lumen:reloadLock", "1");
-    try {
-      if ("serviceWorker" in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister().catch(() => {})));
-      }
-      if (window.caches) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-    } catch (_) {}
-    location.reload();
+    if (v) localStorage.setItem("lumen:assetVersion", v);
   } catch (_) {}
 }
 checkAssetVersion();
-setInterval(checkAssetVersion, 5 * 60 * 1000);
+
+// Safety: if home list still empty after 3s, force newest list (no page reload)
+setTimeout(() => {
+  try {
+    const box = document.getElementById("series-list");
+    const empty = !box || !box.querySelector(".card:not(.card-skeleton)");
+    const home = document.getElementById("view-home");
+    if (empty && home && !home.classList.contains("is-hidden") && window.App) {
+      console.warn("[lumen] safety force loadList");
+      if (typeof App.tab === "function") App.tab("newest");
+      else if (typeof App.go === "function") App.go("home");
+    }
+  } catch (_) {}
+}, 3000);
+
 
 
 try {
