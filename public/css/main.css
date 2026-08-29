@@ -2191,3 +2191,67 @@ html[data-theme="dark"] {
     aspect-ratio: 3 / 4 !important;
   }
 }
+
+
+/* ===== PERF SCROLL 2026-08-29 ===== */
+.ch-item {
+  content-visibility: auto;
+  contain-intrinsic-size: 48px;
+  contain: layout style;
+}
+.ch-load-more {
+  width: 100%;
+  margin: 8px 0 16px;
+  justify-content: center;
+}
+@media (max-width: 700px) {
+  /* Kill expensive paints while scrolling */
+  .header,
+  .bottom-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(10, 11, 16, 0.96) !important;
+  }
+  .series-backdrop {
+    filter: none !important;
+    opacity: 0.3 !important;
+    transform: none !important;
+  }
+  .series-backdrop::after {
+    backdrop-filter: none !important;
+  }
+  .card,
+  .card:hover,
+  .card:hover .card-cover,
+  .card:hover img.card-cover {
+    transform: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border-color: var(--line) !important;
+  }
+  .ch-item {
+    transition: none !important;
+  }
+  /* smoother scrolling containers */
+  .main,
+  #view-home,
+  #view-series,
+  #chapter-list {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

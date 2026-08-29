@@ -335,22 +335,57 @@ export function createSeriesView(ctx) {
       if (btn) btn.onclick = () => openSeries(slug, { title: d.title, cover: d.coverImage });
       return;
     }
-    list.innerHTML = chapters
-      .map((ch) => {
-        const idx = chapterIndex(ch);
-        const t = relTime(ch.createdAt);
-        const neu = isNew(ch.createdAt);
-        return `
-          <div class="ch-item" data-idx="${escAttr(String(idx))}">
+
+    // Chunk render: first N only (smooth scroll on long series)
+    const CHUNK = 40;
+    let shown = Math.min(CHUNK, chapters.length);
+
+    function rowHtml(ch) {
+      const idx = chapterIndex(ch);
+      const t = relTime(ch.createdAt);
+      const neu = isNew(ch.createdAt);
+      return `<div class="ch-item" data-idx="${escAttr(String(idx))}" role="button" tabindex="0">
             <span class="num">Chapter ${esc(String(idx ?? "?"))}${neu ? ' <span class="badge badge--new">Baru</span>' : ""}</span>
             <span class="time">${esc(t)}</span>
           </div>`;
-      })
-      .join("");
+    }
 
-    list.querySelectorAll(".ch-item").forEach((el) => {
-      el.onclick = () => ctx.openChapter(el.getAttribute("data-idx"));
-    });
+    function paint() {
+      const slice = chapters.slice(0, shown);
+      let html = slice.map(rowHtml).join("");
+      if (shown < chapters.length) {
+        html += `<button type="button" class="btn ch-load-more" id="btn-ch-more">Muat ${Math.min(CHUNK, chapters.length - shown)} chapter lagi · ${shown}/${chapters.length}</button>`;
+      }
+      list.innerHTML = html;
+      const more = document.getElementById("btn-ch-more");
+      if (more) {
+        more.onclick = (e) => {
+          e.stopPropagation();
+          shown = Math.min(shown + CHUNK, chapters.length);
+          paint();
+        };
+      }
+    }
+    paint();
+
+    // One delegated listener (not N handlers)
+    list.onclick = (e) => {
+      const el = e.target && e.target.closest && e.target.closest(".ch-item");
+      if (!el || !list.contains(el)) return;
+      const idx = el.getAttribute("data-idx");
+      if (idx != null) ctx.openChapter(idx);
+    };
+
+    // Soft backdrop on mobile (less GPU)
+    try {
+      if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches) {
+        const bd = document.getElementById("series-backdrop");
+        if (bd) {
+          bd.style.filter = "none";
+          bd.style.opacity = "0.35";
+        }
+      }
+    } catch (_) {}
   }
 
   return { openSeries, render };
