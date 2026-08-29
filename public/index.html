@@ -20,11 +20,14 @@
   <meta name="twitter:description" content="Baca manga, manhwa, dan manhua terbaru dengan reader nyaman." />
   <link rel="canonical" href="https://www.v1lumen.my.id/" />
   <title>Lumen — Baca Komik Online</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://lumen-production-d82a.up.railway.app" crossorigin />
+  <link rel="dns-prefetch" href="https://lumen-production-d82a.up.railway.app" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/main.css?v=home-perf-1" />
-    <link rel="stylesheet" href="/css/reader-v2.css" />
+  <link rel="stylesheet" href="/css/main.css?v=lag-fix-2" />
+    <!-- reader-v2.css loaded on demand when opening reader -->
+  <link rel="preload" href="/css/reader-v2.css" as="style" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -442,7 +445,7 @@
     // Backend Railway (Voratoon hybrid). Jangan kosongkan di production.
     window.LUMEN_PROXY = window.LUMEN_PROXY || ""; // same-origin /api + /img on Vercel
   </script>
-  <script src="/js/app.js?v=home-perf-1" type="module"></script>
+  <script src="/js/app.js?v=lag-fix-2" type="module"></script>
 <script>
 /* one-shot: clear broken SW that can blank the SPA */
 (function () {

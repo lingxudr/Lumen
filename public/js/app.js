@@ -58,6 +58,15 @@ ctx.openChapter = async (index) => {
       type: "article",
     });
   }
+  try {
+    if (!document.getElementById("reader-v2-css")) {
+      const l = document.createElement("link");
+      l.id = "reader-v2-css";
+      l.rel = "stylesheet";
+      l.href = "/css/reader-v2.css";
+      document.head.appendChild(l);
+    }
+  } catch (_) {}
   return reader.openChapter(index);
 };
 
@@ -234,8 +243,8 @@ function startPresenceHeartbeat() {
         }).catch(() => {});
       } catch (_) {}
     };
-    beat();
-    setInterval(beat, 45000);
+    setTimeout(beat, 8000); // defer so home paint first
+    setInterval(beat, 90000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") beat();
     });

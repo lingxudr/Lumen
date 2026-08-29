@@ -259,14 +259,10 @@ export function createHomeView(ctx) {
   }
 
   function buildListParams() {
-    const narrow =
-      typeof window !== "undefined" && window.matchMedia
-        ? window.matchMedia("(max-width: 700px)").matches
-        : false;
     const params = {
-      take: narrow ? Math.min(20, Config.pageSize) : Config.pageSize,
+      take: Config.pageSize || 16,
       page: ctx.state.page,
-      takeChapter: narrow ? 1 : Config.previewChapters || 3,
+      takeChapter: Config.previewChapters || 1,
       includeMeta: "true",
     };
     if (ctx.state.query) {
@@ -454,7 +450,7 @@ export function createHomeView(ctx) {
     const list = Array.isArray(items) ? items : [];
     const narrow =
       typeof window !== "undefined" && window.innerWidth < 700;
-    const imgW = narrow ? 160 : 240;
+    const imgW = narrow ? 140 : 200;
 
     // Event delegation (one handler for all cards)
     if (!box.dataset.delegated) {

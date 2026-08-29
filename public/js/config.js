@@ -44,7 +44,7 @@ const endpoints = detectEndpoints();
 export const Config = {
   apiBase: endpoints.apiBase,
   imgProxy: endpoints.imgProxy,
-  pageSize: 30,
-  previewChapters: 3,
+  pageSize: 16,
+  previewChapters: 1,
   version: "1.2.2",
 };

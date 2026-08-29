@@ -1,3 +1,12 @@
+
+function ensureReaderCss() {
+  if (document.getElementById("reader-v2-css")) return;
+  const l = document.createElement("link");
+  l.id = "reader-v2-css";
+  l.rel = "stylesheet";
+  l.href = "/css/reader-v2.css";
+  document.head.appendChild(l);
+}
 import { api, apiPrefetch, proxyImageUrl, checkImageStatus, friendlyError } from "../api.js";
 import { $, esc, escAttr, chapterIndex } from "../utils.js";
 import { toast, loading, showView, setImg, renderState } from "../ui.js";
