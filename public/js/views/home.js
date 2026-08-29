@@ -465,7 +465,7 @@ export function createHomeView(ctx) {
       if (d.status) badges.push(`<span class="badge">${esc(d.status)}</span>`);
 
       let chHtml = chapters
-        .slice(0, Config.previewChapters)
+        .slice(0, (typeof window !== "undefined" && window.innerWidth < 700) ? 1 : Config.previewChapters)
         .map((ch) => {
           const idx = chapterIndex(ch) ?? "?";
           const t = relTime(ch.createdAt || ch.updatedAt);
@@ -483,7 +483,7 @@ export function createHomeView(ctx) {
 
       const eager = i < 4;
       card.innerHTML = `
-        <img class="card-cover" alt="" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="360" height="540" />
+        <img class="card-cover" alt="" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="180" height="240" />
         <div class="card-body">
           <div class="card-title">${esc(d.title || "—")}</div>
           <div class="badges">${badges.join("")}</div>
@@ -491,7 +491,7 @@ export function createHomeView(ctx) {
         </div>`;
       const img = card.querySelector("img");
       if (eager && img) img.fetchPriority = "high";
-      setImg(img, d.coverImage || d.cover || "", { w: 360, cover: true });
+      setImg(img, d.coverImage || d.cover || "", { w: 240, cover: true });
       frag.appendChild(card);
     });
     box.replaceChildren(frag);

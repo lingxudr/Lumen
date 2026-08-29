@@ -387,8 +387,7 @@ a { color: var(--primary2); text-decoration: none; }
   overflow: hidden;
   cursor: pointer;
   transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
-  content-visibility: auto;
-  contain-intrinsic-size: 280px;
+  /* avoid oversized reserved height on mobile */
 }
 .card:hover {
   transform: translateY(-3px);
@@ -1082,8 +1081,7 @@ html, body {
   border-radius: var(--radius-sm);
   overflow: hidden;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-  content-visibility: auto;
-  contain-intrinsic-size: 280px;
+  /* avoid oversized reserved height on mobile */
 }
 .card:hover {
   transform: translateY(-2px);
@@ -2130,4 +2128,66 @@ html[data-theme="dark"] {
 }
 #filter-sheet .sheet-section {
   display: block !important;
+}
+
+
+/* ===== CARD COMPACT MOBILE 2026-08-29 ===== */
+@media (max-width: 699px) {
+  #series-list.grid,
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .card {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    border-radius: 12px !important;
+  }
+  .card-cover,
+  .card img.card-cover,
+  #series-list .card-cover {
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    aspect-ratio: 3 / 4 !important; /* shorter than 2/3 */
+    object-fit: cover !important;
+    display: block !important;
+  }
+  .card-body {
+    padding: 6px 8px 8px !important;
+    gap: 3px !important;
+    flex: 0 0 auto !important;
+  }
+  .card-title {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    -webkit-line-clamp: 2 !important;
+    min-height: 2.5em;
+  }
+  .card-chapters {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    max-height: 1.35em !important;
+    overflow: hidden !important;
+  }
+  /* only first chapter line on small screens */
+  .card-chapters > div:nth-child(n + 2) {
+    display: none !important;
+  }
+  .badges {
+    display: none !important; /* saves vertical space on home cards */
+  }
+  .card-skeleton .sk-cover {
+    aspect-ratio: 3 / 4 !important;
+  }
+}
+@media (max-width: 380px) {
+  .card-title {
+    font-size: 10.5px !important;
+  }
+  .card-cover,
+  .card img.card-cover {
+    aspect-ratio: 3 / 4 !important;
+  }
 }
