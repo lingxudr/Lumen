@@ -274,16 +274,16 @@ export function proxyImageUrl(url, opts = {}) {
   if (w == null && typeof window !== "undefined") {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const vw = window.innerWidth || 400;
-    // Cover grid ~2 columns on mobile → ~half viewport
+    // Cover grid ~2 columns — keep widths modest for WebP encode speed
     if (opts.cover) {
-      w = Math.round(Math.min(480, Math.max(180, (vw / 2) * dpr)));
+      w = Math.round(Math.min(360, Math.max(120, (vw / 2) * Math.min(dpr, 1.5))));
     } else if (vw > 0 && vw <= 480) {
-      w = Math.round(vw * dpr);
+      w = Math.round(Math.min(720, vw * dpr));
     } else if (vw <= 900) {
-      w = Math.round(Math.min(900, vw) * dpr);
+      w = Math.round(Math.min(900, vw * dpr));
     }
   }
-  if (w) qs.set("w", String(Math.max(160, Math.min(1600, Number(w) || 0))));
+  if (w) qs.set("w", String(Math.max(120, Math.min(1200, Number(w) || 0))));
   if (isAlreadyWebp(url)) qs.set("src", "webp");
   return `${Config.imgProxy}?${qs}`;
 }

@@ -458,76 +458,105 @@ def client_ip(handler):
 
 
 def convert_to_webp(body, max_width=None, quality=None):
-    """Re-encode image bytes to WebP. Returns (bytes, content_type) or None.
+    """Re-encode to WebP (smaller, faster mobile). Returns (bytes, content_type) or None.
 
-    Optimizations:
-    - Skip tiny payloads
-    - Adaptive quality by source size
-    - Prefer smaller output (fallback to original if larger)
-    - Optional downscale via max_width
+    - Downscale when max_width set (thumbnails)
+    - Adaptive quality: thumbs lower, full pages higher
+    - Strip metadata, drop useless alpha
+    - method=6 for better compression on server
     """
     try:
         from io import BytesIO
-        from PIL import Image
+        from PIL import Image, ImageOps
     except Exception:
         return None
     if not body or len(body) < 200:
         return None
+
+    try:
+        max_width = int(max_width) if max_width not in (None, "", 0, "0") else None
+    except Exception:
+        max_width = None
+
     if quality is None:
         try:
             quality = int(os.environ.get("WEBP_QUALITY") or "0")
         except Exception:
             quality = 0
     if not quality:
-        # Adaptive: larger originals → slightly lower quality
-        n = len(body)
-        if n > 1_500_000:
-            quality = 70
-        elif n > 700_000:
-            quality = 75
+        # Thumbnails (home cards) vs reader pages
+        if max_width and max_width <= 200:
+            quality = 68
+        elif max_width and max_width <= 480:
+            quality = 72
+        elif max_width and max_width <= 900:
+            quality = 78
         else:
-            quality = 80
+            n = len(body)
+            if n > 1_500_000:
+                quality = 70
+            elif n > 700_000:
+                quality = 75
+            else:
+                quality = 80
+
     try:
         im = Image.open(BytesIO(body))
         im.load()
-        # Already WebP and no resize needed → keep original
+        # Honor EXIF orientation before resize
+        try:
+            im = ImageOps.exif_transpose(im)
+        except Exception:
+            pass
+
         fmt0 = (getattr(im, "format", None) or "").upper()
-        if max_width:
-            try:
-                max_width = int(max_width)
-            except Exception:
-                max_width = None
         need_resize = bool(max_width and im.width > max_width)
-        if fmt0 == "WEBP" and not need_resize:
+
+        # Source already small WebP and no resize → pass through
+        if fmt0 == "WEBP" and not need_resize and len(body) < 120_000:
             return body, "image/webp"
+
         if need_resize:
             h = max(1, int(im.height * (max_width / float(im.width))))
             im = im.resize((max_width, h), Image.Resampling.LANCZOS)
-        # Flatten palette / weird modes → RGB/RGBA for reliable WebP
+
         if im.mode in ("P", "LA"):
             im = im.convert("RGBA")
         elif im.mode == "CMYK":
             im = im.convert("RGB")
         elif im.mode not in ("RGB", "RGBA"):
-            im = im.convert("RGBA" if "A" in (im.getbands() or ()) else "RGB")
-        # Drop alpha if fully opaque (smaller encode)
+            im = im.convert("RGBA" if "A" in (im.getbands() or "") else "RGB")
+
         if im.mode == "RGBA":
-            extrema = im.getchannel("A").getextrema()
-            if extrema == (255, 255):
-                im = im.convert("RGB")
+            try:
+                extrema = im.getchannel("A").getextrema()
+                if extrema == (255, 255):
+                    im = im.convert("RGB")
+            except Exception:
+                pass
+
+        # method 6 = better size; thumbs use 4 for speed
+        method = 4 if (max_width and max_width <= 240) else 6
         buf = BytesIO()
-        # method=4 balance; method=0 on retry path via quality-only calls still ok
-        save_kw = {"format": "WEBP", "quality": int(quality), "method": 4}
+        save_kw = {
+            "format": "WEBP",
+            "quality": int(quality),
+            "method": method,
+            "optimize": True,
+        }
         im.save(buf, **save_kw)
         data = buf.getvalue()
-        # Prefer original only when source was already WebP and re-encode grew
+
+        # If re-encode larger than source WebP without resize, keep source
         if fmt0 == "WEBP" and not need_resize and len(data) >= len(body):
             return body, "image/webp"
-        # Always return WebP when encode succeeded (client asked fmt=webp)
+        # Prefer smaller: if JPEG original smaller and no resize requested, still return WebP
+        # only when WebP wins or client forced fmt
         return data, "image/webp"
     except Exception as e:
         print("webp convert fail:", e, flush=True)
         return None
+
 
 
 def fetch(url, extra_headers=None, timeout=12, retries=0):
@@ -1401,10 +1430,18 @@ class Handler(BaseHTTPRequestHandler):
                     # Prefer WebP when requested (convert JPEG/PNG; resize if w=)
                     is_webp = "webp" in (ct or "").lower() or src.lower().endswith(".webp")
                     if want_webp or max_w:
-                        converted = convert_to_webp(body, max_width=max_w)
+                        try:
+                            mw = int(max_w) if max_w not in (None, "") else None
+                        except Exception:
+                            mw = None
+                        q = None
+                        if mw and mw <= 200:
+                            q = 65
+                        elif mw and mw <= 360:
+                            q = 70
+                        converted = convert_to_webp(body, max_width=max_w, quality=q)
                         if not converted and want_webp:
-                            # retry with more aggressive compression
-                            converted = convert_to_webp(body, max_width=max_w, quality=72)
+                            converted = convert_to_webp(body, max_width=max_w, quality=62)
                         if converted:
                             body, ct = converted[0], converted[1]
                             is_webp = True
