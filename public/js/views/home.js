@@ -259,10 +259,14 @@ export function createHomeView(ctx) {
   }
 
   function buildListParams() {
+    const narrow =
+      typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(max-width: 700px)").matches
+        : false;
     const params = {
-      take: Config.pageSize,
+      take: narrow ? Math.min(20, Config.pageSize) : Config.pageSize,
       page: ctx.state.page,
-      takeChapter: Config.previewChapters || 3,
+      takeChapter: narrow ? 1 : Config.previewChapters || 3,
       includeMeta: "true",
     };
     if (ctx.state.query) {
@@ -442,56 +446,72 @@ export function createHomeView(ctx) {
   }
 
   function renderList(items) {
-    try { renderHero(items); } catch (_) {}
+    try {
+      renderHero(items);
+    } catch (_) {}
     const box = $("#series-list");
     if (!box) return;
-    // Batch DOM: single reflow via DocumentFragment
-    const frag = document.createDocumentFragment();
     const list = Array.isArray(items) ? items : [];
+    const narrow =
+      typeof window !== "undefined" && window.innerWidth < 700;
+    const imgW = narrow ? 160 : 240;
+
+    // Event delegation (one handler for all cards)
+    if (!box.dataset.delegated) {
+      box.dataset.delegated = "1";
+      box.addEventListener("click", (e) => {
+        const card = e.target && e.target.closest && e.target.closest(".card[data-slug]");
+        if (!card || !box.contains(card)) return;
+        const slug = card.getAttribute("data-slug");
+        if (!slug) return;
+        ctx.openSeries(slug, {
+          title: card.getAttribute("data-title") || "",
+          cover: card.getAttribute("data-cover") || "",
+        });
+      });
+    }
+
+    const frag = document.createDocumentFragment();
     list.forEach((item, i) => {
       const d = item.data || {};
       const chapters = item.chapters || [];
+      const slug = d.slug || item.id || "";
+      const title = d.title || "";
+      const cover = d.coverImage || d.cover || "";
+
       const card = document.createElement("article");
       card.className = "card";
-      card.onclick = () => ctx.openSeries(d.slug || item.id, {
-        title: d.title || "",
-        cover: d.coverImage || d.cover || "",
-      });
+      card.dataset.slug = String(slug);
+      card.dataset.title = title;
+      card.dataset.cover = cover;
 
-      const badges = [];
-      if (d.isHot) badges.push('<span class="badge badge--hot">Hot</span>');
-      if (d.type === "project") badges.push('<span class="badge badge--up">Project</span>');
-      if (d.format) badges.push(`<span class="badge">${esc(d.format)}</span>`);
-      if (d.status) badges.push(`<span class="badge">${esc(d.status)}</span>`);
-
-      let chHtml = chapters
-        .slice(0, (typeof window !== "undefined" && window.innerWidth < 700) ? 1 : Config.previewChapters)
-        .map((ch) => {
-          const idx = chapterIndex(ch) ?? "?";
-          const t = relTime(ch.createdAt || ch.updatedAt);
-          const neu = isNew(ch.createdAt || ch.updatedAt);
-          return `<div>Ch. ${esc(String(idx))}${neu ? ' <span class="new">BARU</span>' : ""}${t ? " · " + esc(t) : ""}</div>`;
-        })
-        .join("");
-      if (!chHtml) {
-        const label = d.latestChapterLabel || (d.totalChapters != null ? `Ch. ${d.totalChapters}` : "");
+      let chHtml = "";
+      const prev = chapters.slice(0, narrow ? 1 : Config.previewChapters);
+      if (prev.length) {
+        const ch = prev[0];
+        const idx = chapterIndex(ch) ?? "?";
+        const t = relTime(ch.createdAt || ch.updatedAt);
+        const neu = isNew(ch.createdAt || ch.updatedAt);
+        chHtml = `<div>Ch. ${esc(String(idx))}${neu ? ' <span class="new">BARU</span>' : ""}${t ? " · " + esc(t) : ""}</div>`;
+      } else {
+        const label =
+          d.latestChapterLabel ||
+          (d.totalChapters != null ? `Ch. ${d.totalChapters}` : "");
         const t = relTime(d.updatedLabel || item.updatedAt);
         chHtml = label
           ? `<div>${esc(label)}${t ? " · " + esc(t) : ""}</div>`
           : `<div>Total ch. ${esc(String(d.totalChapters ?? "—"))}</div>`;
       }
 
-      const eager = i < 4;
+      const eager = i < 2;
       card.innerHTML = `
-        <img class="card-cover" alt="" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="180" height="240" />
+        <img class="card-cover" alt="" ${eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'} decoding="async" width="160" height="213" />
         <div class="card-body">
-          <div class="card-title">${esc(d.title || "—")}</div>
-          <div class="badges">${badges.join("")}</div>
+          <div class="card-title">${esc(title || "—")}</div>
           <div class="card-chapters">${chHtml}</div>
         </div>`;
       const img = card.querySelector("img");
-      if (eager && img) img.fetchPriority = "high";
-      setImg(img, d.coverImage || d.cover || "", { w: 240, cover: true });
+      setImg(img, cover, { w: imgW, cover: true });
       frag.appendChild(card);
     });
     box.replaceChildren(frag);

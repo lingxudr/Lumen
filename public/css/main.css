@@ -2255,3 +2255,31 @@ html[data-theme="dark"] {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ===== HOME SCROLL PERF ===== */
+@media (max-width: 700px) {
+  #series-list .card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
+    contain: layout style paint;
+  }
+  .home-hero {
+    min-height: 0 !important;
+    max-height: 200px;
+  }
+  .home-hero-bg {
+    filter: none !important;
+    transform: none !important;
+  }
+  .home-hero-syn {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* fewer paints while flinging scroll */
+  #series-list {
+    content-visibility: auto;
+  }
+}
