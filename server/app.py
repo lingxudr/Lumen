@@ -9,6 +9,15 @@ import os
 import ssl
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+try:
+    import ddos_guard
+except Exception:
+    try:
+        from server import ddos_guard  # type: ignore
+    except Exception:
+        ddos_guard = None  # type: ignore
+
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, unquote, urlparse
@@ -417,6 +426,28 @@ def rate_allow(ip, bucket, limit):
         return True, max(0, limit - len(q)), RATE_LIMIT_WINDOW
 
 
+def _ddos_check(handler, path: str = ""):
+    """Return True if request may proceed; else response already sent."""
+    if ddos_guard is None:
+        return True
+    try:
+        ip = client_ip(handler)
+        ok, reason, retry = ddos_guard.note_request(ip, path)
+        if ok:
+            return True
+        body = {
+            "error": "too_many_requests",
+            "reason": reason,
+            "retry_after": retry,
+            "message": "Terlalu banyak permintaan. Coba lagi nanti.",
+        }
+        handler.send_json(429, body)
+        return False
+    except Exception as e:
+        print("ddos_check skip:", e, flush=True)
+        return True
+
+
 def client_ip(handler):
     xff = handler.headers.get("X-Forwarded-For") or handler.headers.get("x-forwarded-for")
     if xff:
@@ -809,6 +840,11 @@ class Handler(BaseHTTPRequestHandler):
             path = unquote(parsed.path or "/")
             qs = parse_qs(parsed.query or "")
 
+            # Anti-DDoS / flood (API + img)
+            if path.startswith("/api") or path.startswith("/img"):
+                if not _ddos_check(self, path):
+                    return
+
             if path in ("/api/presence", "/api/presence/"):
                 try:
                     from presence import count_online, list_online
@@ -1006,6 +1042,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "img": RATE_LIMIT_IMG,
                                 "window": RATE_LIMIT_WINDOW,
                             },
+                            "ddos": (ddos_guard.stats() if ddos_guard else None),
                         },
                     )
 
@@ -1399,6 +1436,13 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
     def do_POST(self):
+        try:
+            _p0 = (self.path or "/").split("?", 1)[0]
+            if _p0.startswith("/api"):
+                if not _ddos_check(self, _p0):
+                    return
+        except Exception:
+            pass
         try:
             parsed = urlparse(self.path)
             path = unquote(parsed.path or "/")
