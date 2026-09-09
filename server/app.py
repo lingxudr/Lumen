@@ -1407,15 +1407,33 @@ class Handler(BaseHTTPRequestHandler):
                         extra["X-Lumen-Image"] = "webp"
                     return self.send_bytes(200, body, ct, extra_headers=extra)
 
-                code, hdrs, body = fetch(
-                    src,
-                    extra_headers={
+                # Multi-strategy fetch — CDN may 403 on datacenter IP / wrong Referer
+                referers = [
+                    "https://v1.voratoon.com/",
+                    "https://www.voratoon.com/",
+                    "https://cdn.voratoon.com/",
+                    "https://v1.voratoon.com",
+                    "",  # empty referer last
+                ]
+                code, hdrs, body = 0, {}, b""
+                for ref in referers:
+                    eh = {
                         "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-                        "Referer": "https://v1.voratoon.com/",
-                    },
-                    timeout=15,
-                    retries=0,
-                )
+                        "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
+                    }
+                    if ref != "":
+                        eh["Referer"] = ref
+                        eh["Origin"] = "https://v1.voratoon.com"
+                    code, hdrs, body = fetch(
+                        src,
+                        extra_headers=eh,
+                        timeout=18,
+                        retries=1,
+                    )
+                    if code == 200 and body and len(body) > 200:
+                        break
+                    if code not in (403, 401, 429, 0):
+                        break  # other errors unlikely fixed by referer
                 ct = hdrs.get("content-type") or "image/jpeg"
                 extra = dict(rate_headers)
                 extra["X-Content-Type-Options"] = "nosniff"

@@ -32,7 +32,7 @@ ALLOWED_IMAGE_HOST_SUFFIXES = (
     "imgkc1.my.id",
     "komikcast.fit",
     "komikcast.com",
-    "komiku.org", "cvr.voratoon.id", "cdn.voratoon.com", "minio.imgkc1.my.id",
+    "komiku.org", "cvr.voratoon.id", "cdn.voratoon.com", "voratoon.com", "voratoon.id", "minio.imgkc1.my.id",
     "thumbnail.komiku.org",
     "img.komiku.org",
     "sankavollerei.web.id",
@@ -113,6 +113,7 @@ def host_allowed_image(host: str) -> bool:
                     "shngm",
                     "sanka",
                     "minio",
+                    "voratoon",
                 )
             ):
                 return True
