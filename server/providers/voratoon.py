@@ -932,7 +932,7 @@ def get_series_list(
 ) -> dict[str, Any]:
     """
     mode:
-      newest     — chapter update ≤21 hari (bukan katalog import)
+      newest     — feed /updates (RSC) ~30/page; API fallback tanpa potong 21 hari
       new_series — series baru (series.createdAt ≤45 hari)
       completed  — status=completed
       hot        — popularity
@@ -1015,13 +1015,17 @@ def get_series_list(
             if mode == "newest":
                 payload = fetch_updates_html(page=page)
                 items = payload.get("data") or []
-                if take and take < len(items):
-                    items = items[:take]
-                    payload["data"] = items
-                return payload
-            payload = _home_feed_payload(mode, take=take, page=page)
-            if payload and payload.get("data"):
-                return payload
+                if items:
+                    if take and take < len(items):
+                        items = items[:take]
+                        payload = dict(payload)
+                        payload["data"] = items
+                    return payload
+                print("voratoon updates RSC empty — fallback API list", flush=True)
+            else:
+                payload = _home_feed_payload(mode, take=take, page=page)
+                if payload and payload.get("data"):
+                    return payload
         except Exception as e:
             print(f"voratoon RSC feed fail mode={mode}:", e, flush=True)
 
@@ -1030,8 +1034,8 @@ def get_series_list(
     if mode == "new_series":
         api_sort = "createdAt"
     params: dict[str, Any] = {
-        "take": 40 if mode in ("newest", "new_series") else take,
-        "page": page if mode not in ("newest", "new_series") else 1,
+        "take": take if mode == "newest" else (40 if mode == "new_series" else take),
+        "page": page,
         "sort": api_sort,
         "sortOrder": sort_order or "desc",
         "takeChapter": max(1, min(take_chapter or 3, 5)),
@@ -1071,7 +1075,7 @@ def get_series_list(
     # Pool pages for newest / new_series (parallel) — else single request
     raw_items: list[dict] = []
     meta: dict = {}
-    pages_to_fetch = 2 if mode in ("newest", "new_series") else 1
+    pages_to_fetch = 2 if mode == "new_series" else 1
 
     def _fetch_page(pg: int) -> tuple[int, list, dict]:
         p = dict(params)
@@ -1123,37 +1127,26 @@ def get_series_list(
     items = raw_items
 
     if mode == "newest":
-        # Hanya update chapter ≤ 21 hari; ranking by chapter time
-        max_age = 21 * 86400
-        scored = []
-        for it in items:
-            ch_ts = _latest_chapter_ts(it)
-            if not ch_ts or (now - ch_ts) > max_age:
-                continue
-            d = it.get("data") or {}
-            tc = _as_int(d.get("totalChapters"), 0)
-            # Boost ongoing series with real chapter depth
-            score = ch_ts + min(tc, 50) * 60  # up to +50min equivalent
-            scored.append((score, it))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        # dedupe by slug
+        # Fallback API path: keep upstream order (updatedAt), no 21-day cut.
+        # Full catalog paging comes from /updates RSC; this is only backup.
         seen = set()
         ranked = []
-        for _, it in scored:
+        for it in items:
             slug = ((it.get("data") or {}).get("slug") or "").lower()
             if not slug or slug in seen:
                 continue
             seen.add(slug)
             ranked.append(enrich(it))
-        # paginate local
-        start = (max(1, page) - 1) * take
-        items = ranked[start : start + take]
+        # Use upstream meta pages when available
+        up_last = _as_int(meta.get("lastPage") or meta.get("total_pages"), 0)
+        up_total = _as_int(meta.get("total") or meta.get("total_record"), 0)
+        items = ranked[: max(1, take)]
         meta = {
             "page": page,
-            "lastPage": max(1, (len(ranked) + take - 1) // take),
-            "total": len(ranked),
+            "lastPage": up_last or max(1, page),
+            "total": up_total or len(ranked),
             "mode": "newest",
-            "window_days": 21,
+            "source": "voratoon_api_fallback",
         }
     elif mode == "new_series":
         max_age = 45 * 86400
