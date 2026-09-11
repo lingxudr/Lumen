@@ -308,6 +308,13 @@ def fetch_updates_html(page: int = 1) -> dict[str, Any]:
     data, meta = _extract_rsc_initial_data(html)
     items = data if isinstance(data, list) else []
     out = _normalize_feed_items(items, strip_images=True)
+    # Keep official updates order: newest chapter first (RSC order can drift after normalize)
+    def _upd_key(it: dict) -> float:
+        ts = _latest_chapter_ts(it)
+        if ts:
+            return ts
+        return max(_parse_iso(it.get("updatedAt")), _parse_iso(it.get("createdAt")))
+    out.sort(key=_upd_key, reverse=True)
     # Guard: home "updates" snippet is ~6 items; real /updates page is ~30
     if len(out) < 15:
         print(f"updates RSC short n={len(out)} page={page} — fallback API", flush=True)
@@ -1038,9 +1045,15 @@ def get_series_list(
         "page": page,
         "sort": api_sort,
         "sortOrder": sort_order or "desc",
-        "takeChapter": max(1, min(take_chapter or 3, 5)),
+        "takeChapter": max(3, min(take_chapter or 3, 5)),
         "includeMeta": 1,
     }
+    if mode == "newest":
+        # Pull a wider window then sort by chapter time (updatedAt alone is wrong)
+        params["take"] = max(40, int(take or 30))
+        params["page"] = max(1, int(page or 1))
+        params["sort"] = "updatedAt"
+        params["sortOrder"] = "desc"
     if mode == "completed":
         params["status"] = "completed"
         params["take"] = take
@@ -1127,17 +1140,19 @@ def get_series_list(
     items = raw_items
 
     if mode == "newest":
-        # Fallback API path: keep upstream order (updatedAt), no 21-day cut.
-        # Full catalog paging comes from /updates RSC; this is only backup.
+        # Fallback API: series.updatedAt is NOT chapter order — sort by latest chapter time.
         seen = set()
-        ranked = []
+        scored = []
         for it in items:
             slug = ((it.get("data") or {}).get("slug") or "").lower()
             if not slug or slug in seen:
                 continue
             seen.add(slug)
-            ranked.append(enrich(it))
-        # Use upstream meta pages when available
+            it = enrich(it)
+            ts = _latest_chapter_ts(it) or _parse_iso(it.get("updatedAt")) or _parse_iso(it.get("createdAt"))
+            scored.append((ts, it))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        ranked = [it for _, it in scored]
         up_last = _as_int(meta.get("lastPage") or meta.get("total_pages"), 0)
         up_total = _as_int(meta.get("total") or meta.get("total_record"), 0)
         items = ranked[: max(1, take)]
@@ -1147,6 +1162,7 @@ def get_series_list(
             "total": up_total or len(ranked),
             "mode": "newest",
             "source": "voratoon_api_fallback",
+            "sorted_by": "latest_chapter",
         }
     elif mode == "new_series":
         max_age = 45 * 86400
