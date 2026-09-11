@@ -344,6 +344,12 @@ export function createHomeView(ctx) {
         ? `${items.length} judul · ${meta.total != null ? Number(meta.total).toLocaleString("id-ID") : "—"} total`
         : "Tidak ada hasil.";
     }
+    // empty auto-retry once (poisoned cache / race)
+    if (!items.length && !ctx.state._emptyRetried) {
+      ctx.state._emptyRetried = true;
+      setTimeout(() => loadList({ force: true }), 600);
+    }
+    if (items.length) ctx.state._emptyRetried = false;
   }
 
   async function loadList(opts = {}) {

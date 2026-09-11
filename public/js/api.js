@@ -189,7 +189,11 @@ export async function api(path, params = {}, opts = {}) {
       if (!INFLIGHT.has(key)) {
         const p = fetchJson(url)
           .then((data) => {
-            MEM.set(key, { data, exp: Date.now() + ttl, staleExp: Date.now() + stale });
+            const n = Array.isArray(data && data.data) ? data.data.length : -1;
+      // empty series: don't poison cache for minutes
+      const useTtl = n === 0 && String(key).includes("series") ? 5_000 : ttl;
+      const useStale = n === 0 && String(key).includes("series") ? 10_000 : stale;
+      MEM.set(key, { data, exp: Date.now() + useTtl, staleExp: Date.now() + useStale });
             return data;
           })
           .catch(() => hit.data)
@@ -204,7 +208,10 @@ export async function api(path, params = {}, opts = {}) {
 
   const p = fetchJson(url)
     .then((data) => {
-      MEM.set(key, { data, exp: Date.now() + ttl, staleExp: Date.now() + stale });
+      const n2 = Array.isArray(data && data.data) ? data.data.length : -1;
+      const useTtl2 = n2 === 0 && String(key).includes("series") ? 5_000 : ttl;
+      const useStale2 = n2 === 0 && String(key).includes("series") ? 10_000 : stale;
+      MEM.set(key, { data, exp: Date.now() + useTtl2, staleExp: Date.now() + useStale2 });
       // bound memory
       if (MEM.size > 120) {
         const first = MEM.keys().next().value;

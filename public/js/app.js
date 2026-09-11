@@ -354,19 +354,18 @@ async function checkAssetVersion() {
 }
 checkAssetVersion();
 
-// Safety: if home list still empty after 3s, force newest list (no page reload)
+// Safety: if home list still empty after 2.5s, force reload list
 setTimeout(() => {
   try {
     const box = document.getElementById("series-list");
     const empty = !box || !box.querySelector(".card:not(.card-skeleton)");
-    const home = document.getElementById("view-home");
-    if (empty && home && !home.classList.contains("is-hidden") && window.App) {
+    const homeEl = document.getElementById("view-home");
+    if (empty && homeEl && !homeEl.classList.contains("is-hidden")) {
       console.warn("[lumen] safety force loadList");
-      if (typeof App.tab === "function") App.tab("newest");
-      else if (typeof App.go === "function") App.go("home");
+      home.loadList({ force: true });
     }
   } catch (_) {}
-}, 3000);
+}, 2500);
 
 
 
