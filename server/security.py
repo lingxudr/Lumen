@@ -18,6 +18,7 @@ ALLOWED_API_HOSTS = frozenset(
     {
         "api.voratoon.com",
         "v1.voratoon.com",
+        "v2.voratoon.com",
         "voratoon.com",
         "www.voratoon.com",
         # legacy (DNS sering mati — tetap di list agar tidak break env lama)

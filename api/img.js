@@ -61,7 +61,7 @@ function setCdnHeaders(res, { webp, etag, hit }) {
 
 async function fetchOrigin(src) {
   const referers = [
-    "https://v1.voratoon.com/",
+    "https://v2.voratoon.com/",
     "https://www.voratoon.com/",
     "https://cdn.voratoon.com/",
     "",
@@ -75,7 +75,7 @@ async function fetchOrigin(src) {
     };
     if (ref) {
       headers.Referer = ref;
-      headers.Origin = "https://v1.voratoon.com";
+      headers.Origin = "https://v2.voratoon.com";
     }
     try {
       const r = await fetch(src, { headers, redirect: "follow" });

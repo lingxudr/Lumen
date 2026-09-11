@@ -392,7 +392,7 @@ CONTENT_SECURITY_POLICY = (
     "img-src 'self' data: blob: https://cdn.voratoon.com https://cvr.voratoon.id "
     "https://*.voratoon.com https://*.voratoon.id https://*.my.id https://*.shngm.id; "
     "font-src 'self' data: https://fonts.gstatic.com; "
-    "connect-src 'self' https://api.voratoon.com https://v1.voratoon.com "
+    "connect-src 'self' https://api.voratoon.com https://v2.voratoon.com "
     "https://*.up.railway.app https://*.vercel.app; "
     "media-src 'self' blob:; "
     "object-src 'none'; "
@@ -564,8 +564,8 @@ def fetch(url, extra_headers=None, timeout=12, retries=0):
         "User-Agent": UA,
         "Accept": "*/*",
         "Accept-Language": "id-ID,id;q=0.9,en;q=0.8",
-        "Origin": "https://v1.voratoon.com",
-        "Referer": "https://v1.voratoon.com/",
+        "Origin": "https://v2.voratoon.com",
+        "Referer": "https://v2.voratoon.com/",
     }
     if extra_headers:
         headers.update(extra_headers)
@@ -1409,10 +1409,10 @@ class Handler(BaseHTTPRequestHandler):
 
                 # Multi-strategy fetch — CDN may 403 on datacenter IP / wrong Referer
                 referers = [
-                    "https://v1.voratoon.com/",
+                    "https://v2.voratoon.com/",
                     "https://www.voratoon.com/",
                     "https://cdn.voratoon.com/",
-                    "https://v1.voratoon.com",
+                    "https://v2.voratoon.com",
                     "",  # empty referer last
                 ]
                 code, hdrs, body = 0, {}, b""
@@ -1423,7 +1423,7 @@ class Handler(BaseHTTPRequestHandler):
                     }
                     if ref != "":
                         eh["Referer"] = ref
-                        eh["Origin"] = "https://v1.voratoon.com"
+                        eh["Origin"] = "https://v2.voratoon.com"
                     code, hdrs, body = fetch(
                         src,
                         extra_headers=eh,
@@ -1543,7 +1543,7 @@ class Handler(BaseHTTPRequestHandler):
             strategies = [
                 ("no_referer", None),
                 ("empty_referer", ""),
-                ("voratoon_referer", "https://v1.voratoon.com/"),
+                ("voratoon_referer", "https://v2.voratoon.com/"),
                 ("foreign_referer", "https://example.com/"),
             ]
             results = []

@@ -4,7 +4,7 @@
 
 - **UI:** cinematic dark SPA (mobile-first)
 - **Backend:** Python (`server/app.py`) on Railway
-- **Source:** [VoraToon](https://v1.voratoon.com) REST + RSC (successor to KomikCast)
+- **Source:** [VoraToon](https://v2.voratoon.com) REST + RSC (successor to KomikCast)
 - **Edge:** Vercel static hosting + `/api` & `/img` proxy
 
 **Live:** [www.v1lumen.my.id](https://www.v1lumen.my.id)
@@ -36,7 +36,7 @@ Browser (Vercel)
                                       │
                                       ▼
                                api.voratoon.com
-                               v1.voratoon.com (RSC)
+                               v2.voratoon.com (RSC)
 ```
 
 **Single provider:** Voratoon only.  

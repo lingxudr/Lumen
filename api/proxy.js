@@ -83,8 +83,8 @@ async function fetchUpstream(target, opts = {}) {
         "User-Agent": UA,
         Accept: "application/json, text/plain, */*",
         "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        Origin: "https://v1.voratoon.com",
-        Referer: "https://v1.voratoon.com/",
+        Origin: "https://v2.voratoon.com",
+        Referer: "https://v2.voratoon.com/",
       };
       if (opts.contentType) headers["Content-Type"] = opts.contentType;
       const init = {

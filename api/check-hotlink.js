@@ -20,7 +20,7 @@ module.exports = async function handler(req, res) {
     const strategies = [
       ["no_referer", null],
       ["empty_referer", ""],
-      ["voratoon_referer", "https://v1.voratoon.com/"],
+      ["voratoon_referer", "https://v2.voratoon.com/"],
       ["foreign_referer", "https://example.com/"],
     ];
 

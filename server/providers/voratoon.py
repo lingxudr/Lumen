@@ -1,5 +1,5 @@
 """
-Voratoon API client (api.voratoon.com) + site RSC (v1.voratoon.com).
+Voratoon API client (api.voratoon.com) + site RSC (v2.voratoon.com).
 
 Performance:
   - gzip responses
@@ -27,7 +27,7 @@ UA = os.environ.get(
 TIMEOUT = float(os.environ.get("VORATOON_TIMEOUT", "12"))
 TIMEOUT_LIST = float(os.environ.get("VORATOON_TIMEOUT_LIST", "8"))
 TIMEOUT_HTML = float(os.environ.get("VORATOON_TIMEOUT_HTML", "10"))
-SITE_BASE = (os.environ.get("VORATOON_SITE") or "https://v1.voratoon.com").rstrip("/")
+SITE_BASE = (os.environ.get("VORATOON_SITE") or "https://v2.voratoon.com").rstrip("/")
 
 # In-process short cache (reduces repeat RSC/API hits within warm window)
 import threading
@@ -42,7 +42,7 @@ _MEM_MAX = int(os.environ.get("VORATOON_MEM_MAX", "256"))
 # Shared pool — avoid creating ThreadPoolExecutor per request
 _POOL = ThreadPoolExecutor(max_workers=int(os.environ.get("VORATOON_WORKERS", "4")))
 
-# Keep-alive opener (fewer TCP handshakes to api.voratoon.com / v1.voratoon.com)
+# Keep-alive opener (fewer TCP handshakes to api.voratoon.com / v2.voratoon.com)
 _OPENER = urllib.request.build_opener(
     urllib.request.HTTPHandler(),
     urllib.request.HTTPSHandler(),
@@ -295,7 +295,7 @@ def _normalize_feed_items(items: list, *, strip_images: bool = True) -> list:
 
 def fetch_updates_html(page: int = 1) -> dict[str, Any]:
     """
-    Scrape https://v1.voratoon.com/updates — urutan resmi situs.
+    Scrape https://v2.voratoon.com/updates — urutan resmi situs.
     30 item / halaman, ~345 halaman.
     """
     page = max(1, int(page or 1))
@@ -361,7 +361,7 @@ def fetch_updates_html(page: int = 1) -> dict[str, Any]:
 
 def fetch_home_rsc() -> dict[str, Any]:
     """
-    Scrape https://v1.voratoon.com/ home initialData:
+    Scrape https://v2.voratoon.com/ home initialData:
       banner, popular, updates, newSeries, completed, ...
     Cached ~2 minutes in-process.
     """
